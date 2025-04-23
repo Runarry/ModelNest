@@ -8,7 +8,7 @@ let config = null;
 
 // 加载配置文件
 function loadConfig() {
-  const configPath = path.join(__dirname, 'config.json');
+  const configPath = path.join(process.cwd(), 'config.json');
   try {
     if (fs.existsSync(configPath)) {
       config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
@@ -16,7 +16,7 @@ function loadConfig() {
       if (Array.isArray(config.modelSources)) {
         config.modelSources.forEach(source => {
           if (source.type === 'local' && source.path) {
-            source.path = path.isAbsolute(source.path) ? source.path : path.join(__dirname, source.path);
+            source.path = path.isAbsolute(source.path) ? source.path : path.join(process.cwd(), source.path);
           }
         });
       }
