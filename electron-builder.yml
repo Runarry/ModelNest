@@ -1,0 +1,19 @@
+appId: com.banazzle.modelnest
+productName: ModelNest
+files:
+  - '**/*'
+  - '!models'
+  - '!models/**'
+  - '!config.json'
+asar: true
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+        - ia32
+nsis:
+  oneClick: false
+  perMachine: true
+  allowToChangeInstallationDirectory: true
+publish: null
