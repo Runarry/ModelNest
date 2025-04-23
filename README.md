@@ -1,54 +1,20 @@
 # ModelNest
+- ModelNest 是一款基于 Electron 的模型管理工具，主要用来管理美术AIGC的模型的。
+- 它同时支持本地目录和WebDAV，可以配置多个模型仓库进行切换。
+- 本项目完全是为了满足自用，目前仍在开发阶段。
+- 本项目从开发文档到所有代码，几乎都是使用`Roo Code` 生成，且我个人之前没有任何前端和JS开发经验，只有少数代码是我手搓的（现学的），因此代码质量极差，且不保证代码可读性。
 
-ModelNest 是一款基于 Electron 的跨平台桌面工具，简洁高效地管理和浏览本地或 WebDAV 的多种 AI 模型文件。支持多数据源配置、模型筛选、详情查看，适合个人和团队模型资源管理。
 
 ## 主要功能
+- [x] 支持本地与 WebDAV 多数据源模型管理
+- [x] 按模型类型筛选、浏览模型
+- [x] 查看模型详情与图片
+- [ ] 数据和模型下载
+- [ ] 与ComfyUI等进行模型同步
 
-- 支持本地与 WebDAV 多数据源模型管理
-- 按模型类型筛选、浏览模型
-- 查看模型详情与图片
-- 配置文件集中管理数据源与扩展名
-- 代码结构清晰，易于扩展
+## 使用方法
+TODO
 
-## 目录结构
 
-详见 `设计文档.md`，核心目录如下：
 
-```
-main.js
-preload.js
-config.json
-src/
-  data/
-    dataSource.js
-    modelParser.js
-  renderer/
-    index.html
-    renderer.js
-    ui.js
-  common/
-    constants.js
-    utils.js
-```
 
-## 启动方式
-
-1. 安装依赖
-
-   ```
-   npm install
-   ```
-
-2. 启动应用
-
-   ```
-   npm start
-   ```
-
-## 配置
-
-编辑根目录下 `config.json`，可自定义本地或 WebDAV 数据源及支持的模型扩展名。
-
-## 设计与开发说明
-
-详见 `设计文档.md` 和 `tasklist.md`。
