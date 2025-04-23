@@ -1,0 +1,21 @@
+{
+  "modelSources": [
+    {
+      "id": "local1",
+      "name": "本地模型库A",
+      "type": "local",
+      "path": "./models"
+    },
+    {
+      "id": "webdav1",
+      "name": "WebDAV模型库B",
+      "type": "webdav",
+      "url": "https://openapi.alipan.com/dav",
+      "username": "Q75HWE",
+      "password": "eej9W2"
+    }
+  ],
+  "supportedExtensions": [
+    ".checkpoint", ".ckpt", ".safetensors", ".pt", ".pth", ".bin"
+  ]
+}

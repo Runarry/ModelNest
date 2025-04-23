@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <title>ModelNest</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>ModelNest 模型管理</h1>
+      <div class="filters">
+        <select id="sourceSelect"></select>
+        <select id="filterSelect"></select>
+        <div class="view-toggle">
+          <button id="cardViewBtn" class="view-btn active" title="卡片视图">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+          </button>
+          <button id="listViewBtn" class="view-btn" title="列表视图">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <div id="loading">
+      <div class="loading-spinner"></div>
+      <span>加载模型数据中...</span>
+    </div>
+
+    <section id="mainSection">
+      <ul id="modelList"></ul>
+    </section>
+
+    <div id="detailModal" class="modal">
+      <div class="modal-content">
+        <button id="detailClose" class="modal-close">&times;</button>
+        <h2 id="detailName" class="modal-title"></h2>
+        <img id="detailImage" class="modal-image" alt="模型图片">
+        <div id="detailDescription" class="modal-description"></div>
+      </div>
+    </div>
+  </div>
+
+  <script src="./renderer.js"></script>
+</body>
+</html>

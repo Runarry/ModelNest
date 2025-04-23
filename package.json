@@ -1,0 +1,17 @@
+{
+  "name": "ModelNest",
+  "version": "1.0.0",
+  "description": "跨平台 AI 模型管理与浏览工具，支持本地与 WebDAV 多数据源。",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "electron": "^35.2.0",
+    "webdav": "^5.0.10",
+    "petite-vue": "^0.4.1"
+  },
+  "devDependencies": {},
+  "author": "Banazzle",
+  "license": "MIT"
+}
