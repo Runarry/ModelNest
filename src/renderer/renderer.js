@@ -106,6 +106,14 @@ document.addEventListener('DOMContentLoaded', async () => {
       const option = document.createElement('option');
       option.value = src.id;
       option.textContent = src.name;
+      // 根据源类型添加 CSS 类，假设存在 src.type 字段
+      if (src.type === 'local') {
+        option.classList.add('source-option-local');
+      } else if (src.type === 'webdav') {
+        option.classList.add('source-option-webdav');
+      } else {
+        // 可以为未知类型添加默认类或不加类
+      }
       sourceSelect.appendChild(option);
     });
   }

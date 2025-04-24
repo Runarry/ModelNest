@@ -75,7 +75,7 @@ body {
 }
 
 .sidebar {
-  width: 200px; /* Adjust sidebar width as needed */
+  width: 160px; /* Reduced sidebar width */
   flex-shrink: 0; /* Prevent sidebar from shrinking */
   /* padding-top: 1rem; Use layout padding-top */
 }
@@ -747,4 +747,38 @@ select:hover {
   height: 100%;
   object-fit: cover;
   object-position: center;
+}
+/* Styles for source select options with icons */
+#sourceSelect option {
+  padding-left: 25px; /* Add padding for the icon */
+  position: relative; /* Needed for pseudo-element positioning */
+}
+
+#sourceSelect option::before {
+  content: ''; /* Default empty content */
+  position: absolute;
+  left: 5px; /* Position icon to the left */
+  top: 50%;
+  transform: translateY(-50%);
+  width: 16px; /* Icon width */
+  height: 16px; /* Icon height */
+  background-repeat: no-repeat;
+  background-size: contain;
+  background-position: center;
+}
+
+/* Icon for Local Sources (Using a simple disk emoji for now) */
+#sourceSelect .source-option-local::before {
+ content: '💾'; /* Unicode character for floppy disk */
+ /* Alternatively, use background-image with a data URI or URL */
+ /* background-image: url('path/to/local-icon.svg'); */
+ font-size: 14px; /* Adjust emoji size if needed */
+}
+
+/* Icon for WebDAV Sources (Using a cloud emoji for now) */
+#sourceSelect .source-option-webdav::before {
+ content: '☁️'; /* Unicode character for cloud */
+ /* Alternatively, use background-image with a data URI or URL */
+ /* background-image: url('path/to/webdav-icon.svg'); */
+ font-size: 14px; /* Adjust emoji size if needed */
 }
