@@ -28,6 +28,8 @@
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   color: var(--text-color);
+  display: flex; /* Make body a flex container */
+  flex-direction: column; /* Arrange children vertically */
   background-color: var(--bg-color);
   line-height: 1.6;
   min-height: 100vh;
@@ -37,6 +39,9 @@ body {
 #app {
   max-width: 1400px;
   margin: 0 auto;
+  flex-grow: 1; /* Allow #app to grow vertically */
+  display: flex; /* Make #app a flex container */
+  flex-direction: column; /* Arrange children vertically */
   padding: 0 2rem; /* Add horizontal padding back to #app for overall centering */
 }
 
@@ -74,6 +79,8 @@ body {
 /* Main Layout Styles */
 .main-layout {
   /* display: flex; Removed flex */
+  flex-grow: 1; /* Allow main-layout to grow vertically */
+  display: flex; /* Make it a flex container again for content-layout */
   /* gap: 1.5rem; Removed gap */
   padding-bottom: 2rem; /* Add space at the bottom */
 }
@@ -790,6 +797,8 @@ select:hover {
 /* 目录 Tab 栏样式 */
 .content-layout {
  display: flex;
+ flex-grow: 1; /* Allow content-layout to grow vertically */
+ align-items: flex-start; /* Align items to the top, prevent stretching */
  gap: 1.5rem;
 }
 
@@ -836,7 +845,8 @@ select:hover {
 
 .content-main {
  flex-grow: 1;
- min-width: 0;
+ /* min-width: 0; Replaced by specific min-width below */
+ min-width: calc(4 * 220px + 3 * 1rem); /* Enforce min width for 4 cards + 3 gaps */
 }
 
 /* 响应式调整 */
