@@ -156,8 +156,11 @@ document.addEventListener('DOMContentLoaded', async () => {
         // 观察图片懒加载
         imageObserver.observe(imageElement);
       } else {
+        // Create a placeholder div that still uses model-image styles for layout
         imageElement = document.createElement('div');
-        imageElement.className = 'model-image-placeholder';
+        imageElement.className = 'model-image model-image-placeholder'; // Add both classes
+        // Optional: Add an icon or text inside the placeholder
+        imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="placeholder-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
       }
 
       card.appendChild(imageElement);

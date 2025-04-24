@@ -381,6 +381,29 @@ select:hover {
   width: 100%; /* Ensure image takes full width */
 }
 
+/* Styles for the image placeholder */
+.model-image-placeholder {
+  display: flex; /* Use flex to center content */
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.05); /* Slightly different background */
+}
+
+.model-image-placeholder .placeholder-icon {
+  color: rgba(0, 0, 0, 0.2); /* Color for the placeholder icon */
+  width: 30%; /* Adjust icon size relative to placeholder */
+  height: 30%;
+}
+
+[data-theme="dark"] .model-image-placeholder {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .model-image-placeholder .placeholder-icon {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+
 .model-content {
   /* Apply padding here instead of the card */
   padding: 0.8rem 1rem 0.5rem 1rem; /* Adjust padding: top right bottom left */
