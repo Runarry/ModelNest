@@ -82,8 +82,26 @@ app.whenReady().then(() => {
   });
 });
 
-app.on('window-all-closed', function () {
-  if (process.platform !== 'darwin') app.quit();
+
+
+app.on('window-all-closed', async function () {
+  if (process.platform !== 'darwin') {
+    try {
+      // 清理图片缓存
+      await imageCache.clearCache();
+
+      // 清理WebDAV下载缓存目录
+      const webdavCacheDir = path.join(process.cwd(), 'cache', 'webdav_images');
+      if (fs.existsSync(webdavCacheDir)) {
+        const files = await fs.promises.readdir(webdavCacheDir);
+        await Promise.all(files.map(file => fs.promises.unlink(path.join(webdavCacheDir, file))));
+        console.log(`[Main] 清理WebDAV下载缓存目录: ${webdavCacheDir}, 删除文件数: ${files.length}`);
+      }
+    } catch (e) {
+      console.error('[Main] 清理缓存失败:', e);
+    }
+    app.quit();
+  }
 });
 
  // IPC: 获取配置
