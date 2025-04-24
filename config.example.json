@@ -11,8 +11,8 @@
       "name": "WebDAV模型库B",
       "type": "webdav",
       "url": "https://openapi.alipan.com/dav",
-      "username": "***",
-      "password": "***"
+      "username": "WEBDAV名称",
+      "password": "WEBDAV密码"
     }
   ],
   "supportedExtensions": [

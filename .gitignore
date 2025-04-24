@@ -76,3 +76,4 @@ ehthumbs.db
 .vscode/
 
 cache/
+/config.json
