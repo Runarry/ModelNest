@@ -248,14 +248,14 @@ select:hover {
 }
 
 .list-view .model-name {
-  font-size: 1.2rem;
+  font-size: 1.1rem; /* Reduced font size */
   font-weight: 600;
   margin: 0;
 }
 
 .list-view .model-type {
-  font-size: 0.9rem;
-  color: #666;
+  font-size: 0.8rem; /* Adjusted font size */
+  color: #888; /* Softer color */
   margin: 0;
 }
 
@@ -420,9 +420,9 @@ select:hover {
 }
 
 .model-name {
-  font-size: 1.15rem; /* Increased font size */
-  font-weight: 600; /* Slightly reduced weight for balance */
-  margin-bottom: 0.4rem; /* Adjusted margin */
+  font-size: 1.05rem; /* Reduced font size */
+  font-weight: 600;
+  margin-bottom: 0.4rem;
   color: var(--text-primary);
   line-height: 1.3;
 }
@@ -430,15 +430,13 @@ select:hover {
 .model-type {
   display: inline-block;
   padding: 0.2rem 0.5rem;
-  background-color: var(--tag-bg);
-  color: var(--tag-text);
+  background-color: rgba(0, 0, 0, 0.05); /* Lighter background */
+  color: #888; /* Softer color */
   border-radius: 4px;
-  font-size: 0.7rem; /* Slightly smaller font size */
-  font-weight: 500; /* Reduced weight */
-  margin-top: 0.2rem; /* Adjusted margin */
-  color: #6c757d; /* Less prominent color (example) */
-  /* Alternatively, use a variable if defined: var(--text-secondary); */
-  text-transform: capitalize;
+  font-size: 0.75rem; /* Adjusted font size */
+  font-weight: 500;
+  margin-top: 0.3rem; /* Adjusted margin */
+  /* text-transform: capitalize; Removed */
 }
 
 .tags-container {
