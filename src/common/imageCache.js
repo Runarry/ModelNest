@@ -50,19 +50,15 @@ function setConfig(options = {}) {
  * @param {string} srcPath 原始图片路径（本地或 WebDAV 下载到本地的临时路径）
  * @returns {Promise<string>} 压缩后图片的本地缓存路径
  */
-console.log(`[ImageCache] 初始化配置:`, config);
 
 async function getCompressedImage(srcPath, hashKey) {
-    console.log(`[ImageCache] getCompressedImage 调用: ${srcPath}`);
-    if (hashKey) console.log(`[ImageCache] 使用外部hashKey: ${hashKey}`);
-    console.log(`[ImageCache] 缓存目录: ${config.cacheDir}`);
+    if (hashKey && config.debug) console.log(`[ImageCache] 使用外部hashKey: ${hashKey}`); // Keep debug log conditional
     stats.totalRequests++;
     
     // 1. 确保缓存目录存在
     if (!fs.existsSync(config.cacheDir)) {
         try {
             fs.mkdirSync(config.cacheDir, { recursive: true, mode: 0o755 }); // 确保目录权限正确
-            console.log(`[ImageCache] 创建缓存目录成功: ${config.cacheDir}`);
         } catch (e) {
             console.error(`[ImageCache] 创建缓存目录失败: ${e.message}`);
             throw e; // 抛出异常避免继续执行
@@ -74,7 +70,6 @@ async function getCompressedImage(srcPath, hashKey) {
         : crypto.createHash('md5').update(srcPath + JSON.stringify(config)).digest('hex');
     const ext = config.compressFormat === 'webp' ? '.webp' : '.jpg';
     const cachePath = path.join(config.cacheDir, hash + ext);
-    console.log(`[ImageCache] 缓存文件路径: ${cachePath}`);
 
     // 3. 检查缓存是否存在
     try {
@@ -136,8 +131,7 @@ if (!fs.existsSync(cachePath)) {
         stats.compressedSize += destStats.size;
 
         if (config.debug) {
-            const ratio = (1 - destStats.size/srcStats.size) * 100;
-            console.log(`[ImageCache] 压缩完成: ${path.basename(srcPath)} (${(srcStats.size/1024).toFixed(1)}KB -> ${(destStats.size/1024).toFixed(1)}KB, 节省${ratio.toFixed(1)}%)`);
+            // Removed compression summary log
         }
 
         // 5. 检查缓存空间
@@ -161,7 +155,6 @@ async function clearCache() {
         await Promise.all(files.map(file =>
             fs.promises.unlink(path.join(config.cacheDir, file))
         ));
-        console.log(`[ImageCache] 已清理 ${files.length} 个缓存文件`);
     }
     stats.cacheHits = 0;
     stats.totalRequests = 0;

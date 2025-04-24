@@ -27,14 +27,12 @@ class WebDavDataSource extends DataSource {
   async listModels() {
     await this.ensureInitialized();
     const supportedExtensions = this.config.supportedExtensions || [];
-    console.log('[WebDavDataSource] Listing models from:', this.config.url);
-    
+
     let allModels = [];
     const walk = async (dir) => {
       try {
         const items = await this.client.getDirectoryContents(dir);
-        console.log(`[WebDavDataSource] Found ${items.length} items in ${dir}`);
-        
+
         // 获取当前目录下的模型文件
         const modelFiles = items.filter(item =>
           !item.filename.endsWith('/') &&
@@ -75,7 +73,6 @@ class WebDavDataSource extends DataSource {
             lastModified: new Date(modelFile.lastmod),
             extra: detail
           };
-          console.log('[WebDavDataSource] Found model:', modelObj);
           allModels.push(modelObj);
         }
         
@@ -99,15 +96,12 @@ class WebDavDataSource extends DataSource {
   async readModelDetail(jsonPath) {
     await this.ensureInitialized();
     if (!jsonPath) {
-      console.log('[WebDavDataSource] No jsonPath provided');
       return {};
     }
     
     try {
-      console.log('[WebDavDataSource] Reading model detail from:', jsonPath);
       const content = await this.client.getFileContents(jsonPath);
       const detail = JSON.parse(content.toString());
-      console.log('[WebDavDataSource] Model detail:', detail);
       return detail;
     } catch (e) {
       console.error('[WebDavDataSource] Error reading model detail:', e);
@@ -118,12 +112,10 @@ class WebDavDataSource extends DataSource {
   async getImageData(imagePath) {
     await this.ensureInitialized();
     if (!imagePath) {
-      console.log('[WebDavDataSource] No imagePath provided');
       return null;
     }
     
     try {
-      console.log('[WebDavDataSource] Reading image from:', imagePath);
       const content = await this.client.getFileContents(imagePath);
       return {
         path: imagePath,

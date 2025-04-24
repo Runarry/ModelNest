@@ -8,7 +8,6 @@ function parseLocalModels(dir, supportedExtensions) {
   const models = [];
 
   // 调试输出当前目录和文件列表
-  console.log('[ModelNest][parseLocalModels] dir:', dir, 'files:', files);
 
   // 只处理一级目录
   files.forEach(file => {
@@ -38,7 +37,6 @@ function parseLocalModels(dir, supportedExtensions) {
         tags: detail.tags || [],
         extra: detail
       };
-      console.log('[ModelNest][parseLocalModels] found model:', modelObj);
       models.push(modelObj);
     }
   });

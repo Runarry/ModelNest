@@ -48,7 +48,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     entries.forEach(entry => {
       if (entry.isIntersecting) {
         const img = entry.target;
-        console.log('开始加载可见图片:', img.dataset.imagePath);
         loadImage(img);
         imageObserver.unobserve(img);
       }
@@ -62,10 +61,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         imagePath: imgElement.dataset.imagePath
       });
       if (imageData) {
-        console.log('获取到图片数据:', imageData.data.length);
         const blob = new Blob([imageData.data], {type: imageData.mimeType});
         imgElement.src = URL.createObjectURL(blob);
-        imgElement.onload = () => console.log('图片加载完成');
+        imgElement.onload = () => {}; // 保留空回调或根据需要移除onload
       }
     } catch (e) {
       console.error('加载图片失败:', e);
@@ -131,8 +129,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderModels() {
     clearChildren(modelList);
     const filteredModels = filterType ? models.filter(m => m.type === filterType) : models;
-    console.log('[调试] renderModels filteredModels:', filteredModels);
-    
     // 根据显示模式设置容器类
     const mainSection = document.getElementById('mainSection');
     if (displayMode === 'list') {
@@ -204,7 +200,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       modelList.appendChild(card);
     });
-    console.log('[调试] modelList 子元素数量:', modelList.children.length);
   }
 
 
@@ -213,18 +208,14 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (model.image) {
       // 使用getModelImage获取图片数据
       try {
-        console.log('开始加载WebDAV图片:', model.image);
         const imageData = await window.api.getModelImage({
           sourceId: sourceSelect.value,
           imagePath: model.image
         });
-        console.log('获取到的图片数据:', imageData);
         if (imageData) {
-          console.log('图片数据长度:', imageData.data.length);
           try {
             const blob = new Blob([imageData.data], {type: imageData.mimeType});
             const objectUrl = URL.createObjectURL(blob);
-            console.log('生成的Blob URL:', objectUrl);
             detailImage.src = objectUrl;
           } catch (e) {
             console.error('创建Blob失败:', e);
@@ -329,7 +320,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       const saveBtn = document.getElementById('saveDetailBtn');
       if (saveBtn) {
         saveBtn.onclick = async () => {
-          console.log('保存按钮点击事件触发');
           // 更新model对象
           const inputs = detailDescription.querySelectorAll('input[type="text"]');
           const textarea = detailDescription.querySelector('textarea');
@@ -356,7 +346,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
       
           const newExtra = getExtraData(detailDescription);
-          console.log('读取的额外信息:', newExtra);
           // 合并原有extra和新extra，优先使用新extra的值
           function mergeExtra(oldExtra, newExtra) {
             const result = { ...oldExtra };
@@ -465,13 +454,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     images.forEach(img => {
       const rect = img.getBoundingClientRect();
       if (rect.top < window.innerHeight && rect.bottom > 0) {
-        console.log('开始加载可见图片:', img.dataset.imagePath);
         window.api.getModelImage({
           sourceId: img.dataset.sourceId,
           imagePath: img.dataset.imagePath
         }).then(imageData => {
           if (imageData) {
-            console.log('获取到图片数据:', imageData.data.length, 'bytes');
             const blob = new Blob([imageData.data], {type: imageData.mimeType});
             img.src = URL.createObjectURL(blob);
           }
@@ -493,13 +480,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (e.target.classList.contains('model-image') && !e.target.src) {
       const img = e.target;
       try {
-        console.log('点击加载图片:', img.dataset.imagePath);
         const imageData = await window.api.getModelImage({
           sourceId: img.dataset.sourceId,
           imagePath: img.dataset.imagePath
         });
         if (imageData) {
-          console.log('获取到图片数据:', imageData.data.length, 'bytes');
           const blob = new Blob([imageData.data], {type: imageData.mimeType});
           img.src = URL.createObjectURL(blob);
         }
