@@ -1,0 +1,24 @@
+{
+  "appTitle": "ModelNest Model Management",
+  "loadingModels": "Loading model data...",
+  "viewCard": "Card View",
+  "viewList": "List View",
+  "filterAll": "All",
+  "uncategorized": "Uncategorized",
+  "detail": {
+    "type": "Type:",
+    "filePath": "File Path:",
+    "jsonPath": "JSON Path:",
+    "triggerWord": "Trigger Word:",
+    "tags": "Tags:",
+    "noExtraInfo": "No extra information",
+    "tabs": {
+      "basic": "Basic Info",
+      "description": "Description",
+      "extra": "Extra Info"
+    },
+    "save": "Save",
+    "saveSuccess": "Save successful!",
+    "saveFail": "Save failed: "
+  }
+}

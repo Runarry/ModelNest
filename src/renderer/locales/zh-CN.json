@@ -1,0 +1,24 @@
+{
+  "appTitle": "ModelNest 模型管理",
+  "loadingModels": "加载模型数据中...",
+  "viewCard": "卡片视图",
+  "viewList": "列表视图",
+  "filterAll": "全部",
+  "uncategorized": "未分类",
+  "detail": {
+    "type": "类型:",
+    "filePath": "文件路径:",
+    "jsonPath": "JSON路径:",
+    "triggerWord": "触发词:",
+    "tags": "标签:",
+    "noExtraInfo": "无额外信息",
+    "tabs": {
+      "basic": "基础信息",
+      "description": "描述",
+      "extra": "额外信息"
+    },
+    "save": "保存",
+    "saveSuccess": "保存成功！",
+    "saveFail": "保存失败: "
+  }
+}

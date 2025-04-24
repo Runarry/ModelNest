@@ -1,7 +1,49 @@
- document.addEventListener('DOMContentLoaded', async () => {
+document.addEventListener('DOMContentLoaded', async () => {
+  const { loadLocale, t, getCurrentLocale, getSupportedLocales } = window.i18n;
   // 初始化主题切换
   const { initThemeSwitcher } = await import('./ui.js');
   initThemeSwitcher();
+
+  // ===== 国际化初始化 =====
+  const languageSelect = document.getElementById('languageSelect');
+  // 渲染语言下拉
+  function renderLanguageOptions() {
+    const locales = getSupportedLocales();
+    languageSelect.innerHTML = '';
+    locales.forEach(l => {
+      const opt = document.createElement('option');
+      opt.value = l.code;
+      opt.textContent = l.name;
+      languageSelect.appendChild(opt);
+    });
+    languageSelect.value = getCurrentLocale();
+  }
+
+  // 渲染主界面所有静态文本
+  function setI18nTexts() {
+    document.getElementById('appTitle').textContent = t('appTitle');
+    // document.getElementById('viewCardText').textContent = t('viewCard');
+    // document.getElementById('viewListText').textContent = t('viewList');
+    document.getElementById('cardViewBtn').title = t('viewCard');
+    document.getElementById('listViewBtn').title = t('viewList');
+    document.getElementById('loadingModels').textContent = t('loadingModels');
+    // 详情图片alt
+    document.getElementById('detailImage').alt = t('appTitle');
+  }
+
+  // 监听语言切换
+  languageSelect.addEventListener('change', async () => {
+    await loadLocale(languageSelect.value);
+    setI18nTexts();
+    renderFilterTypes();
+    renderModels();
+    // 其他需要刷新文本的地方可在此补充
+  });
+
+  // 加载当前语言
+  await loadLocale(getCurrentLocale());
+  renderLanguageOptions();
+  setI18nTexts();
 
   // 图片懒加载观察器
   const imageObserver = new IntersectionObserver((entries) => {
@@ -113,7 +155,7 @@
         imageElement.src = '';
         imageElement.setAttribute('data-image-path', model.image);
         imageElement.setAttribute('data-source-id', sourceSelect.value);
-        imageElement.alt = '模型图片';
+        imageElement.alt = t('appTitle');
         imageElement.className = 'model-image';
         imageElement.loading = 'lazy';
         // 观察图片懒加载
@@ -134,7 +176,7 @@
 
       const typeSpan = document.createElement('span');
       typeSpan.className = 'model-type';
-      typeSpan.textContent = model.type || '未分类';
+      typeSpan.textContent = model.type || t('uncategorized');
 
       contentDiv.appendChild(nameH3);
       contentDiv.appendChild(typeSpan);
@@ -227,24 +269,26 @@
       }
     }
 
-    const extraHtml = filteredExtraEntries.length > 0 ? filteredExtraEntries.map(([key, value]) => renderExtra(key, value)).join('') : '<p>无额外信息</p>';
+    const extraHtml = filteredExtraEntries.length > 0
+      ? filteredExtraEntries.map(([key, value]) => renderExtra(key, value)).join('')
+      : `<p>${t('detail.noExtraInfo')}</p>`;
 
     detailDescription.innerHTML = `
       <div class="detail-modal-content">
         <div class="detail-tabs">
-          <button class="tab-btn active" data-tab="basic">基础信息</button>
-          <button class="tab-btn" data-tab="description">描述</button>
-          <button class="tab-btn" data-tab="extra">额外信息</button>
+          <button class="tab-btn active" data-tab="basic">${t('detail.tabs.basic')}</button>
+          <button class="tab-btn" data-tab="description">${t('detail.tabs.description')}</button>
+          <button class="tab-btn" data-tab="extra">${t('detail.tabs.extra')}</button>
         </div>
 
         <div class="tab-content active" id="basic-tab">
           <div class="detail-info">
-            <div class="detail-row"><label>类型:</label><input type="text" value="${model.type || ''}"></div>
-            <div class="detail-row"><label>文件路径:</label><span class="readonly-text">${model.file || ''}</span></div>
-            <div class="detail-row"><label>JSON路径:</label><span class="readonly-text">${model.jsonPath || ''}</span></div>
-            <div class="detail-row"><label>触发词:</label><input type="text" value="${model.triggerWord || ''}"></div>
+            <div class="detail-row"><label>${t('detail.type')}</label><input type="text" value="${model.type || ''}"></div>
+            <div class="detail-row"><label>${t('detail.filePath')}</label><span class="readonly-text">${model.file || ''}</span></div>
+            <div class="detail-row"><label>${t('detail.jsonPath')}</label><span class="readonly-text">${model.jsonPath || ''}</span></div>
+            <div class="detail-row"><label>${t('detail.triggerWord')}</label><input type="text" value="${model.triggerWord || ''}"></div>
             ${model.tags && model.tags.length > 0 ? `
-              <div class="detail-row"><label>标签:</label><input type="text" value="${model.tags.join(', ')}"></div>
+              <div class="detail-row"><label>${t('detail.tags')}</label><input type="text" value="${model.tags.join(', ')}"></div>
             ` : ''}
           </div>
         </div>
@@ -263,7 +307,7 @@
           </div>
         </div>
 
-        <button id="saveDetailBtn" class="btn-save">保存</button>
+        <button id="saveDetailBtn" class="btn-save">${t('detail.save')}</button>
       </div>
     `;
 
@@ -331,9 +375,9 @@
 
           try {
             await window.api.saveModel(model);
-            alert('保存成功！');
+            alert(t('detail.saveSuccess'));
           } catch (e) {
-            alert('保存失败: ' + e.message);
+            alert(t('detail.saveFail') + e.message);
           }
         };
       } else {
