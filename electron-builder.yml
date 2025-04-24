@@ -1,10 +1,14 @@
 appId: com.banazzle.modelnest
 productName: ModelNest
 files:
-  - '**/*'
-  - '!models'
-  - '!models/**'
-  - '!config.json'
+  - 'node_modules/**'
+  - 'src/**'
+
+  - 'icon.png'
+  - 'main.js'
+  - 'preload.js'
+
+
 asar: true
 win:
   target:
