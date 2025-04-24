@@ -8,13 +8,27 @@
 </head>
 <body>
   <div id="app">
-    <header>
+    <nav class="top-menu-bar">
       <h1 id="appTitle"></h1>
-      <div class="filters">
-        <select id="sourceSelect"></select>
-        <select id="filterSelect"></select>
+      <div class="settings-controls">
         <select id="languageSelect" class="lang-select"></select>
-        <div class="view-toggle">
+        <button id="themeToggleBtn" class="view-btn" title="Toggle Theme">
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+        </button>
+      </div>
+    </nav>
+
+    <div class="main-layout">
+      <aside class="sidebar">
+        <label for="sourceSelect" class="sidebar-label">模型库:</label>
+        <select id="sourceSelect"></select>
+      </aside>
+
+      <main class="content-area">
+        <header class="filter-header">
+          <div class="filters">
+            <select id="filterSelect"></select>
+            <div class="view-toggle">
           <button id="cardViewBtn" class="view-btn active" title="" type="button">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
             <span id="viewCardText"></span>
@@ -23,18 +37,20 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
             <span id="viewListText"></span>
           </button>
+            </div>
+          </div>
+        </header>
+
+        <div id="loading">
+          <div class="loading-spinner"></div>
+          <span id="loadingModels"></span>
         </div>
-      </div>
-    </header>
 
-    <div id="loading">
-      <div class="loading-spinner"></div>
-      <span id="loadingModels"></span>
+        <section id="mainSection">
+          <ul id="modelList"></ul>
+        </section>
+      </main>
     </div>
-
-    <section id="mainSection">
-      <ul id="modelList"></ul>
-    </section>
 
     <div id="detailModal" class="modal">
       <div class="modal-content">

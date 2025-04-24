@@ -37,22 +37,80 @@ body {
 #app {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 2rem;
+  padding: 0 2rem; /* Add horizontal padding back to #app for overall centering */
 }
 
-header {
+/* Top Menu Bar Styles */
+.top-menu-bar {
+  /* Apply padding here for top/bottom spacing */
+  padding: 0.8rem 0; /* Vertical padding */
   display: flex;
-  justify-content: space-between;
+  justify-content: space-between; /* Title left, settings right */
   align-items: center;
-  margin-bottom: 2rem;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid var(--border-color);
+  margin-bottom: 1.5rem; /* Add margin below top bar */
+  border-bottom: 1px solid var(--border-color); /* Add separator */
+  /* Ensure it spans full width if needed, though max-width on #app might handle this */
+  /* width: 100%; */
 }
 
-h1 {
-  font-size: 1.8rem;
+/* Style for the title within the top bar */
+.top-menu-bar h1 {
+  margin: 0; /* Remove default margin */
+  font-size: 1.6rem; /* Adjust size if needed */
   color: var(--primary-color);
 }
+
+.settings-controls {
+  display: flex;
+  gap: 0.8rem; /* Spacing between language select and theme button */
+  align-items: center;
+}
+
+/* Main Layout Styles */
+.main-layout {
+  display: flex;
+  gap: 1.5rem; /* Space between sidebar and content */
+  /* padding-top: 1.5rem; Remove top padding, use top-bar margin */
+  padding-bottom: 2rem; /* Add space at the bottom */
+}
+
+.sidebar {
+  width: 200px; /* Adjust sidebar width as needed */
+  flex-shrink: 0; /* Prevent sidebar from shrinking */
+  /* padding-top: 1rem; Use layout padding-top */
+}
+
+.sidebar-label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 600;
+  color: var(--text-color);
+}
+
+.sidebar #sourceSelect {
+  width: 100%; /* Make select fill sidebar width */
+}
+
+.content-area {
+  flex-grow: 1; /* Allow content area to take remaining space */
+  min-width: 0; /* Prevent content overflow issues */
+}
+
+/* Styles for the header containing filters */
+.filter-header { /* Updated class name */
+  display: flex;
+  justify-content: flex-end; /* Align filters to the right */
+  align-items: center;
+  margin-bottom: 1.5rem; /* Adjusted margin */
+  /* padding-bottom: 1rem; Removed padding */
+  /* border-bottom: 1px solid var(--border-color); Removed border */
+}
+
+/* Remove standalone h1 style if not used elsewhere */
+/* h1 {
+  font-size: 1.8rem;
+  color: var(--primary-color);
+} */
 
 select {
   padding: 0.5rem 1rem;
@@ -61,6 +119,11 @@ select {
   background-color: var(--card-bg);
   color: var(--text-color);
   font-size: 1rem;
+  transition: border-color 0.2s ease; /* Add transition for hover */
+}
+
+select:hover {
+  border-color: var(--primary-color); /* Add hover effect */
 }
 
 #loading {
@@ -95,14 +158,14 @@ select {
 
 .filters {
   display: flex;
-  gap: 1rem;
+  gap: 0.8rem; /* Reduced gap for better spacing */
   align-items: center;
 }
 
 .view-toggle {
   display: flex;
   gap: 0.5rem;
-  margin-left: 0.5rem;
+  /* margin-left: 0.5rem; Removed margin */
 }
 
 .view-btn {
@@ -282,6 +345,7 @@ select {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1rem;
+  align-items: start; /* Prevent items stretching vertically */
   list-style: none;
   padding: 0;
 }
@@ -289,45 +353,53 @@ select {
 .model-card {
   background-color: var(--card-bg);
   border-radius: 12px;
-  overflow: hidden;
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.12);
+  overflow: hidden; /* Restore overflow hidden */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Softer shadow */
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
-  display: flex;
-  flex-direction: column;
-  height: 100%;
-  min-height: 240px;
-  padding: 1rem;
+  /* display: flex; Removed flex display */
+  /* flex-direction: column; Removed flex direction */
+  /* height: auto; Let height be naturally determined */
+  /* min-height: 240px; Removed fixed min-height */
+  /* padding: 1rem; Remove overall padding, apply to content instead */
 }
 
 .model-card:hover {
-  transform: translateY(-6px);
-  box-shadow: 0 12px 28px rgba(0, 0, 0, 0.3);
+  transform: translateY(-4px); /* Slightly less lift */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); /* Adjusted hover shadow */
 }
 
 .model-image {
   width: 100%;
-  flex: 1;
-  min-height: 220px;
+  flex-shrink: 0; /* Prevent image from shrinking */
+  /* min-height: 220px; Removed fixed min-height */
+  aspect-ratio: 1 / 1; /* Changed aspect ratio to square */
   object-fit: cover;
   background-color: rgba(0, 0, 0, 0.07);
-  border-radius: 12px 12px 0 0;
+  border-radius: 8px 8px 0 0; /* Radius only for top corners */
   display: block;
+  width: 100%; /* Ensure image takes full width */
 }
 
 .model-content {
-  padding: 0.8rem 0.8rem 1rem 0.8rem;
-  flex: 0 0 auto;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  min-height: 100px;
+  /* Apply padding here instead of the card */
+  padding: 0.8rem 1rem 0.5rem 1rem; /* Adjust padding: top right bottom left */
+  /* Ensure it's displayed */
+  display: block; /* Or flex if needed for internal alignment */
+  visibility: visible;
+  height: auto;
+  /* flex: 0 0 auto; Removed flex property */
+  /* flex-shrink: 0; Removed flex shrink */
+  /* display: flex; Let it be default block */
+  /* flex-direction: column; */
+  /* justify-content: flex-start; */
+  /* min-height: 100px; Removed fixed min-height */
 }
 
 .model-name {
-  font-size: 1rem;
-  font-weight: 700;
-  margin-bottom: 0.3rem;
+  font-size: 1.15rem; /* Increased font size */
+  font-weight: 600; /* Slightly reduced weight for balance */
+  margin-bottom: 0.4rem; /* Adjusted margin */
   color: var(--text-primary);
   line-height: 1.3;
 }
@@ -338,31 +410,68 @@ select {
   background-color: var(--tag-bg);
   color: var(--tag-text);
   border-radius: 4px;
-  font-size: 0.75rem;
-  font-weight: 600;
-  margin-top: 0.15rem;
+  font-size: 0.7rem; /* Slightly smaller font size */
+  font-weight: 500; /* Reduced weight */
+  margin-top: 0.2rem; /* Adjusted margin */
+  color: #6c757d; /* Less prominent color (example) */
+  /* Alternatively, use a variable if defined: var(--text-secondary); */
   text-transform: capitalize;
 }
 
 .tags-container {
-  display: flex;
+  display: flex; /* Keep flex for tag layout */
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin-top: 0.6rem;
-  max-height: 60px;
-  overflow-y: auto;
-  padding: 4px 6px;
-  background-color: rgba(67, 97, 238, 0.05);
-  border-radius: 8px;
+  /* Ensure it's displayed */
+  visibility: visible;
+  height: auto;
+  /* flex-shrink: 0; Removed flex shrink */
+  margin-top: 0.4rem; /* Reduced margin top */
+  /* max-height: 60px; Removed max-height */
+  /* overflow-y: auto; Removed overflow */
+  padding: 0.5rem 1rem 0.8rem 1rem; /* Padding: top right bottom left */
+  /* background-color: rgba(67, 97, 238, 0.05); Optional: remove background */
+  border-radius: 0 0 8px 8px; /* Radius for bottom corners if needed */
+  position: relative;
+  transition: max-height 0.3s ease-out; /* Smooth transition for expansion */
 }
+
+/* Style for hidden tags */
+.tag.tag-hidden {
+  display: none;
+}
+
+/* When container is expanded, show hidden tags */
+.tags-container.expanded .tag.tag-hidden {
+  display: inline-block;
+}
+
+/* Style for the "more" button */
+.tag-more-btn {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  font-size: 0.65rem; /* Match tag font size */
+  padding: 0.2rem 0.4rem;
+  margin-left: 0.2rem;
+  font-weight: 600;
+  text-decoration: underline;
+  display: inline-block; /* Ensure it flows with tags */
+}
+
+.tag-more-btn:hover {
+  text-decoration: none;
+}
+
 
 .tag {
   display: inline-block;
-  padding: 0.25rem 0.6rem;
+  padding: 0.2rem 0.5rem; /* Adjusted padding */
   background-color: rgba(67, 97, 238, 0.1);
   color: var(--primary-color);
-  border-radius: 12px;
-  font-size: 0.7rem;
+  border-radius: 10px; /* Adjusted radius */
+  font-size: 0.65rem; /* Adjusted font size */
   font-weight: 500;
   line-height: 1.2;
   white-space: nowrap;

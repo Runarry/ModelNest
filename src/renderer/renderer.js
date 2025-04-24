@@ -129,6 +129,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   function renderModels() {
     clearChildren(modelList);
     const filteredModels = filterType ? models.filter(m => m.type === filterType) : models;
+    const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
     // 根据显示模式设置容器类
     const mainSection = document.getElementById('mainSection');
     if (displayMode === 'list') {
@@ -180,18 +181,35 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (model.tags && model.tags.length > 0) {
         tagsContainer = document.createElement('div');
         tagsContainer.className = 'tags-container';
-        
-        model.tags.forEach(tag => {
+
+        model.tags.forEach((tag, index) => {
           const tagElement = document.createElement('span');
           tagElement.className = 'tag';
           tagElement.textContent = tag;
+          if (index >= MAX_VISIBLE_TAGS) {
+            tagElement.classList.add('tag-hidden'); // Hide tags beyond the limit
+          }
           tagsContainer.appendChild(tagElement);
         });
+
+        // Add "more" button if tags exceed the limit
+        if (model.tags.length > MAX_VISIBLE_TAGS) {
+          const moreBtn = document.createElement('button');
+          moreBtn.className = 'tag-more-btn';
+          moreBtn.textContent = t('showMore'); // Use translation key
+          moreBtn.onclick = (event) => {
+            event.stopPropagation(); // Prevent card click event
+            const container = event.target.closest('.tags-container');
+            const isExpanded = container.classList.toggle('expanded');
+            event.target.textContent = isExpanded ? t('showLess') : t('showMore'); // Update button text
+          };
+          tagsContainer.appendChild(moreBtn);
+        }
       }
 
       card.appendChild(contentDiv);
       if (tagsContainer) {
-        card.appendChild(tagsContainer);
+        card.appendChild(tagsContainer); // Append container after contentDiv
       }
 
       card.addEventListener('click', async () => {
