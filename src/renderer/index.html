@@ -10,6 +10,7 @@
   <div id="app">
     <nav class="top-menu-bar">
       <h1 id="appTitle"></h1>
+      <!-- Source selector removed from top bar -->
       <div class="settings-controls">
         <select id="languageSelect" class="lang-select"></select>
         <button id="themeToggleBtn" class="view-btn" title="Toggle Theme">
@@ -19,13 +20,14 @@
     </nav>
 
     <div class="main-layout">
-      <aside class="sidebar">
-        <label for="sourceSelect" class="sidebar-label">模型库:</label>
-        <select id="sourceSelect"></select>
-      </aside>
-
+      <!-- Sidebar removed -->
       <main class="content-area">
+        <!-- Source selector moved into filter-header -->
         <header class="filter-header">
+          <div class="source-selector">
+            <label for="sourceSelect" class="content-label">模型库:</label>
+            <select id="sourceSelect"></select>
+          </div>
           <div class="filters">
             <select id="filterSelect"></select>
             <div class="view-toggle">

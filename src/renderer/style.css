@@ -42,15 +42,12 @@ body {
 
 /* Top Menu Bar Styles */
 .top-menu-bar {
-  /* Apply padding here for top/bottom spacing */
   padding: 0.8rem 0; /* Vertical padding */
   display: flex;
+  align-items: center; /* Align items vertically */
   justify-content: space-between; /* Title left, settings right */
-  align-items: center;
   margin-bottom: 1.5rem; /* Add margin below top bar */
   border-bottom: 1px solid var(--border-color); /* Add separator */
-  /* Ensure it spans full width if needed, though max-width on #app might handle this */
-  /* width: 100%; */
 }
 
 /* Style for the title within the top bar */
@@ -58,50 +55,52 @@ body {
   margin: 0; /* Remove default margin */
   font-size: 1.6rem; /* Adjust size if needed */
   color: var(--primary-color);
+  /* flex-shrink: 0; No longer needed */
+}
+
+/* Removed styles for .source-selector and .top-bar-label in top bar */
+
+#sourceSelect {
+  /* General style for the select, width/max-width might be set below */
 }
 
 .settings-controls {
   display: flex;
   gap: 0.8rem; /* Spacing between language select and theme button */
   align-items: center;
+  /* flex-shrink: 0; No longer needed */
 }
 
 /* Main Layout Styles */
 .main-layout {
-  display: flex;
-  gap: 1.5rem; /* Space between sidebar and content */
-  /* padding-top: 1.5rem; Remove top padding, use top-bar margin */
+  /* display: flex; Removed flex */
+  /* gap: 1.5rem; Removed gap */
   padding-bottom: 2rem; /* Add space at the bottom */
 }
 
-.sidebar {
-  width: 160px; /* Reduced sidebar width */
-  flex-shrink: 0; /* Prevent sidebar from shrinking */
-  /* padding-top: 1rem; Use layout padding-top */
-}
-
-.sidebar-label {
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 600;
-  color: var(--text-color);
-}
-
-.sidebar #sourceSelect {
-  width: 100%; /* Make select fill sidebar width */
-}
+/* Removed .sidebar and .sidebar-label styles */
 
 .content-area {
-  flex-grow: 1; /* Allow content area to take remaining space */
+  /* flex-grow: 1; Removed flex-grow */
+  width: 100%; /* Ensure content area takes full width */
   min-width: 0; /* Prevent content overflow issues */
 }
 
-/* Styles for the header containing filters */
-.filter-header { /* Updated class name */
+/* Removed styles for .source-selector.content-section */
+
+.content-label { /* Keep general label style if used elsewhere, or make more specific */
+  font-weight: 600;
+  color: var(--text-color);
+  white-space: nowrap;
+}
+
+/* Styles for the header containing source selector and filters */
+.filter-header {
   display: flex;
-  justify-content: flex-end; /* Align filters to the right */
+  justify-content: space-between; /* Source selector left, filters right */
   align-items: center;
   margin-bottom: 1.5rem; /* Adjusted margin */
+  gap: 1rem; /* Add some gap between left and right sections */
   /* padding-bottom: 1rem; Removed padding */
   /* border-bottom: 1px solid var(--border-color); Removed border */
 }
@@ -156,10 +155,23 @@ select:hover {
   gap: 1.5rem;
 }
 
+/* Styles for the source selector now inside filter-header */
+.filter-header .source-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem; /* Space between label and select */
+}
+
+.filter-header .source-selector #sourceSelect {
+   max-width: 300px; /* Or adjust as needed */
+   width: auto; /* Allow it to shrink if needed */
+}
+
 .filters {
   display: flex;
   gap: 0.8rem; /* Reduced gap for better spacing */
   align-items: center;
+  /* No justification needed here, parent handles it */
 }
 
 .view-toggle {
