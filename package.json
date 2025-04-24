@@ -9,8 +9,9 @@
     "dist": "electron-builder -c electron-builder.yml"
   },
   "dependencies": {
-    "webdav": "^5.0.10",
-    "petite-vue": "^0.4.1"
+    "petite-vue": "^0.4.1",
+    "sharp": "^0.34.1",
+    "webdav": "^5.0.10"
   },
   "devDependencies": {
     "electron": "^35.2.0",

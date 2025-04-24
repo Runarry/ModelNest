@@ -75,3 +75,4 @@ ehthumbs.db
 # VSCode settings
 .vscode/
 
+cache/

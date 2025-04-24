@@ -4,7 +4,7 @@
       "id": "local1",
       "name": "本地模型库A",
       "type": "local",
-      "path": "./models"
+      "path": "G:/Models"
     },
     {
       "id": "webdav1",
@@ -17,5 +17,11 @@
   ],
   "supportedExtensions": [
     ".checkpoint", ".ckpt", ".safetensors", ".pt", ".pth", ".bin"
-  ]
+  ],
+  "imageCache": {
+    "debug": true,
+    "compressQuality": 80,
+    "compressFormat": "jpeg",
+    "maxCacheSizeMB": 500
+  }
 }

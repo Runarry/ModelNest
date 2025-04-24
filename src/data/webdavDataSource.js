@@ -4,8 +4,10 @@ const path = require('path');
 class WebDavDataSource extends DataSource {
   constructor(config) {
     super(config);
+
     this.initialized = this.initClient(config);
   }
+
 
   async initClient(config) {
     const { createClient } = await import('webdav');

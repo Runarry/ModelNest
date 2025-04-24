@@ -3,6 +3,9 @@ const path = require('path');
 const fs = require('fs');
 const { LocalDataSource } = require('./src/data/dataSource');
 const { WebDavDataSource } = require('./src/data/webdavDataSource');
+const imageCache = require('./src/common/imageCache');
+const os = require('os');
+const crypto = require('crypto');
 
 let config = null;
 
@@ -27,6 +30,11 @@ function loadConfig() {
     console.error('加载或解析 config.json 失败:', error);
     config = { modelSources: [], supportedExtensions: [] };
   }
+}
+if (config && config.imageCache) {
+  imageCache.setConfig(config.imageCache);
+} else {
+  imageCache.setConfig({});
 }
 
 // 创建主窗口
@@ -115,21 +123,49 @@ ipcMain.handle('getModelDetail', async (event, { sourceId, jsonPath }) => {
 ipcMain.handle('getModelImage', async (event, { sourceId, imagePath }) => {
   const source = (config.modelSources || []).find(s => s.id === sourceId);
   if (!source) return null;
-  if (source.type === 'local') {
-    try {
-      const data = await fs.promises.readFile(imagePath);
-      return {
-        path: imagePath,
-        data: data,
-        mimeType: 'image/png'
-      };
-    } catch (e) {
-      console.error('读取本地图片失败:', e);
-      return null;
+
+  // 统一图片压缩与缓存处理
+  // 返回格式：{ path, data, mimeType }
+  try {
+    let localPath = imagePath;
+    let mimeType = 'image/png';
+
+    if (source.type === 'local') {
+      // 本地图片，直接用原路径
+      // 走压缩与缓存流程
+      localPath = imagePath;
+    } else if (source.type === 'webdav') {
+      // WebDAV 图片，需先下载到本地临时文件
+      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      const imageData = await ds.getImageData(imagePath);
+      if (!imageData || !imageData.data) return null;
+
+      // 生成唯一临时文件名
+      const hash = crypto.createHash('md5').update(imagePath).digest('hex');
+      const tempDir = path.join(process.cwd(),'cache', 'webdav_images');
+      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
+      localPath = path.join(tempDir, hash + '.png');
+      await fs.promises.writeFile(localPath, imageData.data);
+      mimeType = imageData.mimeType || 'image/png';
     }
-  } else if (source.type === 'webdav') {
-    const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-    return await ds.getImageData(imagePath);
+
+    // 统一走压缩与缓存
+    let compressedPath;
+    try {
+      compressedPath = await imageCache.getCompressedImage(localPath);
+    } catch (e) {
+      // 若压缩未实现，降级为原图
+      compressedPath = localPath;
+    }
+
+    const data = await fs.promises.readFile(compressedPath);
+    return {
+      path: compressedPath,
+      data: data,
+      mimeType: mimeType // 实际可根据压缩格式调整
+    };
+  } catch (e) {
+    console.error('图片压缩/缓存流程失败:', e);
+    return null;
   }
-  return null;
 });
