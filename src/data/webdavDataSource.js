@@ -47,7 +47,7 @@ class WebDavDataSource extends DataSource {
           // 查找同名图片和json
           const image = items.find(f =>
             !f.filename.endsWith('/') &&
-            (f.filename.endsWith(`${base}.png`) || f.filename.endsWith(`${base}_v2.0.png`)));
+            (f.filename.endsWith(`${base}.png`) || f.filename.endsWith(`${base}.jpg`)));
           const jsonFile = items.find(f =>
             !f.filename.endsWith('/') &&
             f.filename.endsWith(`${base}.json`));
