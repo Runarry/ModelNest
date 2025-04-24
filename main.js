@@ -110,15 +110,39 @@ ipcMain.handle('getConfig', async () => {
 });
 
 // IPC: 获取模型列表
-ipcMain.handle('listModels', async (event, { sourceId }) => {
+ipcMain.handle('listModels', async (event, { sourceId, directory }) => { // 添加 directory 参数
   const source = (config.modelSources || []).find(s => s.id === sourceId);
   if (!source) return [];
-  if (source.type === 'local') {
-    const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-    return await ds.listModels();
-  } else if (source.type === 'webdav') {
-    const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-    return await ds.listModels();
+  try { // 添加 try-catch 块
+    if (source.type === 'local') {
+      const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      return await ds.listModels(directory); // 传递 directory
+    } else if (source.type === 'webdav') {
+      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      return await ds.listModels(directory); // 传递 directory
+    }
+  } catch (error) {
+    console.error(`[IPC listModels] Error listing models for source ${sourceId} in directory ${directory}:`, error);
+    throw error; // 将错误传递给渲染进程
+  }
+  return [];
+});
+
+// IPC: 获取子目录列表
+ipcMain.handle('listSubdirectories', async (event, { sourceId }) => {
+  const source = (config.modelSources || []).find(s => s.id === sourceId);
+  if (!source) return [];
+  try {
+    if (source.type === 'local') {
+      const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      return await ds.listSubdirectories();
+    } else if (source.type === 'webdav') {
+      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      return await ds.listSubdirectories();
+    }
+  } catch (error) {
+    console.error(`[IPC listSubdirectories] Error listing subdirectories for source ${sourceId}:`, error);
+    throw error; // 将错误传递给渲染进程
   }
   return [];
 });

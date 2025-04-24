@@ -787,6 +787,70 @@ select:hover {
  font-size: 14px; /* Adjust emoji size if needed */
 }
 
+/* 目录 Tab 栏样式 */
+.content-layout {
+ display: flex;
+ gap: 1.5rem;
+}
+
+.directory-tabs {
+ width: 220px;
+ flex-shrink: 0;
+ background-color: var(--card-bg);
+ border-radius: 8px;
+ padding: 0.8rem;
+ box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.tab-header {
+ font-weight: 600;
+ color: var(--primary-color);
+ margin-bottom: 0.8rem;
+ padding-bottom: 0.5rem;
+ border-bottom: 1px solid var(--border-color);
+}
+
+.tab-list {
+ display: flex;
+ flex-direction: column;
+ gap: 0.4rem;
+}
+
+.tab-item {
+ padding: 0.6rem 0.8rem;
+ border-radius: 6px;
+ cursor: pointer;
+ transition: background-color 0.2s ease;
+ font-size: 0.9rem;
+}
+
+.tab-item:hover {
+ background-color: rgba(67, 97, 238, 0.1);
+}
+
+.tab-item.active {
+ background-color: rgba(67, 97, 238, 0.2);
+ font-weight: 500;
+ color: var(--primary-color);
+}
+
+.content-main {
+ flex-grow: 1;
+ min-width: 0;
+}
+
+/* 响应式调整 */
+@media (max-width: 768px) {
+ .content-layout {
+   flex-direction: column;
+ }
+ 
+ .directory-tabs {
+   width: 100%;
+   order: -1; /* 移动端将目录栏放在顶部 */
+ }
+}
+
 /* Icon for WebDAV Sources (Using a cloud emoji for now) */
 #sourceSelect .source-option-webdav::before {
  content: '☁️'; /* Unicode character for cloud */

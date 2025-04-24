@@ -83,6 +83,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   let models = [];
   let filterType = '';
   let displayMode = 'card'; // 'card' or 'list'
+  let currentDirectory = null; // 当前选中的目录
+  let subdirectories = []; // 子目录列表
 
   function setLoading(isLoading) {
     if (isLoading) {
@@ -408,10 +410,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     detailModal.classList.remove('active');
   }
 
-  async function loadModels(sourceId) {
+  async function loadModels(sourceId, directory = null) {
     setLoading(true);
     try {
-      models = await window.api.listModels(sourceId);
+      models = await window.api.listModels(sourceId, directory);
+      // 如果是根目录，获取子目录列表
+      if (directory === null) {
+        subdirectories = await window.api.listSubdirectories(sourceId);
+        renderDirectoryTabs();
+      }
       renderFilterTypes();
       renderModels();
     } catch (e) {
@@ -420,6 +427,48 @@ document.addEventListener('DOMContentLoaded', async () => {
     setLoading(false);
   }
 
+
+  // 渲染目录Tab栏
+  function renderDirectoryTabs() {
+    const tabList = document.querySelector('.directory-tabs .tab-list');
+    if (!tabList) return;
+    
+    clearChildren(tabList);
+    
+    // 添加"全部"Tab
+    const allTab = document.createElement('div');
+    allTab.className = `tab-item ${currentDirectory === null ? 'active' : ''}`;
+    allTab.textContent = '全部';
+    allTab.onclick = () => {
+      // 移除所有active类
+      document.querySelectorAll('.tab-item').forEach(item => {
+        item.classList.remove('active');
+      });
+      // 添加active类到当前tab
+      allTab.classList.add('active');
+      currentDirectory = null;
+      loadModels(sourceSelect.value);
+    };
+    tabList.appendChild(allTab);
+    
+    // 添加子目录Tab
+    subdirectories.forEach(dir => {
+      const tab = document.createElement('div');
+      tab.className = `tab-item ${currentDirectory === dir ? 'active' : ''}`;
+      tab.textContent = dir;
+      tab.onclick = () => {
+        // 移除所有active类
+        document.querySelectorAll('.tab-item').forEach(item => {
+          item.classList.remove('active');
+        });
+        // 添加active类到当前tab
+        tab.classList.add('active');
+        currentDirectory = dir;
+        loadModels(sourceSelect.value, dir);
+      };
+      tabList.appendChild(tab);
+    });
+  }
 
   async function init() {
     setLoading(true);
@@ -430,6 +479,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (sources.length > 0) {
         sourceSelect.value = sources[0].id;
         await loadModels(sources[0].id);
+        renderDirectoryTabs();
       }
       document.getElementById('mainSection').style.display = 'grid';
       document.getElementById('loading').style.display = 'none';
@@ -440,7 +490,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   sourceSelect.addEventListener('change', async () => {
+    currentDirectory = null; // 切换仓库时重置目录选择
     await loadModels(sourceSelect.value);
+    renderDirectoryTabs();
   });
 
   filterSelect.addEventListener('change', () => {

@@ -24,9 +24,39 @@ class WebDavDataSource extends DataSource {
     await this.initialized;
   }
 
-  async listModels() {
+  async listSubdirectories() {
+    await this.ensureInitialized();
+    const basePath = this.config.basePath || '/'; // Use configured base path or default to root
+    try {
+      const items = await this.client.getDirectoryContents(basePath, { deep: false }); // Get only top-level items
+      return items
+        .filter(item =>
+          item.type === 'directory' &&
+          item.basename !== '.' && // Explicitly exclude . and ..
+          item.basename !== '..'
+        )
+        .map(item => item.basename); // Return just the directory name
+    } catch (error) {
+      console.error(`[WebDavDataSource] Error listing subdirectories in ${basePath}:`, error);
+      // Handle cases like 404 Not Found gracefully
+      if (error.response && error.response.status === 404) {
+        return []; // Directory doesn't exist, return empty list
+      }
+      throw error; // Re-throw other errors
+    }
+  }
+
+  async listModels(directory = null) { // Add directory parameter
     await this.ensureInitialized();
     const supportedExtensions = this.config.supportedExtensions || [];
+    const basePath = this.config.basePath || '/'; // Use configured base path or default to root
+
+    // Construct the starting path, ensuring correct joining with '/'
+    let startPath = basePath;
+    if (directory) {
+      // Avoid double slashes if basePath is '/'
+      startPath = basePath === '/' ? `/${directory}` : `${basePath}/${directory}`;
+    }
 
     let allModels = [];
     const walk = async (dir) => {
@@ -89,7 +119,19 @@ class WebDavDataSource extends DataSource {
       }
     };
     
-    await walk('/');
+    // Check if start path exists before walking
+    try {
+      await this.client.stat(startPath);
+    } catch (error) {
+      if (error.response && error.response.status === 404) {
+        console.warn(`[WebDavDataSource] Directory not found: ${startPath}`);
+        return []; // Directory doesn't exist
+      }
+      console.error(`[WebDavDataSource] Error accessing start path ${startPath}:`, error);
+      throw error; // Re-throw other errors
+    }
+
+    await walk(startPath); // Start walking from the determined path
     return allModels;
   }
 

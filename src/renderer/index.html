@@ -22,8 +22,17 @@
     <div class="main-layout">
       <!-- Sidebar removed -->
       <main class="content-area">
-        <!-- Source selector moved into filter-header -->
-        <header class="filter-header">
+        <div class="content-layout">
+          <!-- 左侧目录 Tab 栏 -->
+          <div id="directoryTabs" class="directory-tabs">
+            <div class="tab-header">目录</div>
+            <div class="tab-list"></div>
+          </div>
+
+          <!-- 右侧内容区 -->
+          <div class="content-main">
+            <!-- Source selector moved into filter-header -->
+            <header class="filter-header">
           <div class="source-selector">
             <label for="sourceSelect" class="content-label">模型库:</label>
             <select id="sourceSelect"></select>
@@ -50,7 +59,9 @@
 
         <section id="mainSection">
           <ul id="modelList"></ul>
-        </section>
+            </section>
+          </div>
+        </div>
       </main>
     </div>
 
