@@ -1,7 +1,0 @@
-{
-  "modelType": "CheckPoint",
-  "description": "测试模型3，适合快速推理",
-  "triggerWord": "nova, flat, xl3",
-  "author": "ModelNest Team",
-  "version": "2.2"
-}
