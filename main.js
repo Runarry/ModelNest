@@ -140,50 +140,100 @@ ipcMain.handle('getModelDetail', async (event, { sourceId, jsonPath }) => {
 // IPC: 获取模型图片数据
 ipcMain.handle('getModelImage', async (event, { sourceId, imagePath }) => {
   const source = (config.modelSources || []).find(s => s.id === sourceId);
-  if (!source) return null;
+  if (!source) {
+    console.error(`[ImageLoader] 未找到数据源: ${sourceId}`);
+    return null;
+  }
 
-  // 统一图片压缩与缓存处理
-  // 返回格式：{ path, data, mimeType }
   try {
-    let localPath = imagePath;
-    let mimeType = 'image/png';
+    // 统一缓存key生成方式：本地用绝对路径，WebDAV用原始网络路径
+    const hashKey = source.type === 'local'
+      ? path.resolve(imagePath)
+      : imagePath.replace(/\\/g, '/').toLowerCase();
+    
+    console.log('[ImageLoader] Generated hash key:', hashKey);
+    if (source.type === 'webdav') {
+      console.log('[ImageLoader] WebDAV source details:', {
+        url: source.url,
+        imagePath: imagePath,
+        sourceId: source.id
+      });
+    }
 
+    // 计算缓存路径（使用hashKey而非localPath）
+    const cacheDir = path.join(process.cwd(), 'cache', 'images');
+    const cachePath = path.join(cacheDir,
+      crypto.createHash('md5').update(hashKey).digest('hex') +
+      (imageCache.config.compressFormat === 'webp' ? '.webp' : '.jpg'));
+
+    // 1. 详细检查缓存状态
+    console.log('[ImageLoader] Checking cache at:', cachePath);
+    try {
+      if (fs.existsSync(cachePath)) {
+        console.log('[ImageLoader] Cache exists, reading...');
+        const stats = fs.statSync(cachePath);
+        console.log(`[ImageLoader] Cache file stats: size=${stats.size} bytes, mtime=${stats.mtime}`);
+        
+        const data = await fs.promises.readFile(cachePath);
+        console.log('[ImageLoader] Successfully read cache file');
+        return {
+          path: cachePath,
+          data,
+          mimeType: imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg'
+        };
+      } else {
+        console.log('[ImageLoader] Cache does not exist');
+      }
+    } catch (e) {
+      console.error('[ImageLoader] Cache check error:', e);
+    }
+
+    // 2. 根据类型处理图片
+    let localPath, mimeType = 'image/png';
     if (source.type === 'local') {
-      // 本地图片，直接用原路径
-      // 走压缩与缓存流程
       localPath = imagePath;
     } else if (source.type === 'webdav') {
-      // WebDAV 图片，需先下载到本地临时文件
       const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
       const imageData = await ds.getImageData(imagePath);
-      if (!imageData || !imageData.data) return null;
-
-      // 生成唯一临时文件名
-      const hash = crypto.createHash('md5').update(imagePath).digest('hex');
-      const tempDir = path.join(process.cwd(),'cache', 'webdav_images');
+      if (!imageData?.data) {
+        console.error(`[ImageLoader] WebDAV图片下载失败: ${imagePath}`);
+        return null;
+      }
+      
+      // 临时保存WebDAV图片
+      const tempDir = path.join(process.cwd(), 'cache', 'temp_images');
       if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-      localPath = path.join(tempDir, hash + '.png');
+      localPath = path.join(tempDir, crypto.randomBytes(8).toString('hex') + '.png');
       await fs.promises.writeFile(localPath, imageData.data);
       mimeType = imageData.mimeType || 'image/png';
     }
 
-    // 统一走压缩与缓存
+    // 3. 压缩并缓存图片（带详细日志）
+    console.log('[ImageLoader] Calling imageCache.getCompressedImage with:', localPath);
     let compressedPath;
     try {
-      compressedPath = await imageCache.getCompressedImage(localPath);
+      compressedPath = await imageCache.getCompressedImage(localPath, hashKey);
+      console.log('[ImageLoader] Compressed image path:', compressedPath);
     } catch (e) {
-      // 若压缩未实现，降级为原图
-      compressedPath = localPath;
+      console.error('[ImageLoader] Image compression failed:', e);
+      compressedPath = localPath; // 降级使用原图
+    }
+    const data = await fs.promises.readFile(compressedPath);
+    
+    // 4. 清理WebDAV临时文件
+    if (source.type === 'webdav' && localPath !== compressedPath) {
+      fs.promises.unlink(localPath).catch(e =>
+        console.error(`[ImageLoader] 临时文件清理失败: ${localPath}`, e));
     }
 
-    const data = await fs.promises.readFile(compressedPath);
     return {
       path: compressedPath,
-      data: data,
-      mimeType: mimeType // 实际可根据压缩格式调整
+      data,
+      mimeType: compressedPath.endsWith('.webp') ? 'image/webp' :
+               compressedPath.endsWith('.jpg') ? 'image/jpeg' : mimeType
     };
   } catch (e) {
-    console.error('图片压缩/缓存流程失败:', e);
+    console.error('[ImageLoader] 图片处理流程失败:', e);
     return null;
   }
 });

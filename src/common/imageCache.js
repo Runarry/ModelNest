@@ -52,8 +52,9 @@ function setConfig(options = {}) {
  */
 console.log(`[ImageCache] 初始化配置:`, config);
 
-async function getCompressedImage(srcPath) {
+async function getCompressedImage(srcPath, hashKey) {
     console.log(`[ImageCache] getCompressedImage 调用: ${srcPath}`);
+    if (hashKey) console.log(`[ImageCache] 使用外部hashKey: ${hashKey}`);
     console.log(`[ImageCache] 缓存目录: ${config.cacheDir}`);
     stats.totalRequests++;
     
@@ -68,9 +69,9 @@ async function getCompressedImage(srcPath) {
         }
     }
     // 2. 生成唯一缓存文件名
-    const hash = crypto.createHash('md5')
-        .update(srcPath + JSON.stringify(config))
-        .digest('hex');
+    const hash = hashKey
+        ? crypto.createHash('md5').update(hashKey).digest('hex')
+        : crypto.createHash('md5').update(srcPath + JSON.stringify(config)).digest('hex');
     const ext = config.compressFormat === 'webp' ? '.webp' : '.jpg';
     const cachePath = path.join(config.cacheDir, hash + ext);
     console.log(`[ImageCache] 缓存文件路径: ${cachePath}`);
@@ -224,5 +225,5 @@ module.exports = {
     getCompressedImage,
     clearCache,
     checkAndCleanCache,
-    // config,
+    config,
 };
