@@ -22,8 +22,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   // 渲染主界面所有静态文本
   function setI18nTexts() {
     document.getElementById('appTitle').textContent = t('appTitle');
-    // document.getElementById('viewCardText').textContent = t('viewCard');
-    // document.getElementById('viewListText').textContent = t('viewList');
     document.getElementById('cardViewBtn').title = t('viewCard');
     document.getElementById('listViewBtn').title = t('viewList');
     document.getElementById('loadingModels').textContent = t('loadingModels');
