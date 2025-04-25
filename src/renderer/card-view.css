@@ -1,0 +1,172 @@
+/* Card View Specific Styles */
+
+#modelList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 1rem;
+  align-items: start; /* Prevent items stretching vertically */
+  list-style: none;
+  padding: 0;
+}
+
+.model-card {
+  background-color: var(--card-bg);
+  border-radius: 12px;
+  overflow: hidden; /* Restore overflow hidden */
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Softer shadow */
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+  cursor: pointer;
+  /* display: flex; Removed flex display */
+  /* flex-direction: column; Removed flex direction */
+  /* height: auto; Let height be naturally determined */
+  /* min-height: 240px; Removed fixed min-height */
+  /* padding: 1rem; Remove overall padding, apply to content instead */
+}
+
+.model-card:hover {
+  transform: translateY(-4px); /* Slightly less lift */
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); /* Adjusted hover shadow */
+}
+
+.model-image {
+  width: 100%;
+  flex-shrink: 0; /* Prevent image from shrinking */
+  /* min-height: 220px; Removed fixed min-height */
+  aspect-ratio: 1 / 1; /* Changed aspect ratio to square */
+  object-fit: cover;
+  background-color: rgba(0, 0, 0, 0.07);
+  border-radius: 8px 8px 0 0; /* Radius only for top corners */
+  display: block;
+  width: 100%; /* Ensure image takes full width */
+  height: 100%; /* Ensure image takes full height within aspect ratio */
+  object-position: center;
+}
+
+/* Styles for the image placeholder */
+.model-image-placeholder {
+  display: flex; /* Use flex to center content */
+  align-items: center;
+  justify-content: center;
+  background-color: rgba(0, 0, 0, 0.05); /* Slightly different background */
+  width: 100%;
+  height: 100%; /* Ensure placeholder fills the image area */
+  aspect-ratio: 1 / 1; /* Maintain aspect ratio */
+  border-radius: 8px 8px 0 0;
+}
+
+.model-image-placeholder .placeholder-icon {
+  color: rgba(0, 0, 0, 0.2); /* Color for the placeholder icon */
+  width: 30%; /* Adjust icon size relative to placeholder */
+  height: 30%;
+}
+
+[data-theme="dark"] .model-image-placeholder {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+[data-theme="dark"] .model-image-placeholder .placeholder-icon {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+
+.model-content {
+  /* Apply padding here instead of the card */
+  padding: 0.8rem 1rem 0.5rem 1rem; /* Adjust padding: top right bottom left */
+  /* Ensure it's displayed */
+  display: block; /* Or flex if needed for internal alignment */
+  visibility: visible;
+  height: auto;
+  /* flex: 0 0 auto; Removed flex property */
+  /* flex-shrink: 0; Removed flex shrink */
+  /* display: flex; Let it be default block */
+  /* flex-direction: column; */
+  /* justify-content: flex-start; */
+  /* min-height: 100px; Removed fixed min-height */
+}
+
+.model-name {
+  font-size: 1.05rem; /* Reduced font size */
+  font-weight: 600;
+  margin-bottom: 0.4rem;
+  color: var(--text-primary); /* Ensure this variable exists or replace */
+  line-height: 1.3;
+}
+
+.model-type {
+  display: inline-block;
+  padding: 0.2rem 0.5rem;
+  background-color: rgba(0, 0, 0, 0.05); /* Lighter background */
+  color: #888; /* Softer color */
+  border-radius: 4px;
+  font-size: 0.75rem; /* Adjusted font size */
+  font-weight: 500;
+  margin-top: 0.3rem; /* Adjusted margin */
+  /* text-transform: capitalize; Removed */
+}
+
+.tags-container {
+  display: flex; /* Keep flex for tag layout */
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  /* Ensure it's displayed */
+  visibility: visible;
+  height: auto;
+  /* flex-shrink: 0; Removed flex shrink */
+  margin-top: 0.4rem; /* Reduced margin top */
+  /* max-height: 60px; Removed max-height */
+  /* overflow-y: auto; Removed overflow */
+  padding: 0.5rem 1rem 0.8rem 1rem; /* Padding: top right bottom left */
+  /* background-color: rgba(67, 97, 238, 0.05); Optional: remove background */
+  border-radius: 0 0 8px 8px; /* Radius for bottom corners if needed */
+  position: relative;
+  transition: max-height 0.3s ease-out; /* Smooth transition for expansion */
+}
+
+/* Style for hidden tags */
+.tag.tag-hidden {
+  display: none;
+}
+
+/* When container is expanded, show hidden tags */
+.tags-container.expanded .tag.tag-hidden {
+  display: inline-block;
+}
+
+/* Style for the "more" button */
+.tag-more-btn {
+  background: none;
+  border: none;
+  color: var(--primary-color);
+  cursor: pointer;
+  font-size: 0.65rem; /* Match tag font size */
+  padding: 0.2rem 0.4rem;
+  margin-left: 0.2rem;
+  font-weight: 600;
+  text-decoration: underline;
+  display: inline-block; /* Ensure it flows with tags */
+}
+
+.tag-more-btn:hover {
+  text-decoration: none;
+}
+
+
+.tag {
+  display: inline-block;
+  padding: 0.2rem 0.5rem; /* Adjusted padding */
+  background-color: rgba(67, 97, 238, 0.1);
+  color: var(--primary-color);
+  border-radius: 10px; /* Adjusted radius */
+  font-size: 0.65rem; /* Adjusted font size */
+  font-weight: 500;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+/* Responsive adjustments specifically for card view grid if needed */
+@media (max-width: 768px) {
+  #modelList {
+    /* Adjust grid for smaller screens if the default auto-fill isn't sufficient */
+    /* Example: grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); */
+  }
+}
