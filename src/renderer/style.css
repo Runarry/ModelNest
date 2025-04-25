@@ -742,3 +742,39 @@ select:hover {
 .add-source-btn {
   margin-top: 0.5rem;
 }
+/* Modal Feedback Area Styles */
+.modal-feedback {
+  padding: 0.8rem 1rem;
+  margin-bottom: 1rem; /* Space between feedback and actions */
+  border-radius: 4px;
+  font-size: 0.9rem;
+  display: none; /* Hidden by default */
+  border: 1px solid transparent;
+}
+
+.modal-feedback.feedback-success {
+  color: #155724; /* Dark green text */
+  background-color: #d4edda; /* Light green background */
+  border-color: #c3e6cb; /* Green border */
+  display: block; /* Show when class is added */
+}
+
+.modal-feedback.feedback-error {
+  color: #721c24; /* Dark red text */
+  background-color: #f8d7da; /* Light red background */
+  border-color: #f5c6cb; /* Red border */
+  display: block; /* Show when class is added */
+}
+
+.modal-feedback.feedback-info {
+  color: #0c5460; /* Dark cyan text */
+  background-color: #d1ecf1; /* Light cyan background */
+  border-color: #bee5eb; /* Cyan border */
+  display: block; /* Show when class is added */
+}
+
+/* Style for disabled buttons */
+.btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

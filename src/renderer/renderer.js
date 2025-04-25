@@ -151,6 +151,41 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
+  // ===== UI Feedback Helper =====
+  let feedbackTimeout = null;
+  function showFeedback(feedbackElement, message, type = 'info', duration = 4000) {
+      if (!feedbackElement) return;
+
+      // Clear previous timeout if any
+      if (feedbackTimeout) {
+          clearTimeout(feedbackTimeout);
+      }
+
+      feedbackElement.textContent = message;
+      feedbackElement.className = `modal-feedback feedback-${type}`; // Set class based on type
+
+      // Auto-hide after duration (if duration is positive)
+      if (duration > 0) {
+          feedbackTimeout = setTimeout(() => {
+              feedbackElement.textContent = '';
+              feedbackElement.className = 'modal-feedback'; // Reset class
+              feedbackTimeout = null;
+          }, duration);
+      }
+  }
+
+  function clearFeedback(feedbackElement) {
+       if (!feedbackElement) return;
+       if (feedbackTimeout) {
+          clearTimeout(feedbackTimeout);
+          feedbackTimeout = null;
+       }
+       feedbackElement.textContent = '';
+       feedbackElement.className = 'modal-feedback';
+  }
+
+
+  // ===== Core Rendering Functions =====
   function renderSources() {
     clearChildren(sourceSelect);
     sources.forEach(src => {
@@ -699,6 +734,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   function openSettingsModal() {
     console.log("Opening settings modal...");
+    clearFeedback(document.getElementById('settingsFeedback')); // Clear feedback on open
     settingsModal.classList.add('active');
     loadConfigForSettings(); // Load config when opening
   }
@@ -737,6 +773,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   async function handleBrowseFolder() {
+      const browseBtn = sourceEditBrowseBtn; // Use the correct variable
+      browseBtn.disabled = true; // Disable button
+      const feedbackEl = document.getElementById('sourceEditFeedback');
+      clearFeedback(feedbackEl);
+
       try {
           const selectedPath = await window.api.openFolderDialog();
           if (selectedPath) {
@@ -744,11 +785,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           }
       } catch (error) {
           console.error("Failed to open folder dialog:", error);
-          alert(t('settings.folderDialogError', { message: error.message })); // Already uses t()
+          showFeedback(feedbackEl, t('settings.folderDialogError', { message: error.message }), 'error');
+      } finally {
+          browseBtn.disabled = false; // Re-enable button
       }
   }
 
   function openSourceEditModal(sourceToEdit = null) {
+      clearFeedback(document.getElementById('sourceEditFeedback')); // Clear feedback on open
       sourceEditForm.reset(); // Clear form fields
       handleSourceTypeChange(); // Ensure correct fields are shown initially
 
@@ -791,23 +835,26 @@ document.addEventListener('DOMContentLoaded', async () => {
           type: sourceType,
       };
 
+      const feedbackEl = document.getElementById('sourceEditFeedback');
+      clearFeedback(feedbackEl);
+  
       // Basic validation
       if (!newSourceData.name) {
-          alert(t('settings.validation.sourceNameRequired')); // Already uses t()
+          showFeedback(feedbackEl, t('settings.validation.sourceNameRequired'), 'error');
           return;
       }
 
       if (sourceType === 'local') {
           const pathValue = sourceEditPathInput.value.trim();
           if (!pathValue) {
-              alert(t('settings.validation.pathRequired')); // Already uses t()
+              showFeedback(feedbackEl, t('settings.validation.pathRequired'), 'error');
               return;
           }
           newSourceData.path = pathValue;
       } else if (sourceType === 'webdav') {
           const urlValue = sourceEditUrlInput.value.trim();
           if (!urlValue) {
-              alert(t('settings.validation.urlRequired')); // Already uses t()
+              showFeedback(feedbackEl, t('settings.validation.urlRequired'), 'error');
               return;
           }
           newSourceData.url = urlValue;
@@ -836,8 +883,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
    function handleDeleteSource(sourceId) {
-      if (!confirm(t('settings.modelSources.deleteConfirm'))) { // Already uses t()
-          return;
+       // TODO: Replace confirm with a custom confirmation UI later
+       if (!confirm(t('settings.modelSources.deleteConfirm'))) { // Keep confirm for now
+           return;
       }
       const index = tempModelSources.findIndex(s => s.id === sourceId);
       if (index !== -1) {
@@ -868,6 +916,11 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Save action for the main settings modal
   settingsSaveBtn.addEventListener('click', async () => {
     console.log("Save settings clicked...");
+    const saveBtn = settingsSaveBtn; // Reference the button
+    const feedbackEl = document.getElementById('settingsFeedback');
+    clearFeedback(feedbackEl);
+    saveBtn.disabled = true; // Disable button
+
     try {
       // 1. Construct the new config object using tempModelSources
       const newConfig = {
@@ -891,11 +944,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Basic validation (can be expanded)
       if (isNaN(newConfig.imageCache.compressQuality) || newConfig.imageCache.compressQuality < 0 || newConfig.imageCache.compressQuality > 100) {
-         alert(t('settings.validation.qualityError')); // Already uses t()
+         showFeedback(feedbackEl, t('settings.validation.qualityError'), 'error');
+         saveBtn.disabled = false; // Re-enable button on validation error
          return;
       }
        if (isNaN(newConfig.imageCache.maxCacheSizeMB) || newConfig.imageCache.maxCacheSizeMB < 0) {
-         alert(t('settings.validation.sizeError')); // Already uses t()
+         showFeedback(feedbackEl, t('settings.validation.sizeError'), 'error');
+         saveBtn.disabled = false; // Re-enable button on validation error
          return;
       }
 
@@ -907,12 +962,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // 4. Handle response
       if (result.success) {
-        alert(t('settings.saveSuccess')); // Already uses t()
-        closeSettingsModal();
-        // Reloading will be handled by the 'config-updated' listener below
+        // Show success feedback briefly before closing
+        showFeedback(feedbackEl, t('settings.saveSuccess'), 'success', 2000);
+        setTimeout(closeSettingsModal, 2100); // Close after feedback is shown
+        // Reloading will be handled by the 'config-updated' listener
       } else {
          // This part might not be reached if saveConfig throws error on failure
-         alert(t('settings.saveErrorUnknown')); // Already uses t()
+         showFeedback(feedbackEl, t('settings.saveErrorUnknown'), 'error');
       }
 
     } catch (error) {
