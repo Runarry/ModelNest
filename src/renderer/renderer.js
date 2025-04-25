@@ -4,9 +4,43 @@ document.addEventListener('DOMContentLoaded', async () => {
   const { initThemeSwitcher } = await import('./ui.js');
   initThemeSwitcher();
 
-  // ===== 国际化初始化 =====
+  // ===== Get DOM Element References =====
   const languageSelect = document.getElementById('languageSelect');
-  // 渲染语言下拉
+  const sourceSelect = document.getElementById('sourceSelect');
+  const filterSelect = document.getElementById('filterSelect');
+  const modelList = document.getElementById('modelList');
+  const detailModal = document.getElementById('detailModal');
+  const detailName = document.getElementById('detailName');
+  const detailImage = document.getElementById('detailImage');
+  const detailDescription = document.getElementById('detailDescription');
+  const loadingDiv = document.getElementById('loading');
+  // Settings Modal Elements
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsModal = document.getElementById('settingsModal');
+  const settingsCloseBtn = document.getElementById('settingsClose');
+  const settingsSaveBtn = document.getElementById('settingsSaveBtn');
+  const settingsCancelBtn = document.getElementById('settingsCancelBtn');
+  const settingsForm = document.querySelector('#settingsModal .settings-form');
+  // Source Edit Modal Elements
+  const sourceEditModal = document.getElementById('sourceEditModal');
+  const sourceEditForm = document.getElementById('sourceEditForm');
+  const sourceEditTitle = document.getElementById('sourceEditTitle');
+  const sourceEditIdInput = document.getElementById('sourceEditId');
+  const sourceEditNameInput = document.getElementById('sourceEditName');
+  const sourceEditTypeSelect = document.getElementById('sourceEditType');
+  const sourceEditLocalFields = document.getElementById('sourceEditLocalFields');
+  const sourceEditPathInput = document.getElementById('sourceEditPath');
+  const sourceEditBrowseBtn = document.getElementById('sourceEditBrowseBtn');
+  const sourceEditWebdavFields = document.getElementById('sourceEditWebdavFields');
+  const sourceEditUrlInput = document.getElementById('sourceEditUrl');
+  const sourceEditUsernameInput = document.getElementById('sourceEditUsername');
+  const sourceEditPasswordInput = document.getElementById('sourceEditPassword');
+  const sourceEditCloseBtn = document.getElementById('sourceEditClose');
+  const sourceEditCancelBtn = document.getElementById('sourceEditCancelBtn');
+  const sourceEditSaveBtn = document.getElementById('sourceEditSaveBtn');
+
+  // ===== Internationalization (i18n) =====
+  // Render language dropdown
   function renderLanguageOptions() {
     const locales = getSupportedLocales();
     languageSelect.innerHTML = '';
@@ -21,12 +55,33 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // 渲染主界面所有静态文本
   function setI18nTexts() {
+    // Main UI
     document.getElementById('appTitle').textContent = t('appTitle');
     document.getElementById('cardViewBtn').title = t('viewCard');
     document.getElementById('listViewBtn').title = t('viewList');
     document.getElementById('loadingModels').textContent = t('loadingModels');
-    // 详情图片alt
-    document.getElementById('detailImage').alt = t('appTitle');
+    document.getElementById('detailImage').alt = t('appTitle'); // Detail modal image alt
+
+    // Settings Button Title
+    settingsBtn.title = t('settings.title');
+
+    // Settings Modal Static Texts
+    settingsTitle.textContent = t('settings.title');
+    settingsCancelBtn.textContent = t('settings.cancel');
+    settingsSaveBtn.textContent = t('settings.save');
+
+    // Source Edit Modal Static Texts
+    // Title is set dynamically in openSourceEditModal
+    document.getElementById('labelSourceEditName').textContent = t('settings.modelSources.nameLabel');
+    document.getElementById('labelSourceEditType').textContent = t('settings.modelSources.typeLabel');
+    document.getElementById('optionSourceEditTypeLocal').textContent = t('settings.modelSources.typeLocal');
+    document.getElementById('optionSourceEditTypeWebdav').textContent = t('settings.modelSources.typeWebdav');
+    document.getElementById('labelSourceEditPath').textContent = t('settings.modelSources.pathLabel');
+    sourceEditBrowseBtn.textContent = t('settings.modelSources.browse');
+    document.getElementById('labelSourceEditUrl').textContent = t('settings.modelSources.urlLabel');
+    document.getElementById('labelSourceEditUsername').textContent = t('settings.modelSources.usernameLabel');
+    document.getElementById('labelSourceEditPassword').textContent = t('settings.modelSources.passwordLabel');
+    sourceEditCancelBtn.textContent = t('settings.cancel'); // Re-use cancel key
   }
 
   // 监听语言切换
@@ -70,21 +125,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  const sourceSelect = document.getElementById('sourceSelect');
-  const filterSelect = document.getElementById('filterSelect');
-  const modelList = document.getElementById('modelList');
-  const detailModal = document.getElementById('detailModal');
-  const detailName = document.getElementById('detailName');
-  const detailImage = document.getElementById('detailImage');
-  const detailDescription = document.getElementById('detailDescription');
-  const loadingDiv = document.getElementById('loading');
-
+  // ===== App State =====
   let sources = [];
   let models = [];
   let filterType = '';
   let displayMode = 'card'; // 'card' or 'list'
   let currentDirectory = null; // 当前选中的目录
   let subdirectories = []; // 子目录列表
+
+  let tempModelSources = []; // Temporary state for editing sources in settings
 
   function setLoading(isLoading) {
     if (isLoading) {
@@ -531,7 +580,360 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   document.getElementById('detailClose').addEventListener('click', hideDetail);
 
+  // ===== Settings Modal Logic =====
+  // Function to render the list of model sources within the settings modal
+  function renderSourceListForSettings() {
+    const sourcesSection = settingsForm.querySelector('.settings-section:first-child'); // Assuming sources are the first section
+    if (!sourcesSection) return; // Should not happen if loadConfigForSettings ran correctly
+
+    let sourcesList = sourcesSection.querySelector('.source-list');
+    if (!sourcesList) {
+        sourcesList = document.createElement('ul');
+        sourcesList.className = 'source-list';
+        // Insert the list before the "Add" button if it exists, otherwise append
+        const addBtn = sourcesSection.querySelector('.add-source-btn');
+        if (addBtn) {
+            sourcesSection.insertBefore(sourcesList, addBtn);
+        } else {
+            sourcesSection.appendChild(sourcesList);
+        }
+    }
+
+    clearChildren(sourcesList); // Clear existing list items
+
+    tempModelSources.forEach(source => {
+      const item = document.createElement('li');
+      item.className = 'source-item';
+      item.dataset.sourceId = source.id; // Store ID for edit/delete
+      item.innerHTML = `
+        <div class="source-item-details">
+          <span class="source-item-name">${source.name} (${source.type === 'local' ? t('settings.modelSources.typeLocal') : t('settings.modelSources.typeWebdav')})</span> <!-- Type already uses t() -->
+          <span class="source-item-path">${source.type === 'local' ? source.path : source.url}</span>
+        </div>
+        <div class="source-item-actions">
+          <button class="edit-btn" title="${t('settings.modelSources.edit')}">✏️</button> <!-- Title already uses t() -->
+          <button class="delete-btn" title="${t('settings.modelSources.delete')}">🗑️</button> <!-- Title already uses t() -->
+        </div>
+      `;
+      // Add event listeners for edit/delete buttons
+      item.querySelector('.edit-btn').addEventListener('click', () => openSourceEditModal(source));
+      item.querySelector('.delete-btn').addEventListener('click', () => handleDeleteSource(source.id));
+      sourcesList.appendChild(item);
+    });
+  }
+
+  // Load config and populate the main settings form
+  async function loadConfigForSettings() {
+    try {
+      const currentConfig = await window.api.getConfig();
+      console.log("Loaded config for settings:", currentConfig);
+      // Deep clone sources into temporary state for editing
+      tempModelSources = JSON.parse(JSON.stringify(currentConfig.modelSources || []));
+
+      settingsForm.innerHTML = ''; // Clear previous form content
+
+      // --- Render Model Sources Section ---
+      const sourcesSection = document.createElement('div');
+      sourcesSection.className = 'settings-section';
+      sourcesSection.innerHTML = `<h3>${t('settings.modelSources.title')}</h3>`; // Already uses t()
+      settingsForm.appendChild(sourcesSection); // Append section first
+
+      renderSourceListForSettings(); // Render the list using temp state
+
+      const addSourceBtn = document.createElement('button');
+      addSourceBtn.textContent = t('settings.modelSources.add'); // Already uses t()
+      addSourceBtn.className = 'btn btn-secondary add-source-btn';
+      addSourceBtn.type = 'button'; // Prevent form submission if inside a form
+      addSourceBtn.addEventListener('click', () => openSourceEditModal()); // Open modal for adding
+      sourcesSection.appendChild(addSourceBtn); // Append button after the list container
+
+      // --- Render Supported Extensions ---
+      const extensionsSection = document.createElement('div');
+      extensionsSection.className = 'settings-section';
+      extensionsSection.innerHTML = `
+        <h3>${t('settings.extensions.title')}</h3> <!-- Already uses t() -->
+        <div class="form-group">
+          <label for="supportedExtensions">${t('settings.extensions.label')}</label> <!-- Already uses t() -->
+          <textarea id="supportedExtensions" rows="3">${(currentConfig.supportedExtensions || []).join(', ')}</textarea>
+          <small>${t('settings.extensions.hint')}</small> <!-- Already uses t() -->
+        </div>
+      `;
+      settingsForm.appendChild(extensionsSection);
+
+      // --- Render Image Cache Settings ---
+      const cacheSection = document.createElement('div');
+      cacheSection.className = 'settings-section';
+      const cacheConfig = currentConfig.imageCache || {};
+      cacheSection.innerHTML = `
+        <h3>${t('settings.imageCache.title')}</h3> <!-- Already uses t() -->
+        <div class="form-group">
+          <label>
+            <input type="checkbox" id="imageCacheDebug" ${cacheConfig.debug ? 'checked' : ''}>
+            ${t('settings.imageCache.debug')} <!-- Already uses t() -->
+          </label>
+        </div>
+        <div class="form-group">
+          <label for="imageCacheQuality">${t('settings.imageCache.quality')} (0-100)</label> <!-- Already uses t() -->
+          <input type="number" id="imageCacheQuality" min="0" max="100" value="${cacheConfig.compressQuality || 80}">
+        </div>
+        <div class="form-group">
+          <label for="imageCacheFormat">${t('settings.imageCache.format')}</label> <!-- Already uses t() -->
+          <select id="imageCacheFormat">
+            <option value="jpeg" ${cacheConfig.compressFormat === 'jpeg' ? 'selected' : ''}>JPEG</option>
+            <option value="webp" ${cacheConfig.compressFormat === 'webp' ? 'selected' : ''}>WebP</option>
+            <option value="png" ${cacheConfig.compressFormat === 'png' ? 'selected' : ''}>PNG</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="imageCacheSize">${t('settings.imageCache.maxSize')} (MB)</label> <!-- Already uses t() -->
+          <input type="number" id="imageCacheSize" min="0" value="${cacheConfig.maxCacheSizeMB || 500}">
+        </div>
+      `;
+      settingsForm.appendChild(cacheSection);
+
+    } catch (error) {
+      console.error("Failed to load config for settings:", error);
+      settingsForm.innerHTML = `<p style="color: red;">${t('settings.loadError', { message: error.message })}</p>`; // Already uses t()
+    }
+  }
+
+  function openSettingsModal() {
+    console.log("Opening settings modal...");
+    settingsModal.classList.add('active');
+    loadConfigForSettings(); // Load config when opening
+  }
+
+  function closeSettingsModal() {
+    settingsModal.classList.remove('active');
+  }
+
+  settingsBtn.addEventListener('click', openSettingsModal);
+  settingsCloseBtn.addEventListener('click', closeSettingsModal);
+  settingsCancelBtn.addEventListener('click', closeSettingsModal);
+
+  // Close modal if clicking on the backdrop
+  settingsModal.addEventListener('click', (event) => {
+    if (event.target === settingsModal) {
+      closeSettingsModal();
+    }
+  });
+
+  // --- Source Edit Modal Logic ---
+
+  function handleSourceTypeChange() {
+      const selectedType = sourceEditTypeSelect.value;
+      if (selectedType === 'local') {
+          sourceEditLocalFields.style.display = 'block';
+          sourceEditWebdavFields.style.display = 'none';
+          sourceEditPathInput.required = true;
+          sourceEditUrlInput.required = false;
+      } else if (selectedType === 'webdav') {
+          sourceEditLocalFields.style.display = 'none';
+          sourceEditWebdavFields.style.display = 'block';
+          sourceEditPathInput.required = false;
+          sourceEditUrlInput.required = true;
+          // Username/Password are optional for WebDAV usually
+      }
+  }
+
+  async function handleBrowseFolder() {
+      try {
+          const selectedPath = await window.api.openFolderDialog();
+          if (selectedPath) {
+              sourceEditPathInput.value = selectedPath;
+          }
+      } catch (error) {
+          console.error("Failed to open folder dialog:", error);
+          alert(t('settings.folderDialogError', { message: error.message })); // Already uses t()
+      }
+  }
+
+  function openSourceEditModal(sourceToEdit = null) {
+      sourceEditForm.reset(); // Clear form fields
+      handleSourceTypeChange(); // Ensure correct fields are shown initially
+
+      if (sourceToEdit) {
+          // Editing existing source
+          sourceEditTitle.textContent = t('settings.modelSources.editTitle'); // Already uses t()
+          sourceEditIdInput.value = sourceToEdit.id;
+          sourceEditNameInput.value = sourceToEdit.name;
+          sourceEditTypeSelect.value = sourceToEdit.type;
+          if (sourceToEdit.type === 'local') {
+              sourceEditPathInput.value = sourceToEdit.path || '';
+          } else if (sourceToEdit.type === 'webdav') {
+              sourceEditUrlInput.value = sourceToEdit.url || '';
+              sourceEditUsernameInput.value = sourceToEdit.username || '';
+              sourceEditPasswordInput.value = sourceToEdit.password || ''; // Be cautious with passwords
+          }
+          handleSourceTypeChange(); // Update visible fields based on loaded type
+      } else {
+          // Adding new source
+          sourceEditTitle.textContent = t('settings.modelSources.addTitle'); // Already uses t()
+          sourceEditIdInput.value = ''; // Ensure ID is empty for new source
+      }
+      sourceEditModal.classList.add('active');
+  }
+
+  function closeSourceEditModal() {
+      sourceEditModal.classList.remove('active');
+  }
+
+  function handleSourceEditFormSubmit(event) {
+      event.preventDefault(); // Prevent default HTML form submission
+      console.log("Source edit form submitted");
+
+      const sourceId = sourceEditIdInput.value;
+      const sourceType = sourceEditTypeSelect.value;
+
+      const newSourceData = {
+          id: sourceId || Date.now().toString(), // Generate new ID if adding
+          name: sourceEditNameInput.value.trim(),
+          type: sourceType,
+      };
+
+      // Basic validation
+      if (!newSourceData.name) {
+          alert(t('settings.validation.sourceNameRequired')); // Already uses t()
+          return;
+      }
+
+      if (sourceType === 'local') {
+          const pathValue = sourceEditPathInput.value.trim();
+          if (!pathValue) {
+              alert(t('settings.validation.pathRequired')); // Already uses t()
+              return;
+          }
+          newSourceData.path = pathValue;
+      } else if (sourceType === 'webdav') {
+          const urlValue = sourceEditUrlInput.value.trim();
+          if (!urlValue) {
+              alert(t('settings.validation.urlRequired')); // Already uses t()
+              return;
+          }
+          newSourceData.url = urlValue;
+          newSourceData.username = sourceEditUsernameInput.value.trim();
+          newSourceData.password = sourceEditPasswordInput.value; // Get password value
+      }
+
+      if (sourceId) {
+          // Editing: Find index and replace
+          const index = tempModelSources.findIndex(s => s.id === sourceId);
+          if (index !== -1) {
+              tempModelSources[index] = newSourceData;
+              console.log("Updated source:", newSourceData);
+          } else {
+              console.error("Source ID not found for editing:", sourceId);
+              // Handle error? Maybe add as new?
+          }
+      } else {
+          // Adding: Push new source
+          tempModelSources.push(newSourceData);
+          console.log("Added new source:", newSourceData);
+      }
+
+      renderSourceListForSettings(); // Re-render the list in the main settings modal
+      closeSourceEditModal(); // Close the edit modal
+  }
+
+   function handleDeleteSource(sourceId) {
+      if (!confirm(t('settings.modelSources.deleteConfirm'))) { // Already uses t()
+          return;
+      }
+      const index = tempModelSources.findIndex(s => s.id === sourceId);
+      if (index !== -1) {
+          tempModelSources.splice(index, 1);
+          console.log("Deleted source with ID:", sourceId);
+          renderSourceListForSettings(); // Re-render the list
+      } else {
+          console.error("Source ID not found for deletion:", sourceId);
+      }
+  }
+
+  // Attach event listeners for the source edit modal
+  sourceEditTypeSelect.addEventListener('change', handleSourceTypeChange);
+  sourceEditBrowseBtn.addEventListener('click', handleBrowseFolder);
+  sourceEditForm.addEventListener('submit', handleSourceEditFormSubmit);
+  sourceEditCloseBtn.addEventListener('click', closeSourceEditModal);
+  sourceEditCancelBtn.addEventListener('click', closeSourceEditModal);
+   sourceEditModal.addEventListener('click', (event) => {
+    if (event.target === sourceEditModal) {
+      closeSourceEditModal();
+    }
+  });
+
+
+  // --- End Source Edit Modal Logic ---
+
+
+  // Save action for the main settings modal
+  settingsSaveBtn.addEventListener('click', async () => {
+    console.log("Save settings clicked...");
+    try {
+      // 1. Construct the new config object using tempModelSources
+      const newConfig = {
+        modelSources: tempModelSources, // Use the edited list
+        supportedExtensions: [],
+        imageCache: {}
+      };
+
+      // 2. Collect data from form elements
+      // Supported Extensions
+      const extensionsText = document.getElementById('supportedExtensions')?.value || '';
+      newConfig.supportedExtensions = extensionsText.split(',')
+                                          .map(ext => ext.trim())
+                                          .filter(ext => ext.length > 0);
+
+      // Image Cache
+      newConfig.imageCache.debug = document.getElementById('imageCacheDebug')?.checked || false;
+      newConfig.imageCache.compressQuality = parseInt(document.getElementById('imageCacheQuality')?.value || '80', 10);
+      newConfig.imageCache.compressFormat = document.getElementById('imageCacheFormat')?.value || 'jpeg';
+      newConfig.imageCache.maxCacheSizeMB = parseInt(document.getElementById('imageCacheSize')?.value || '500', 10);
+
+      // Basic validation (can be expanded)
+      if (isNaN(newConfig.imageCache.compressQuality) || newConfig.imageCache.compressQuality < 0 || newConfig.imageCache.compressQuality > 100) {
+         alert(t('settings.validation.qualityError')); // Already uses t()
+         return;
+      }
+       if (isNaN(newConfig.imageCache.maxCacheSizeMB) || newConfig.imageCache.maxCacheSizeMB < 0) {
+         alert(t('settings.validation.sizeError')); // Already uses t()
+         return;
+      }
+
+
+      console.log("Saving new config:", newConfig);
+
+      // 3. Send to main process
+      const result = await window.api.saveConfig(newConfig);
+
+      // 4. Handle response
+      if (result.success) {
+        alert(t('settings.saveSuccess')); // Already uses t()
+        closeSettingsModal();
+        // Reloading will be handled by the 'config-updated' listener below
+      } else {
+         // This part might not be reached if saveConfig throws error on failure
+         alert(t('settings.saveErrorUnknown')); // Already uses t()
+      }
+
+    } catch (error) {
+      console.error("Failed to save settings:", error);
+      alert(t('settings.saveError', { message: error.message })); // Already uses t()
+    }
+  });
+
+  // ==============================
+
   init();
+
+  // Listen for configuration updates from the main process
+  window.api.onConfigUpdated(() => {
+      console.log('[Renderer] Received config-updated event. Reloading sources and models.');
+      // Re-initialize the application state based on the new config
+      // This will re-fetch sources and load models for the first source
+      init();
+      // Optionally, show a less intrusive notification instead of alert in save handler
+  });
+
 
   // 自动加载可见卡片图片
   function loadVisibleImages() {

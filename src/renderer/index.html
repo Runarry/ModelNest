@@ -18,6 +18,9 @@
         <button id="themeToggleBtn" class="view-btn" title="Toggle Theme">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
         </button>
+        <button id="settingsBtn" class="view-btn" title="Settings"> <!-- Title will be set by JS -->
+          <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        </button> <!-- id="settingsBtn" already exists -->
       </div>
     </nav>
 
@@ -73,6 +76,78 @@
         <h2 id="detailName" class="modal-title"></h2>
         <img id="detailImage" class="modal-image" alt="" />
         <div id="detailDescription" class="modal-description"></div>
+      </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div id="settingsModal" class="modal">
+      <div class="modal-content settings-modal-content"> <!-- Added specific class for sizing -->
+        <button id="settingsClose" class="modal-close">&times;</button>
+        <h2 id="settingsTitle" class="modal-title">Settings</h2> <!-- id="settingsTitle" already exists -->
+        <div class="settings-form">
+          <!-- Configuration form elements will go here -->
+          <p>Configuration options will appear here.</p>
+        </div>
+        <div id="settingsFeedback" class="modal-feedback"></div> <!-- Feedback Area -->
+        <div class="modal-actions">
+          <button type="button" id="settingsCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Ensure type="button" -->
+          <button type="button" id="settingsSaveBtn" class="btn btn-primary">Save</button> <!-- Ensure type="button" -->
+        </div>
+      </div>
+    </div>
+
+    <!-- Add/Edit Source Modal -->
+    <div id="sourceEditModal" class="modal">
+      <div class="modal-content source-edit-modal-content">
+        <button id="sourceEditClose" class="modal-close">&times;</button>
+        <h2 id="sourceEditTitle" class="modal-title">Add/Edit Model Source</h2> <!-- id="sourceEditTitle" already exists -->
+        <form id="sourceEditForm">
+          <input type="hidden" id="sourceEditId"> <!-- Hidden field for editing existing source ID -->
+
+          <div class="form-group">
+            <label for="sourceEditName" id="labelSourceEditName">Name</label>
+            <input type="text" id="sourceEditName" required>
+          </div>
+
+          <div class="form-group">
+            <label for="sourceEditType" id="labelSourceEditType">Type</label>
+            <select id="sourceEditType" required>
+              <option value="local" id="optionSourceEditTypeLocal">Local Folder</option>
+              <option value="webdav" id="optionSourceEditTypeWebdav">WebDAV</option>
+            </select>
+          </div>
+
+          <!-- Fields for Local Type -->
+          <div id="sourceEditLocalFields" class="form-group source-type-fields">
+            <label for="sourceEditPath" id="labelSourceEditPath">Folder Path</label>
+            <div class="input-group">
+              <input type="text" id="sourceEditPath" required>
+              <button type="button" id="sourceEditBrowseBtn" class="btn btn-secondary">Browse...</button> <!-- id="sourceEditBrowseBtn" already exists -->
+            </div>
+          </div>
+
+          <!-- Fields for WebDAV Type -->
+          <div id="sourceEditWebdavFields" class="form-group source-type-fields" style="display: none;">
+            <div class="form-group">
+              <label for="sourceEditUrl" id="labelSourceEditUrl">WebDAV URL</label>
+              <input type="url" id="sourceEditUrl" required>
+            </div>
+            <div class="form-group">
+              <label for="sourceEditUsername" id="labelSourceEditUsername">Username</label>
+              <input type="text" id="sourceEditUsername">
+            </div>
+            <div class="form-group">
+              <label for="sourceEditPassword" id="labelSourceEditPassword">Password</label>
+              <input type="password" id="sourceEditPassword">
+            </div>
+          </div>
+
+        </form>
+        <div id="sourceEditFeedback" class="modal-feedback"></div> <!-- Feedback Area -->
+        <div class="modal-actions">
+          <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Already type="button" -->
+          <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm">Save Source</button> <!-- type="submit" is correct here -->
+        </div>
       </div>
     </div>
   </div>

@@ -20,5 +20,53 @@
     "save": "保存",
     "saveSuccess": "保存成功！",
     "saveFail": "保存失败: "
+  },
+  "settings": {
+    "title": "设置",
+    "cancel": "取消",
+    "save": "保存设置",
+    "loadError": "加载设置失败: {message}",
+    "saveSuccess": "设置保存成功！",
+    "saveError": "保存设置失败: {message}",
+    "saveErrorUnknown": "保存设置失败，发生未知错误。",
+    "folderDialogError": "打开文件夹选择对话框失败: {message}",
+    "modelSources": {
+      "title": "模型来源",
+      "add": "添加来源",
+      "edit": "编辑",
+      "delete": "删除",
+      "deleteConfirm": "您确定要删除此模型来源吗？",
+      "addTitle": "添加模型来源",
+      "editTitle": "编辑模型来源",
+      "nameLabel": "名称:",
+      "typeLabel": "类型:",
+      "typeLocal": "本地文件夹",
+      "typeWebdav": "WebDAV",
+      "pathLabel": "文件夹路径:",
+      "browse": "浏览...",
+      "urlLabel": "WebDAV URL:",
+      "usernameLabel": "用户名:",
+      "passwordLabel": "密码:",
+      "saveSource": "保存来源"
+    },
+    "extensions": {
+      "title": "支持的文件扩展名",
+      "label": "扩展名 (逗号分隔):",
+      "hint": "例如: .ckpt, .safetensors, .pt"
+    },
+    "imageCache": {
+      "title": "图片缓存",
+      "debug": "启用调试日志",
+      "quality": "压缩质量:",
+      "format": "压缩格式:",
+      "maxSize": "最大缓存大小:"
+    },
+    "validation": {
+      "sourceNameRequired": "来源名称不能为空。",
+      "pathRequired": "本地来源的文件夹路径不能为空。",
+      "urlRequired": "WebDAV URL 不能为空。",
+      "qualityError": "压缩质量必须介于 0 和 100 之间。",
+      "sizeError": "最大缓存大小必须是非负数。"
+    }
   }
 }

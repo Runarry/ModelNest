@@ -20,5 +20,53 @@
     "save": "Save",
     "saveSuccess": "Save successful!",
     "saveFail": "Save failed: "
+  },
+  "settings": {
+    "title": "Settings",
+    "cancel": "Cancel",
+    "save": "Save Settings",
+    "loadError": "Failed to load settings: {message}",
+    "saveSuccess": "Settings saved successfully!",
+    "saveError": "Failed to save settings: {message}",
+    "saveErrorUnknown": "Failed to save settings due to an unknown error.",
+    "folderDialogError": "Failed to open folder dialog: {message}",
+    "modelSources": {
+      "title": "Model Sources",
+      "add": "Add Source",
+      "edit": "Edit",
+      "delete": "Delete",
+      "deleteConfirm": "Are you sure you want to delete this model source?",
+      "addTitle": "Add Model Source",
+      "editTitle": "Edit Model Source",
+      "nameLabel": "Name:",
+      "typeLabel": "Type:",
+      "typeLocal": "Local Folder",
+      "typeWebdav": "WebDAV",
+      "pathLabel": "Folder Path:",
+      "browse": "Browse...",
+      "urlLabel": "WebDAV URL:",
+      "usernameLabel": "Username:",
+      "passwordLabel": "Password:",
+      "saveSource": "Save Source"
+    },
+    "extensions": {
+      "title": "Supported File Extensions",
+      "label": "Extensions (comma-separated):",
+      "hint": "e.g., .ckpt, .safetensors, .pt"
+    },
+    "imageCache": {
+      "title": "Image Cache",
+      "debug": "Enable Debug Logging",
+      "quality": "Compression Quality:",
+      "format": "Compression Format:",
+      "maxSize": "Max Cache Size:"
+    },
+    "validation": {
+      "sourceNameRequired": "Source name cannot be empty.",
+      "pathRequired": "Folder path cannot be empty for local source.",
+      "urlRequired": "WebDAV URL cannot be empty.",
+      "qualityError": "Compression quality must be between 0 and 100.",
+      "sizeError": "Max cache size must be a non-negative number."
+    }
   }
 }

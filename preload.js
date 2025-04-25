@@ -6,5 +6,9 @@ contextBridge.exposeInMainWorld('api', {
   listSubdirectories: (sourceId) => ipcRenderer.invoke('listSubdirectories', { sourceId }), // 添加新 API
   getModelDetail: (sourceId, jsonPath) => ipcRenderer.invoke('getModelDetail', { sourceId, jsonPath }),
   saveModel: (model) => ipcRenderer.invoke('saveModel', model),
-  getModelImage: ({sourceId, imagePath}) => ipcRenderer.invoke('getModelImage', {sourceId, imagePath})
+  getModelImage: ({sourceId, imagePath}) => ipcRenderer.invoke('getModelImage', {sourceId, imagePath}),
+  saveConfig: (configData) => ipcRenderer.invoke('save-config', configData), // Add saveConfig API
+  // Listen for config updates from main process
+  onConfigUpdated: (callback) => ipcRenderer.on('config-updated', callback),
+  openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog') // Add open folder dialog API
 });

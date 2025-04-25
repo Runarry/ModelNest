@@ -261,3 +261,65 @@ ipcMain.handle('getModelImage', async (event, { sourceId, imagePath }) => {
     return null;
   }
 });
+// IPC: 保存配置
+ipcMain.handle('save-config', async (event, newConfig) => {
+  const configPath = path.join(process.cwd(), 'config.json');
+  try {
+    // 1. 验证和清理 newConfig (可选但推荐)
+    //    - 确保 modelSources 是数组等
+    //    - 移除不必要的临时字段（如果渲染进程添加了的话）
+
+    // 2. 写入文件
+    const configString = JSON.stringify(newConfig, null, 2); // Pretty print JSON
+    await fs.promises.writeFile(configPath, configString, 'utf-8');
+    console.log('[Main] Configuration saved successfully to:', configPath);
+
+    // 3. 更新内存中的配置
+    //    重新加载或直接赋值，确保路径处理等逻辑一致
+    //    简单起见，这里直接赋值，但注意本地路径可能需要重新处理成绝对路径
+    config = newConfig;
+    // 确保本地路径是绝对路径 (如果 loadConfig 中的逻辑需要保持一致)
+    if (Array.isArray(config.modelSources)) {
+        config.modelSources.forEach(source => {
+          if (source.type === 'local' && source.path && !path.isAbsolute(source.path)) {
+            // 注意：这里假设路径是相对于 process.cwd()，如果保存时已经是绝对路径则不需要此步
+             source.path = path.join(process.cwd(), source.path);
+          }
+        });
+      }
+
+
+    // 4. 更新图片缓存配置
+    imageCache.setConfig(config.imageCache || {});
+    console.log('[Main] Image cache configuration updated.');
+
+    // 5. 通知所有渲染进程配置已更新 (重要!)
+     BrowserWindow.getAllWindows().forEach(win => {
+       win.webContents.send('config-updated');
+     });
+     console.log('[Main] Sent config-updated event to all windows.');
+
+
+    return { success: true };
+  } catch (error) {
+    console.error('[Main] Failed to save configuration:', error);
+    // 将错误信息传递回渲染进程
+    throw new Error(`Failed to save config.json: ${error.message}`);
+  }
+});
+// IPC: 打开文件夹选择对话框
+ipcMain.handle('open-folder-dialog', async (event) => {
+  // 需要从 electron 导入 dialog 模块
+  const { dialog } = require('electron');
+  const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow(), {
+    properties: ['openDirectory']
+  });
+
+  if (result.canceled || result.filePaths.length === 0) {
+    console.log('[Main] Folder selection cancelled.');
+    return null; // 或者返回一个空数组，根据渲染进程的期望
+  } else {
+    console.log('[Main] Folder selected:', result.filePaths[0]);
+    return result.filePaths[0]; // 返回选中的第一个文件夹路径
+  }
+});
