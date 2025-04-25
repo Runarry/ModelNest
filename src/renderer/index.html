@@ -84,10 +84,10 @@
       <div class="modal-content settings-modal-content"> <!-- Added specific class for sizing -->
         <button id="settingsClose" class="modal-close">&times;</button>
         <h2 id="settingsTitle" class="modal-title">Settings</h2> <!-- id="settingsTitle" already exists -->
-        <div class="settings-form">
+        <form id="settingsForm" class="settings-form">
           <!-- Configuration form elements will go here -->
           <p>Configuration options will appear here.</p>
-        </div>
+        </form>
         <div id="settingsFeedback" class="modal-feedback"></div> <!-- Feedback Area -->
         <div class="modal-actions">
           <button type="button" id="settingsCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Ensure type="button" -->
@@ -153,6 +153,6 @@
   </div>
 
   <script src="./i18n.js"></script>
-  <script src="./renderer.js"></script>
+  <script type="module" src="./renderer.js"></script>
 </body>
 </html>
