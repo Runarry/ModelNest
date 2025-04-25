@@ -1,0 +1,33 @@
+name: Manual Release
+
+# Allow manual triggering from the Actions tab
+on: workflow_dispatch
+
+jobs:
+  build-and-release:
+    # Use the latest Windows runner
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          # Use a specific LTS version of Node.js
+          node-version: '20.x'
+          # Cache npm dependencies for faster builds
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build and release
+        # Set the GITHUB_TOKEN environment variable
+        # electron-builder uses this to authenticate with GitHub API
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        # Run the distribution script defined in package.json
+        # electron-builder will automatically create a release and upload artifacts
+        run: npm run dist

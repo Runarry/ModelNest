@@ -15,9 +15,11 @@ win:
     - target: nsis
       arch:
         - x64
-        - ia32
+    - target: zip # Add zip target for unpacked version
+      arch:
+        - x64
 nsis:
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true
-publish: null
+publish: github # Publish to GitHub Releases
