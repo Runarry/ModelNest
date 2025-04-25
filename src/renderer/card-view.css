@@ -91,6 +91,9 @@
   margin-bottom: 0.4rem;
   color: var(--text-primary); /* Ensure this variable exists or replace */
   line-height: 1.3;
+  white-space: nowrap; /* Prevent name from wrapping */
+  overflow: hidden; /* Hide overflow */
+  text-overflow: ellipsis; /* Add ellipsis for overflow */
 }
 
 .card-view .model-type {
