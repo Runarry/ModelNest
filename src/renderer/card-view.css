@@ -1,6 +1,6 @@
 /* Card View Specific Styles */
 
-#modelList {
+.card-view #modelList {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
   gap: 1rem;
@@ -9,7 +9,7 @@
   padding: 0;
 }
 
-.model-card {
+.card-view .model-card {
   background-color: var(--card-bg);
   border-radius: 12px;
   overflow: hidden; /* Restore overflow hidden */
@@ -23,12 +23,12 @@
   /* padding: 1rem; Remove overall padding, apply to content instead */
 }
 
-.model-card:hover {
+.card-view .model-card:hover {
   transform: translateY(-4px); /* Slightly less lift */
   box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15); /* Adjusted hover shadow */
 }
 
-.model-image {
+.card-view .model-image {
   width: 100%;
   flex-shrink: 0; /* Prevent image from shrinking */
   /* min-height: 220px; Removed fixed min-height */
@@ -43,7 +43,7 @@
 }
 
 /* Styles for the image placeholder */
-.model-image-placeholder {
+.card-view .model-image-placeholder {
   display: flex; /* Use flex to center content */
   align-items: center;
   justify-content: center;
@@ -54,22 +54,23 @@
   border-radius: 8px 8px 0 0;
 }
 
-.model-image-placeholder .placeholder-icon {
+.card-view .model-image-placeholder .placeholder-icon {
   color: rgba(0, 0, 0, 0.2); /* Color for the placeholder icon */
   width: 30%; /* Adjust icon size relative to placeholder */
   height: 30%;
 }
 
-[data-theme="dark"] .model-image-placeholder {
+/* Apply dark theme styles within card view */
+.card-view [data-theme="dark"] .model-image-placeholder {
   background-color: rgba(255, 255, 255, 0.05);
 }
 
-[data-theme="dark"] .model-image-placeholder .placeholder-icon {
+.card-view [data-theme="dark"] .model-image-placeholder .placeholder-icon {
   color: rgba(255, 255, 255, 0.2);
 }
 
 
-.model-content {
+.card-view .model-content {
   /* Apply padding here instead of the card */
   padding: 0.8rem 1rem 0.5rem 1rem; /* Adjust padding: top right bottom left */
   /* Ensure it's displayed */
@@ -84,7 +85,7 @@
   /* min-height: 100px; Removed fixed min-height */
 }
 
-.model-name {
+.card-view .model-name {
   font-size: 1.05rem; /* Reduced font size */
   font-weight: 600;
   margin-bottom: 0.4rem;
@@ -92,7 +93,7 @@
   line-height: 1.3;
 }
 
-.model-type {
+.card-view .model-type {
   display: inline-block;
   padding: 0.2rem 0.5rem;
   background-color: rgba(0, 0, 0, 0.05); /* Lighter background */
@@ -104,7 +105,7 @@
   /* text-transform: capitalize; Removed */
 }
 
-.tags-container {
+.card-view .tags-container {
   display: flex; /* Keep flex for tag layout */
   flex-wrap: wrap;
   gap: 0.4rem;
@@ -123,17 +124,17 @@
 }
 
 /* Style for hidden tags */
-.tag.tag-hidden {
+.card-view .tag.tag-hidden {
   display: none;
 }
 
 /* When container is expanded, show hidden tags */
-.tags-container.expanded .tag.tag-hidden {
+.card-view .tags-container.expanded .tag.tag-hidden {
   display: inline-block;
 }
 
 /* Style for the "more" button */
-.tag-more-btn {
+.card-view .tag-more-btn {
   background: none;
   border: none;
   color: var(--primary-color);
@@ -146,12 +147,12 @@
   display: inline-block; /* Ensure it flows with tags */
 }
 
-.tag-more-btn:hover {
+.card-view .tag-more-btn:hover {
   text-decoration: none;
 }
 
 
-.tag {
+.card-view .tag {
   display: inline-block;
   padding: 0.2rem 0.5rem; /* Adjusted padding */
   background-color: rgba(67, 97, 238, 0.1);
@@ -165,7 +166,7 @@
 
 /* Responsive adjustments specifically for card view grid if needed */
 @media (max-width: 768px) {
-  #modelList {
+  .card-view #modelList {
     /* Adjust grid for smaller screens if the default auto-fill isn't sufficient */
     /* Example: grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); */
   }

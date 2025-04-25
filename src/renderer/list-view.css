@@ -1,9 +1,6 @@
 /* List View Specific Styles */
 
-.mainSection.list-view {
-  display: block;
-  padding: 0 1.5rem; /* Consider if this padding is needed or handled elsewhere */
-}
+/* .mainSection.list-view rule removed as scoping is handled by parent */
 
 .list-view #modelList {
   display: flex;
@@ -95,19 +92,25 @@
 .list-view .tag {
   white-space: nowrap;
   margin: 0;
-  padding: 0.2rem 0.6rem;
+  padding: 0.1rem 0.4rem; /* Reduced padding */
   background-color: rgba(67, 97, 238, 0.15);
   color: var(--primary-color);
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 600;
+  border-radius: 8px; /* Reduced border-radius */
+  font-size: 0.65rem; /* Reduced font-size */
+  font-weight: 500; /* Slightly lighter weight */
   user-select: none;
   cursor: default;
   transition: background-color 0.3s ease;
+  line-height: 1.3; /* Adjust line-height for smaller font */
 }
 
 .list-view .tag:hover {
   background-color: rgba(67, 97, 238, 0.3);
+}
+
+/* Hide the "showMore" button in list view */
+.list-view .tag-more-btn {
+  display: none;
 }
 
 /* Responsive Design for List View */
@@ -130,9 +133,8 @@
 }
 
 @media (max-width: 768px) {
-  .mainSection.list-view {
-      padding: 0 1rem; /* Reduce padding on smaller screens */
-  }
+  /* .mainSection.list-view rule removed as scoping is handled by parent */
+  /* Padding adjustment might be needed elsewhere if required */
 
   .list-view .model-card {
     /* Stack elements vertically on small screens */

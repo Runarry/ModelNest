@@ -143,11 +143,15 @@ document.addEventListener('DOMContentLoaded', async () => {
     // 根据显示模式设置容器类
     const mainSection = document.getElementById('mainSection');
     if (displayMode === 'list') {
-      modelList.classList.add('list-view');
       mainSection.classList.add('list-view');
-    } else {
-      modelList.classList.remove('list-view');
-      mainSection.classList.remove('list-view');
+      mainSection.classList.remove('card-view'); // 确保移除 card-view
+      // modelList 本身不需要 list-view 类，因为样式会基于 mainSection
+      modelList.classList.remove('list-view'); // 移除可能存在的旧类
+    } else { // displayMode === 'card'
+      mainSection.classList.add('card-view');
+      mainSection.classList.remove('list-view'); // 确保移除 list-view
+      // modelList 本身不需要 card-view 类
+      modelList.classList.remove('list-view'); // 确保移除 list-view
     }
     
     filteredModels.forEach(model => {
