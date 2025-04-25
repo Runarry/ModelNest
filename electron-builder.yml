@@ -22,4 +22,4 @@ nsis:
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true
-publish: github # Publish to GitHub Releases
+publish: null 
