@@ -23,6 +23,7 @@
   },
   "settings": {
     "title": "设置",
+    "loading": "正在加载设置...",
     "cancel": "取消",
     "save": "保存设置",
     "loadError": "加载设置失败: {message}",
@@ -58,15 +59,21 @@
       "title": "图片缓存",
       "debug": "启用调试日志",
       "quality": "压缩质量:",
+      "qualityHint": "(0-100)",
       "format": "压缩格式:",
-      "maxSize": "最大缓存大小:"
+      "formatJpeg": "JPEG",
+      "formatWebp": "WebP",
+      "formatPng": "PNG",
+      "maxSize": "最大缓存大小:",
+      "maxSizeHint": "(MB)"
     },
     "validation": {
       "sourceNameRequired": "来源名称不能为空。",
       "pathRequired": "本地来源的文件夹路径不能为空。",
       "urlRequired": "WebDAV URL 不能为空。",
       "qualityError": "压缩质量必须介于 0 和 100 之间。",
-      "sizeError": "最大缓存大小必须是非负数。"
+      "sizeError": "最大缓存大小必须是非负数。",
+      "failed": "验证失败"
     }
   }
 }

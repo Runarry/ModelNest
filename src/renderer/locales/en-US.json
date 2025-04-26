@@ -23,6 +23,7 @@
   },
   "settings": {
     "title": "Settings",
+    "loading": "Loading settings...",
     "cancel": "Cancel",
     "save": "Save Settings",
     "loadError": "Failed to load settings: {message}",
@@ -58,15 +59,21 @@
       "title": "Image Cache",
       "debug": "Enable Debug Logging",
       "quality": "Compression Quality:",
+      "qualityHint": "(0-100)",
       "format": "Compression Format:",
-      "maxSize": "Max Cache Size:"
+      "formatJpeg": "JPEG",
+      "formatWebp": "WebP",
+      "formatPng": "PNG",
+      "maxSize": "Max Cache Size:",
+      "maxSizeHint": "(MB)"
     },
     "validation": {
       "sourceNameRequired": "Source name cannot be empty.",
       "pathRequired": "Folder path cannot be empty for local source.",
       "urlRequired": "WebDAV URL cannot be empty.",
       "qualityError": "Compression quality must be between 0 and 100.",
-      "sizeError": "Max cache size must be a non-negative number."
+      "sizeError": "Max cache size must be a non-negative number.",
+      "failed": "Validation failed"
     }
   }
 }

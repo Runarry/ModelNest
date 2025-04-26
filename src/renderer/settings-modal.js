@@ -88,7 +88,7 @@ function closeSettingsModal() {
 /** Loads the current config from the main process and populates the settings form. */
 async function loadConfigForSettings() {
     if (!settingsForm) return;
-    settingsForm.innerHTML = '<p>Loading settings...</p>'; // Placeholder while loading
+    settingsForm.innerHTML = `<p>${t('settings.loading')}</p>`; // Placeholder while loading
 
     try {
         const currentConfig = await window.api.getConfig();
@@ -147,19 +147,19 @@ async function loadConfigForSettings() {
             </label>
           </div>
           <div class="form-group">
-            <label for="imageCacheQuality">${t('settings.imageCache.quality')} (0-100)</label>
+            <label for="imageCacheQuality">${t('settings.imageCache.quality')} ${t('settings.imageCache.qualityHint')}</label>
             <input type="number" id="imageCacheQuality" name="imageCacheQuality" min="0" max="100" value="${cacheConfig.compressQuality ?? 80}">
           </div>
           <div class="form-group">
             <label for="imageCacheFormat">${t('settings.imageCache.format')}</label>
             <select id="imageCacheFormat" name="imageCacheFormat">
-              <option value="jpeg" ${cacheConfig.compressFormat === 'jpeg' ? 'selected' : ''}>JPEG</option>
-              <option value="webp" ${cacheConfig.compressFormat === 'webp' ? 'selected' : ''}>WebP</option>
-              <option value="png" ${cacheConfig.compressFormat === 'png' ? 'selected' : ''}>PNG</option>
+              <option value="jpeg" ${cacheConfig.compressFormat === 'jpeg' ? 'selected' : ''}>${t('settings.imageCache.formatJpeg')}</option>
+              <option value="webp" ${cacheConfig.compressFormat === 'webp' ? 'selected' : ''}>${t('settings.imageCache.formatWebp')}</option>
+              <option value="png" ${cacheConfig.compressFormat === 'png' ? 'selected' : ''}>${t('settings.imageCache.formatPng')}</option>
             </select>
           </div>
           <div class="form-group">
-            <label for="imageCacheSize">${t('settings.imageCache.maxSize')} (MB)</label>
+            <label for="imageCacheSize">${t('settings.imageCache.maxSize')} ${t('settings.imageCache.maxSizeHint')}</label>
             <input type="number" id="imageCacheSize" name="imageCacheSize" min="0" value="${cacheConfig.maxCacheSizeMB ?? 500}">
           </div>
         `;
@@ -298,14 +298,14 @@ async function handleSaveSettings() {
         if (isNaN(quality) || quality < 0 || quality > 100) {
             showFeedback(settingsFeedbackEl, t('settings.validation.qualityError'), 'error');
             settingsForm.querySelector('#imageCacheQuality')?.focus();
-            throw new Error("Validation failed"); // Throw to prevent saving
+            throw new Error(t('settings.validation.failed')); // Throw to prevent saving
         }
         newConfig.imageCache.compressQuality = quality;
 
         if (isNaN(size) || size < 0) {
             showFeedback(settingsFeedbackEl, t('settings.validation.sizeError'), 'error');
             settingsForm.querySelector('#imageCacheSize')?.focus();
-            throw new Error("Validation failed"); // Throw to prevent saving
+            throw new Error(t('settings.validation.failed')); // Throw to prevent saving
         }
         newConfig.imageCache.maxCacheSizeMB = size;
 
