@@ -40,7 +40,7 @@ if (config && config.imageCache) {
 // 创建主窗口
 function createWindow() {
   const win = new BrowserWindow({
-    width: 1200,
+    width: 1270,
     height: 800,
     icon: path.join(__dirname, 'icon.png'),
     webPreferences: {
@@ -51,7 +51,7 @@ function createWindow() {
   });
   win.removeMenu();
   win.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  win.webContents.openDevTools();
+  //win.webContents.openDevTools();
 }
 
 app.whenReady().then(() => {
