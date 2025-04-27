@@ -128,7 +128,7 @@ async function loadConfigForSettings() {
           <h3>${t('settings.extensions.title')}</h3>
           <div class="form-group">
             <label for="supportedExtensions">${t('settings.extensions.label')}</label>
-            <textarea id="supportedExtensions" name="supportedExtensions" rows="3">${(currentConfig.supportedExtensions || []).join(', ')}</textarea>
+            <textarea id="supportedExtensions" name="supportedExtensions" rows="3">${(currentConfig.supportedExtensions && currentConfig.supportedExtensions.length > 0) ? currentConfig.supportedExtensions.join(', ') : '.checkpoint, .ckpt, .safetensors, .pt, .pth, .bin'}</textarea>
             <small>${t('settings.extensions.hint')}</small>
           </div>
         `;
@@ -285,7 +285,7 @@ async function handleSaveSettings() {
         // Supported Extensions
         const extensionsText = formData.get('supportedExtensions') || '';
         newConfig.supportedExtensions = extensionsText.split(',')
-            .map(ext => ext.trim().replace(/^\./, '')) // Trim and remove leading dots
+            .map(ext => ext.trim()) // Trim only, keep leading dots
             .filter(ext => ext.length > 0);
 
         // Image Cache
