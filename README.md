@@ -9,9 +9,15 @@
 - [x] 支持本地与 WebDAV 多数据源模型管理
 - [x] 按模型类型筛选、浏览模型
 - [x] 查看模型详情与图片
-- [ ] 增加配置界面 - 进行中
-- [ ] 数据和模型下载
-- [ ] 与ComfyUI等进行模型同步
+- [x] 增加配置界面
+- [ ] UI优化
+- [ ] 增加其他数据源类型。
+- [ ] 模型仓库之间模型同步。
+- [ ] Civita/Liblib数据和模型爬取和下载
+- [ ] 与ComfyUI等进行模型同步(通过节点实现动态同步、模型选择)
+
+## 应用截图
+![应用截图](assets/image.png)
 
 ## 使用方法
 1. **下载与运行**:
@@ -51,8 +57,7 @@
    ├── style_b.ckpt
    ├── style_b.jpg
    ├── style_b.json
-   ├── object_c.pt
-   └── background_d.safetensors
+  
    ```
 
    **`character_a.json` 文件内容示例**:
@@ -66,6 +71,10 @@
      "author": "CreatorX"
    }
    ```
+   如果你是从Liblib或者Civita下载的模型，可以考虑使用我的浏览器脚本抓取对应内容 ->> [liblib-civitai-helper]https://github.com/Runarry/liblib-civitai-helper。
+
+
+
 
 
 
