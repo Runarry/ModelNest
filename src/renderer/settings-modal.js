@@ -13,9 +13,13 @@ let settingsCancelBtn;
 let settingsForm;
 let settingsFeedbackEl; // Feedback element specific to this modal
 let sourceListContainer; // Element within the form to hold the list of sources
+let updateSection; // Container for the update UI
+let updateStatusEl; // Span to display update status messages
+let checkUpdateButton; // Button to check for updates / quit and install
 
 // ===== Module State =====
 let tempModelSources = []; // Temporary state for editing sources
+let unsubscribeUpdateStatus = null; // Function to unsubscribe from update status events
 
 // ===== Initialization =====
 
@@ -80,6 +84,12 @@ function closeSettingsModal() {
         settingsModal.classList.remove('active');
         // Clear temporary state when closing without saving
         tempModelSources = [];
+        // Clean up IPC listener when closing modal
+        if (unsubscribeUpdateStatus) {
+            console.log("Unsubscribing from update status events.");
+            unsubscribeUpdateStatus();
+            unsubscribeUpdateStatus = null;
+        }
     }
 }
 
@@ -164,6 +174,38 @@ async function loadConfigForSettings() {
           </div>
         `;
         settingsForm.appendChild(cacheSection);
+
+        // --- Render Update Section ---
+        updateSection = document.createElement('div');
+        updateSection.className = 'settings-section update-section';
+        updateSection.innerHTML = `
+          <h3>${t('settings.update.title')}</h3>
+          <div class="update-controls">
+            <span id="update-status">${t('settings.update.statusIdle')}</span>
+            <button id="check-update-button" type="button" class="btn btn-secondary">${t('settings.update.check')}</button>
+          </div>
+          <small>${t('settings.update.hint')}</small>
+        `;
+        settingsForm.appendChild(updateSection);
+
+        // Get references to update elements
+        updateStatusEl = updateSection.querySelector('#update-status');
+        checkUpdateButton = updateSection.querySelector('#check-update-button');
+
+        if (!updateStatusEl || !checkUpdateButton) {
+            console.error("Update UI elements not found in settings modal.");
+        } else {
+             // Add event listener for the update button
+            checkUpdateButton.addEventListener('click', handleUpdateButtonClick);
+
+            // Register listener for update status changes from main process
+            // Ensure previous listener is removed if modal is reopened
+            if (unsubscribeUpdateStatus) {
+                unsubscribeUpdateStatus();
+            }
+            unsubscribeUpdateStatus = window.api.onUpdateStatus(handleUpdateStatus);
+            console.log("Subscribed to update status events.");
+        }
 
     } catch (error) {
         console.error("Failed to load config for settings:", error);
@@ -332,5 +374,88 @@ async function handleSaveSettings() {
             settingsSaveBtn.disabled = false;
             settingsSaveBtn.textContent = t('settings.save');
          }
+    }
+}
+// ===== Update Handling Functions =====
+
+/**
+ * Handles clicks on the "Check for Updates" / "Restart & Install" button.
+ */
+function handleUpdateButtonClick() {
+    if (!checkUpdateButton || !updateStatusEl) return;
+
+    // Read the current button text to determine the action
+    const currentActionText = checkUpdateButton.textContent;
+
+    // Compare with translated strings to decide action
+    if (currentActionText === t('settings.update.install')) {
+        console.log("Requesting app quit and install...");
+        window.api.quitAndInstall();
+    } else {
+        console.log("Requesting check for updates...");
+        window.api.checkForUpdate();
+        // Optionally disable button and show checking status immediately
+        // checkUpdateButton.disabled = true;
+        // checkUpdateButton.textContent = t('settings.update.checking');
+        // updateStatusEl.textContent = t('settings.update.statusChecking');
+    }
+}
+
+/**
+ * Callback function to handle update status updates from the main process.
+ * Updates the UI elements (status text and button) accordingly.
+ * @param {string} status - The update status code (e.g., 'checking', 'downloaded').
+ * @param {...any} args - Additional arguments depending on the status (e.g., error message, progress info).
+ */
+function handleUpdateStatus(status, ...args) {
+    if (!updateStatusEl || !checkUpdateButton) {
+        console.warn("Update UI elements not available to handle status:", status);
+        return;
+    }
+    console.log(`Received update status: ${status}`, args);
+
+    // Reset button state initially, enable by default unless specified otherwise
+    checkUpdateButton.disabled = false;
+    checkUpdateButton.textContent = t('settings.update.check'); // Default text
+
+    switch (status) {
+        case 'checking':
+            updateStatusEl.textContent = t('settings.update.statusChecking');
+            checkUpdateButton.disabled = true;
+            checkUpdateButton.textContent = t('settings.update.checking'); // Change button text while checking
+            break;
+        case 'available':
+            // This state might be brief, often followed by 'downloading'.
+            updateStatusEl.textContent = t('settings.update.statusAvailable');
+            // Keep button as "Check for Updates" or let 'downloading' state handle it.
+            // Button remains enabled here, allowing another check if desired, though unlikely needed.
+            break;
+        case 'not-available':
+            updateStatusEl.textContent = t('settings.update.statusNotAvailable');
+            // Button remains enabled with "Check for Updates" text.
+            break;
+        case 'downloading':
+            const progress = args[0]?.percent; // Progress info is usually the first arg
+            const progressText = progress ? `(${progress.toFixed(1)}%)` : '';
+            updateStatusEl.textContent = `${t('settings.update.statusDownloading')} ${progressText}`;
+            checkUpdateButton.disabled = true;
+            checkUpdateButton.textContent = t('settings.update.downloading'); // Change button text while downloading
+            break;
+        case 'downloaded':
+            updateStatusEl.textContent = t('settings.update.statusDownloaded');
+            checkUpdateButton.disabled = false; // Enable button for install action
+            checkUpdateButton.textContent = t('settings.update.install'); // Change button text to prompt install
+            break;
+        case 'error':
+            const error = args[0]; // Error object or message is usually the first arg
+            const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
+            updateStatusEl.textContent = t('settings.update.statusError', { message: errorMessage });
+            // Button remains enabled with "Check for Updates" text.
+            break;
+        default:
+            // Optional: Handle any unexpected status or reset to a known idle state
+            console.warn(`Unhandled update status: ${status}`);
+            // updateStatusEl.textContent = t('settings.update.statusIdle'); // Uncomment to reset explicitly
+            break;
     }
 }

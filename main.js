@@ -1,4 +1,5 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dialog here
+const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
 const fs = require('fs');
 const { LocalDataSource } = require('./src/data/dataSource');
@@ -7,6 +8,7 @@ const imageCache = require('./src/common/imageCache');
 const os = require('os');
 const crypto = require('crypto');
 
+let mainWindow; // Declare mainWindow globally
 let config = null;
 
 // 加载配置文件 (异步)
@@ -39,7 +41,7 @@ async function loadConfig() {
 
 // 创建主窗口
 function createWindow() {
-  const win = new BrowserWindow({
+  mainWindow = new BrowserWindow({ // Assign to mainWindow
     width: 1270,
     height: 800,
     icon: path.join(__dirname, 'icon.png'),
@@ -49,9 +51,9 @@ function createWindow() {
       contextIsolation: true
     }
   });
-  win.removeMenu();
-  win.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  //win.webContents.openDevTools();
+  mainWindow.removeMenu();
+  mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
+  mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(async () => { // 改为 async 回调
@@ -65,6 +67,96 @@ app.whenReady().then(async () => { // 改为 async 回调
   }
 
   createWindow();
+
+  // --- Electron Updater Logic ---
+  console.log('[Updater] Initializing...');
+
+  // Optional: Configure logging
+  autoUpdater.logger = require("electron-log");
+  autoUpdater.logger.transports.file.level = "info";
+  console.log('[Updater] Logger configured.');
+
+  // Helper function to send status to renderer
+  const sendUpdateStatus = (status, ...args) => {
+    if (mainWindow && mainWindow.webContents) {
+      console.log(`[Updater] Sending status to renderer: ${status}`, args);
+      mainWindow.webContents.send('updater.onUpdateStatus', status, ...args);
+    } else {
+      console.warn('[Updater] Cannot send status, mainWindow is not available.');
+    }
+  };
+
+  autoUpdater.on('checking-for-update', () => {
+    sendUpdateStatus('checking');
+  });
+  autoUpdater.on('update-available', (info) => {
+    sendUpdateStatus('available', info);
+  });
+  autoUpdater.on('update-not-available', (info) => {
+    sendUpdateStatus('not-available', info);
+  });
+  autoUpdater.on('error', (err) => {
+    sendUpdateStatus('error', err.message);
+    console.error('[Updater] Update error:', err);
+  });
+  autoUpdater.on('download-progress', (progressObj) => {
+    sendUpdateStatus('downloading', progressObj);
+  });
+  autoUpdater.on('update-downloaded', (info) => {
+    sendUpdateStatus('downloaded', info);
+    // Optional: Prompt user to restart, or rely on manual trigger from renderer
+    // dialog.showMessageBox({
+    //   type: 'info',
+    //   title: '发现新版本',
+    //   message: '已下载新版本，是否立即重启并安装？',
+    //   buttons: ['立即重启', '稍后重启']
+    // }).then(({ response }) => {
+    //   if (response === 0) {
+    //     autoUpdater.quitAndInstall();
+    //   }
+    // });
+  });
+
+  // Check for updates after a delay (e.g., 3 seconds)
+  setTimeout(() => {
+    console.log('[Updater] Checking for updates and notifying...');
+    autoUpdater.checkForUpdatesAndNotify().catch(err => {
+      console.error('[Updater] checkForUpdatesAndNotify error:', err);
+      // Optionally send an error status if check fails immediately
+      sendUpdateStatus('error', `自动检查更新失败: ${err.message}`);
+    });
+  }, 3000);
+
+  console.log('[Updater] Initialization complete.');
+// --- Updater IPC Handlers ---
+  ipcMain.handle('updater.checkForUpdate', async () => {
+    console.log('[Updater IPC] Received checkForUpdate request.');
+    try {
+      sendUpdateStatus('checking'); // Notify renderer immediately
+      const result = await autoUpdater.checkForUpdates();
+      console.log('[Updater IPC] checkForUpdates result:', result);
+      // Note: The actual status updates are sent via the event listeners above.
+      // This handler primarily triggers the check. We might return the result if needed.
+      return result; // Contains updateInfo and cancellationToken
+    } catch (error) {
+      console.error('[Updater IPC] Error during checkForUpdates:', error);
+      sendUpdateStatus('error', `手动检查更新失败: ${error.message}`); // Send error status
+      throw error; // Re-throw error to be caught by invoke in renderer
+    }
+  });
+
+  ipcMain.handle('updater.quitAndInstall', () => {
+    console.log('[Updater IPC] Received quitAndInstall request.');
+    try {
+      autoUpdater.quitAndInstall();
+    } catch (error) {
+      console.error('[Updater IPC] Error during quitAndInstall:', error);
+      // It might be too late to send IPC messages here if quitting fails early
+    }
+  });
+  // --- End Updater IPC Handlers ---
+  // --- End Electron Updater Logic ---
+
 
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -315,19 +407,19 @@ ipcMain.handle('save-config', async (event, newConfig) => {
     throw new Error(`Failed to save config.json: ${error.message}`);
   }
 });
+
 // IPC: 打开文件夹选择对话框
 ipcMain.handle('open-folder-dialog', async (event) => {
-  // 需要从 electron 导入 dialog 模块
-  const { dialog } = require('electron');
-  const result = await dialog.showOpenDialog(BrowserWindow.getFocusedWindow(), {
+  // const { dialog } = require('electron'); // Moved import to the top
+  const result = await dialog.showOpenDialog(mainWindow, { // Use mainWindow
     properties: ['openDirectory']
   });
 
   if (result.canceled || result.filePaths.length === 0) {
     console.log('[Main] Folder selection cancelled.');
-    return null; // 或者返回一个空数组，根据渲染进程的期望
+    return null;
   } else {
     console.log('[Main] Folder selected:', result.filePaths[0]);
-    return result.filePaths[0]; // 返回选中的第一个文件夹路径
+    return result.filePaths[0];
   }
 });

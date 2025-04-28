@@ -22,4 +22,8 @@ nsis:
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true
-publish: null 
+publish:
+  provider: github
+  owner: Runarry 
+  repo: ModelNest 
+  releaseType: prerelease # 可选: draft, prerelease, release (默认)
