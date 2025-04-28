@@ -9,32 +9,32 @@ const crypto = require('crypto');
 
 let config = null;
 
-// 加载配置文件
-function loadConfig() {
+// 加载配置文件 (异步)
+async function loadConfig() {
   const configPath = path.join(process.cwd(), 'config.json');
   try {
-    if (fs.existsSync(configPath)) {
-      config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
-      // 转换本地路径为绝对路径
-      if (Array.isArray(config.modelSources)) {
-        config.modelSources.forEach(source => {
-          if (source.type === 'local' && source.path) {
-            source.path = path.isAbsolute(source.path) ? source.path : path.join(process.cwd(), source.path);
-          }
-        });
-      }
-    } else {
-      config = { modelSources: [], supportedExtensions: [] };
+    // 使用 fs.promises.access 检查文件是否存在
+    await fs.promises.access(configPath);
+    // 使用 fs.promises.readFile 读取文件
+    const configData = await fs.promises.readFile(configPath, 'utf-8');
+    config = JSON.parse(configData);
+    // 转换本地路径为绝对路径
+    if (Array.isArray(config.modelSources)) {
+      config.modelSources.forEach(source => {
+        if (source.type === 'local' && source.path) {
+          source.path = path.isAbsolute(source.path) ? source.path : path.join(process.cwd(), source.path);
+        }
+      });
     }
   } catch (error) {
-    console.error('加载或解析 config.json 失败:', error);
+    // 如果文件不存在或读取/解析失败，则使用默认配置
+    if (error.code === 'ENOENT') {
+      console.log('config.json 不存在，使用默认配置。');
+    } else {
+      console.error('加载或解析 config.json 失败:', error);
+    }
     config = { modelSources: [], supportedExtensions: [] };
   }
-}
-if (config && config.imageCache) {
-  imageCache.setConfig(config.imageCache);
-} else {
-  imageCache.setConfig({});
 }
 
 // 创建主窗口
@@ -54,8 +54,16 @@ function createWindow() {
   //win.webContents.openDevTools();
 }
 
-app.whenReady().then(() => {
-  loadConfig();
+app.whenReady().then(async () => { // 改为 async 回调
+  await loadConfig(); // 等待配置加载完成
+
+  // 配置加载完成后再设置 imageCache
+  if (config && config.imageCache) {
+    imageCache.setConfig(config.imageCache);
+  } else {
+    imageCache.setConfig({});
+  }
+
   createWindow();
 
   app.on('activate', function () {

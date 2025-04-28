@@ -26,13 +26,18 @@ class LocalDataSource extends DataSource {
   }
   async listSubdirectories() {
     const root = this.config.path;
-    if (!fs.existsSync(root)) return [];
     try {
+      // Check existence using access
+      await fs.promises.access(root);
       const entries = await fs.promises.readdir(root, { withFileTypes: true });
       return entries
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name);
     } catch (error) {
+      // If directory doesn't exist (ENOENT), return empty array, otherwise log error
+      if (error.code === 'ENOENT') {
+        return [];
+      }
       console.error(`[LocalDataSource] Error reading subdirectories in ${root}:`, error);
       return [];
     }
@@ -43,38 +48,64 @@ class LocalDataSource extends DataSource {
     const startPath = directory ? path.join(root, directory) : root; // 确定起始路径
     const supportedExtensions = this.config.supportedExtensions || [];
 
-    if (!fs.existsSync(startPath)) { // 检查起始路径是否存在
-      console.warn(`[LocalDataSource] Directory not found: ${startPath}`);
-      return [];
+    try {
+      // Check existence using access
+      await fs.promises.access(startPath);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        console.warn(`[LocalDataSource] Directory not found: ${startPath}`);
+        return [];
+      }
+      console.error(`[LocalDataSource] Error accessing directory ${startPath}:`, error);
+      return []; // Return empty on other access errors too
     }
 
     let allModels = [];
-    const walk = (dir) => {
-      try { // 添加 try-catch 块以处理可能的权限错误等
-        const files = fs.readdirSync(dir, { withFileTypes: true });
-        // 只处理文件夹和模型文件
+    // Make walk async
+    const walk = async (dir) => {
+      try {
+        // Use async readdir
+        const files = await fs.promises.readdir(dir, { withFileTypes: true });
+        // Assuming parseLocalModels remains synchronous. If it becomes async, add await.
         const modelObjs = parseLocalModels(dir, supportedExtensions);
         allModels = allModels.concat(modelObjs);
-        files.forEach(f => {
+
+        // Use for...of loop for async iteration
+        for (const f of files) {
           if (f.isDirectory()) {
-            walk(path.join(dir, f.name));
+            // Await the recursive call
+            await walk(path.join(dir, f.name));
           }
-        });
+        }
       } catch (error) {
-        console.error(`[LocalDataSource] Error walking directory ${dir}:`, error);
-        // 可以选择继续或抛出错误，这里选择记录错误并继续
+        // Handle errors, especially ENOENT (directory not found) which might occur
+        // if a directory is deleted between readdir and the recursive walk call.
+        if (error.code !== 'ENOENT') { // Ignore 'Not Found' errors if desired, or handle specifically
+            console.error(`[LocalDataSource] Error walking directory ${dir}:`, error);
+        }
+        // Continue walking other directories even if one fails
       }
     };
 
-    walk(startPath); // 从 startPath 开始扫描
+    await walk(startPath); // Await the initial call
     return allModels;
   }
   async readModelDetail(jsonPath) {
-    if (!jsonPath || !fs.existsSync(jsonPath)) return {};
+    if (!jsonPath) return {};
     try {
-      return JSON.parse(fs.readFileSync(jsonPath, 'utf-8'));
-    } catch (e) {
-      console.error(`[LocalDataSource] Error reading model detail ${jsonPath}:`, e); // 添加错误日志
+      // Check existence using access before reading
+      await fs.promises.access(jsonPath);
+      const data = await fs.promises.readFile(jsonPath, 'utf-8');
+      return JSON.parse(data);
+    } catch (error) {
+      // If file doesn't exist (ENOENT) or cannot be accessed, return empty object
+      if (error.code === 'ENOENT') {
+        // Optional: Log a warning if the file is expected but not found
+        // console.warn(`[LocalDataSource] Model detail file not found: ${jsonPath}`);
+        return {};
+      }
+      // Log other errors (parsing errors, permission errors, etc.)
+      console.error(`[LocalDataSource] Error reading model detail ${jsonPath}:`, error);
       return {};
     }
   }

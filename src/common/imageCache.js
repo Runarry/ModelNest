@@ -56,12 +56,21 @@ async function getCompressedImage(srcPath, hashKey) {
     stats.totalRequests++;
     
     // 1. 确保缓存目录存在
-    if (!fs.existsSync(config.cacheDir)) {
-        try {
-            fs.mkdirSync(config.cacheDir, { recursive: true, mode: 0o755 }); // 确保目录权限正确
-        } catch (e) {
-            console.error(`[ImageCache] 创建缓存目录失败: ${e.message}`);
-            throw e; // 抛出异常避免继续执行
+    try {
+        await fs.promises.access(config.cacheDir);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            try {
+                await fs.promises.mkdir(config.cacheDir, { recursive: true, mode: 0o755 });
+                if (config.debug) console.log(`[ImageCache] 缓存目录已创建: ${config.cacheDir}`);
+            } catch (mkdirError) {
+                console.error(`[ImageCache] 创建缓存目录失败: ${mkdirError.message}`);
+                throw mkdirError; // Re-throw if mkdir fails
+            }
+        } else {
+            // Handle other access errors (e.g., permissions)
+            console.error(`[ImageCache] 访问缓存目录失败: ${error.message}`);
+            throw error;
         }
     }
     // 2. 生成唯一缓存文件名
@@ -71,25 +80,30 @@ async function getCompressedImage(srcPath, hashKey) {
     const ext = config.compressFormat === 'webp' ? '.webp' : '.jpg';
     const cachePath = path.join(config.cacheDir, hash + ext);
 
-    // 3. 检查缓存是否存在
+    // 3. 检查缓存是否存在并更新访问时间
     try {
-        // 使用文件锁避免竞争条件
-        if (fs.existsSync(cachePath)) {
-            // 使用更可靠的方式更新访问时间
-            fs.utimesSync(cachePath, new Date(), new Date());
-            stats.cacheHits++;
-            if (config.debug) {
-                console.log(`[ImageCache] 缓存命中: ${path.basename(srcPath)} -> ${cachePath}`);
-            }
-            return cachePath;
+        await fs.promises.access(cachePath); // Check if file exists and is accessible
+        // Update access time asynchronously
+        await fs.promises.utimes(cachePath, new Date(), new Date());
+        stats.cacheHits++;
+        if (config.debug) {
+            console.log(`[ImageCache] 缓存命中: ${path.basename(srcPath)} -> ${cachePath}`);
         }
-    } catch (e) {
-        console.error(`[ImageCache] 缓存检查异常: ${e.message}`);
+        return cachePath; // Return cached path
+    } catch (error) {
+        if (error.code !== 'ENOENT') {
+            // Log errors other than 'file not found'
+            console.error(`[ImageCache] 缓存检查/更新时间异常: ${error.message}`);
+            // Decide if we should proceed or re-throw. For now, proceed to compression.
+        }
+        // If file doesn't exist (ENOENT) or other error occurred, proceed to compression.
     }
 
     // 4. 压缩图片并写入缓存
+    // 4. 压缩图片并写入缓存
     try {
-        const srcStats = fs.statSync(srcPath);
+        // Get source file stats asynchronously
+        const srcStats = await fs.promises.stat(srcPath);
         stats.originalSize += srcStats.size;
 
         const sharpInstance = sharp(srcPath)
@@ -111,23 +125,34 @@ async function getCompressedImage(srcPath, hashKey) {
 // 使用更可靠的文件存在检查
 const MAX_RETRY = 3;
 let retryCount = 0;
-while (retryCount++ < MAX_RETRY) {
-    if (fs.existsSync(cachePath)) {
-        if (config.debug) {
-            console.log(`[ImageCache] 缓存文件写入成功: ${cachePath}`);
+        // Asynchronously check if file exists after writing
+        let writeSuccess = false;
+        while (retryCount++ < MAX_RETRY) {
+            try {
+                await fs.promises.access(cachePath); // Check existence
+                writeSuccess = true;
+                if (config.debug) {
+                    console.log(`[ImageCache] 缓存文件写入成功: ${cachePath}`);
+                }
+                break;
+            } catch (accessError) {
+                if (accessError.code !== 'ENOENT') {
+                    console.warn(`[ImageCache] 检查缓存文件时出错 (重试 ${retryCount}): ${accessError.message}`);
+                }
+                // Wait before retrying
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
         }
-        break;
-    }
-    await new Promise(resolve => setTimeout(resolve, 100));
-}
 
-if (!fs.existsSync(cachePath)) {
-    console.error(`[ImageCache] 缓存文件写入失败: ${cachePath}`);
-    throw new Error('CACHE_WRITE_FAILED');
-}
+        if (!writeSuccess) {
+            console.error(`[ImageCache] 缓存文件写入失败或无法访问: ${cachePath}`);
+            // Attempt to remove potentially corrupted file
+            try { await fs.promises.unlink(cachePath); } catch (unlinkErr) { /* Ignore */ }
+            throw new Error('CACHE_WRITE_FAILED');
+        }
 
-
-        const destStats = fs.statSync(cachePath);
+        // Get destination file stats asynchronously
+        const destStats = await fs.promises.stat(cachePath);
         stats.compressedSize += destStats.size;
 
         if (config.debug) {
@@ -167,20 +192,43 @@ async function clearCache() {
  * @returns {Promise<void>}
  */
 async function checkAndCleanCache() {
-    if (!fs.existsSync(config.cacheDir)) return;
+    try {
+        await fs.promises.access(config.cacheDir); // Check if cache dir exists
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            return; // Directory doesn't exist, nothing to clean
+        }
+        console.error(`[ImageCache] 无法访问缓存目录进行清理: ${error.message}`);
+        return; // Cannot proceed
+    }
 
-    // 1. 统计缓存目录大小
-    const files = fs.readdirSync(config.cacheDir)
-        .map(file => {
-            const filePath = path.join(config.cacheDir, file);
-            const stats = fs.statSync(filePath);
-            return {
-                path: filePath,
-                size: stats.size,
-                atime: stats.atimeMs, // 访问时间
-                mtime: stats.mtimeMs // 修改时间
-            };
-        });
+    // 1. 统计缓存目录大小 (Asynchronously)
+    let files = [];
+    try {
+        const fileNames = await fs.promises.readdir(config.cacheDir);
+        for (const fileName of fileNames) {
+            const filePath = path.join(config.cacheDir, fileName);
+            try {
+                const fileStats = await fs.promises.stat(filePath);
+                files.push({
+                    path: filePath,
+                    size: fileStats.size,
+                    atime: fileStats.atimeMs, // Access time
+                    mtime: fileStats.mtimeMs // Modification time
+                });
+            } catch (statError) {
+                // Handle error if stat fails (e.g., file deleted concurrently)
+                if (statError.code !== 'ENOENT') {
+                    console.warn(`[ImageCache] 无法获取文件状态 ${filePath}:`, statError);
+                }
+                // Skip this file
+            }
+        }
+    } catch (readdirError) {
+        console.error(`[ImageCache] 读取缓存目录失败: ${readdirError.message}`);
+        return; // Cannot proceed
+    }
+
 
     const totalSizeMB = files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024);
     if (totalSizeMB <= config.maxCacheSizeMB) return;
@@ -194,10 +242,12 @@ async function checkAndCleanCache() {
     for (const file of files) {
         if (totalSizeMB - removedSize <= targetSizeMB) break;
         try {
-            fs.unlinkSync(file.path);
+            await fs.promises.unlink(file.path); // Use async unlink
             removedSize += file.size / (1024 * 1024);
-        } catch (e) {
-            console.error(`删除缓存文件失败: ${file.path}`, e);
+        } catch (unlinkError) {
+             if (unlinkError.code !== 'ENOENT') { // Don't log error if file already gone
+                console.error(`删除缓存文件失败: ${file.path}`, unlinkError);
+             }
         }
     }
 
