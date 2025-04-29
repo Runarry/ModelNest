@@ -220,30 +220,32 @@ app.whenReady().then(async () => { // 改为 async 回调
         existingData = {}; // 确保从空对象开始
       }
 
-      // 2. 合并数据：将前端传来的 model 字段合并到现有数据上
-      //    确保包含所有从 detail-modal.js 发送的字段
-      //    注意：前端发送的 model 对象包含了 id, sourceId, jsonPath 等元数据，
-      //    以及 type, description, triggerWord, tags 等实际模型数据。
-      //    注意：根据实际 JSON 结构，不应保存 name 和 extra。type 应映射到 modelType。
+      // 2. 合并数据:
+      //    - Start with the existing data from the file.
+      //    - Spread the incoming 'model' object from the frontend over it.
+      //    - This ensures all fields sent by the frontend (standard and extra)
+      //      are included at the top level, overwriting existing values if keys match.
       const mergedData = {
-        ...existingData, // 保留原始数据中未被前端修改的字段 (如 uuid, image, file, examplePrompt, basic 等)
-        // name: model.name, // 不保存 name 到 JSON 文件
-        modelType: model.type, // 使用前端传来的 type，但保存为 modelType
-        description: model.description, // 使用前端传来的 description
-        triggerWord: model.triggerWord, // 使用前端传来的 triggerWord
-        tags: model.tags, // 使用前端传来的 tags
-        // extra: model.extra || {}, // 不保存 extra 到 JSON 文件
+        ...existingData, // Load existing data first
+        ...model        // Apply updates and new fields from the frontend model object
       };
-      // 注意：我们不需要手动删除 id, sourceId, jsonPath，因为它们不在 existingData 中，
-      // 并且 ...existingData 会保留原始文件中的字段。
-      // 我们只合并前端明确编辑过的字段。
 
-      // 3. 写入合并后的完整数据
-      const dataToWrite = JSON.stringify(mergedData, null, 2);
-      log.debug(`[IPC saveModel] 准备写入合并后的数据到: ${model.jsonPath}`, mergedData);
+      // 3. 清理元数据: 从合并后的对象中移除不需要保存到 JSON 文件中的字段
+      delete mergedData.id;       // Internal ID, not part of the model file itself
+      delete mergedData.sourceId; // Identifier for the data source, not part of the model file
+      delete mergedData.jsonPath; // Path to the JSON file, not stored within it
+      delete mergedData.name;     // Assuming 'name' is derived from filename/context, not stored in JSON
+      // 'extra' field is no longer sent by the frontend, so no need to delete it here.
+      // Explicitly remove 'file' and 'image' keys before writing to ensure they are not saved.
+      delete mergedData.file;
+      delete mergedData.image;
+
+      // 4. 写入合并后的完整数据
+      const dataToWrite = JSON.stringify(mergedData, null, 2); // Pretty-print JSON
+      log.debug(`[IPC saveModel] 准备写入合并后的数据到: ${model.jsonPath}`, JSON.stringify(mergedData, null, 2)); // Log the exact data being written
       await fs.promises.writeFile(model.jsonPath, dataToWrite, 'utf-8');
       log.info('[IPC] 模型保存成功', { jsonPath: model.jsonPath });
-      return { success: true };
+      return { success: true }; // Indicate success back to the renderer
     } catch (error) {
       log.error('[IPC] 保存模型失败:', error.message, error.stack, { model });
       throw error;

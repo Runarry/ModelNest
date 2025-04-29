@@ -190,7 +190,7 @@ function renderFilterTypes() {
 function renderModels() {
   if (!modelList) return;
   clearChildren(modelList);
-  const filteredModels = filterType ? models.filter(m => m.type === filterType) : models;
+  const filteredModels = filterType ? models.filter(m => m.modelType === filterType) : models;
   const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
 
   // Set container class based on display mode
@@ -241,7 +241,7 @@ function renderModels() {
 
     const typeSpan = document.createElement('span');
     typeSpan.className = 'model-type';
-    typeSpan.textContent = model.type || t('uncategorized');
+    typeSpan.textContent = model.modelType || t('uncategorized');
 
     contentDiv.appendChild(nameH3);
     contentDiv.appendChild(typeSpan);
@@ -282,7 +282,7 @@ function renderModels() {
     // --- Click Event ---
     card.addEventListener('click', () => {
         // Task 4: Click Event Logging
-        console.log(`[UI] 点击了模型卡片: ${model.name} (Type: ${model.type}, Source: ${currentSourceId})`);
+        console.log(`[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
         // Call the callback provided during initialization
         if (_showDetail) {
             _showDetail(model);

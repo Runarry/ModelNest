@@ -3,7 +3,6 @@ const fs = require('fs');
 const path = require('path');
 
 // 解析本地模型目录，返回标准模型对象数组
-// 解析本地模型目录，返回标准模型对象数组
 function parseLocalModels(dir, supportedExtensions) {
   log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}`);
   if (!fs.existsSync(dir)) {
@@ -43,7 +42,7 @@ function parseLocalModels(dir, supportedExtensions) {
       }
       const modelObj = {
         name: base,
-        type: detail.modelType || ext.replace('.', '').toUpperCase(),
+        modelType: detail.modelType || ext.replace('.', '').toUpperCase(),
         description: detail.description || '',
         image: image ? path.join(dir, image) : '',
         file: path.join(dir, file),

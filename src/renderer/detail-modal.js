@@ -158,7 +158,7 @@ function renderModalContent(model) {
     const extraEntries = Object.entries(model.extra || {});
     // Filter out standard fields from the 'extra' section display
     const filteredExtraEntries = extraEntries.filter(([key]) =>
-        !['name', 'type', 'description', 'triggerWord', 'image', 'file', 'jsonPath', 'tags'].includes(key)
+        !['name', 'type', 'modelType', 'description', 'triggerWord', 'image', 'file', 'jsonPath', 'tags', 'id', 'sourceId'].includes(key) // Added modelType, id, sourceId
     );
 
     const extraHtml = filteredExtraEntries.length > 0
@@ -175,7 +175,7 @@ function renderModalContent(model) {
 
         <div class="tab-content active" id="basic-tab">
           <div class="detail-info">
-            ${renderEditableField(t('detail.type'), 'model-type', model.type || '')}
+            ${renderEditableField(t('detail.type'), 'model-type', model.modelType || '')}
             ${renderReadonlyField(t('detail.filePath'), model.file || t('notAvailable'))}
             ${renderReadonlyField(t('detail.jsonPath'), model.jsonPath || t('notAvailable'))}
             ${renderEditableField(t('detail.triggerWord'), 'model-trigger', model.triggerWord || '')}
@@ -322,28 +322,41 @@ function attachSaveListener() {
 
             // --- Collect Updated Data ---
             window.api.logMessage('debug', '[DetailModal] 开始收集更新后的模型数据');
-            const updatedModelData = {
-                ...currentModel, // Start with original model data
+            // --- Collect Standard Data ---
+            const standardData = {
                 id: currentModel.id, // Ensure ID is preserved
                 sourceId: currentSourceId, // Include sourceId for the backend
+                jsonPath: currentModel.jsonPath, // Make sure jsonPath is included for saving
                 name: detailName.textContent, // Name is from the title element
-                type: detailModal.querySelector('#model-type')?.value || currentModel.type,
+                modelType: detailModal.querySelector('#model-type')?.value || currentModel.modelType, // Use modelType
                 triggerWord: detailModal.querySelector('#model-trigger')?.value || currentModel.triggerWord,
                 description: detailModal.querySelector('#model-description')?.value || currentModel.description,
                 tags: (detailModal.querySelector('#model-tags')?.value || '')
                         .split(',')
                         .map(tag => tag.trim())
                         .filter(tag => tag.length > 0),
-                extra: collectExtraData(detailModal.querySelector('.extra-info-group'))
+                // DO NOT include file and image when saving metadata
+                // file: currentModel.file, // Removed
+                // image: currentModel.image, // Removed
             };
-             // Clean up extra data: remove standard keys if they somehow got in
-             const standardKeys = ['name', 'type', 'description', 'triggerWord', 'image', 'file', 'jsonPath', 'tags', 'id', 'sourceId'];
-             for (const key of standardKeys) {
-                 delete updatedModelData.extra[key];
-             }
 
+            // --- Collect Extra Data ---
+            const extraData = collectExtraData(detailModal.querySelector('.extra-info-group'));
+            window.api.logMessage('debug', "[DetailModal] 收集到的额外数据:", extraData);
 
-            window.api.logMessage('debug', "[DetailModal] 更新后的模型数据:", updatedModelData);
+            // --- Combine Data ---
+            // Start with an empty object, spread collected extra data, then standard data.
+            // Standard data comes last to ensure its values overwrite any conflicting keys from extraData.
+            // Also include essential original fields like file paths if they aren't editable here.
+            const updatedModelData = {
+                ...extraData, // Spread extra fields first
+                ...standardData, // Spread standard fields, overwriting any conflicts
+            };
+
+            // Remove the 'extra' container property if it exists from original model spread (no longer needed)
+            // delete updatedModelData.extra; // This is no longer needed as we build from scratch
+
+            window.api.logMessage('debug', "[DetailModal] 最终发送的模型数据:", updatedModelData);
 
             // --- Call API ---
             const saveStartTime = Date.now();
