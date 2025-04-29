@@ -23,6 +23,17 @@ contextBridge.exposeInMainWorld('api', {
   },
   // --- End Updater API ---
 
-  // 渲染进程错误上报
+  // 通用日志记录接口
+  logMessage: (level, message, ...args) => {
+    // 验证 level 是否是有效的日志级别 (可选但推荐)
+    const validLevels = ['error', 'warn', 'info', 'verbose', 'debug', 'silly'];
+    if (!validLevels.includes(level)) {
+      console.warn(`[Preload] Invalid log level used: ${level}. Defaulting to 'info'.`);
+      level = 'info';
+    }
+    ipcRenderer.send('log-message', level, message, ...args);
+  },
+
+  // 渲染进程错误上报 (保留现有，或考虑统一到 logMessage)
   sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo)
 });
