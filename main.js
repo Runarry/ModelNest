@@ -13,7 +13,7 @@ let config = null;
 
 // 加载配置文件 (异步)
 async function loadConfig() {
-  const configPath = path.join(process.cwd(), 'config.json');
+  const configPath = path.join(app.getPath('userData'), 'config.json');
   try {
     // 使用 fs.promises.access 检查文件是否存在
     await fs.promises.access(configPath);
@@ -53,7 +53,7 @@ function createWindow() {
   });
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  //mainWindow.webContents.openDevTools();
+  mainWindow.webContents.openDevTools();
 }
 
 app.whenReady().then(async () => { // 改为 async 回调
@@ -90,14 +90,20 @@ app.whenReady().then(async () => { // 改为 async 回调
     sendUpdateStatus('checking');
   });
   autoUpdater.on('update-available', (info) => {
+    console.log('[Updater] Update available. Info:', JSON.stringify(info, null, 2)); // 添加详细日志
     sendUpdateStatus('available', info);
   });
   autoUpdater.on('update-not-available', (info) => {
     sendUpdateStatus('not-available', info);
   });
   autoUpdater.on('error', (err) => {
-    sendUpdateStatus('error', err.message);
-    console.error('[Updater] Update error:', err);
+    console.error('[Updater] Update error occurred. Error object:', err); // 打印完整错误对象
+    // 尝试打印更详细的堆栈信息（如果可用）
+    if (err.stack) {
+        console.error('[Updater] Error stack trace:', err.stack);
+    }
+    sendUpdateStatus('error', err.message || 'Unknown update error'); // 确保发送消息
+    console.error('[Updater] Update error (original console):', err); // 保留原始日志
   });
   autoUpdater.on('download-progress', (progressObj) => {
     sendUpdateStatus('downloading', progressObj);
@@ -134,10 +140,10 @@ app.whenReady().then(async () => { // 改为 async 回调
     try {
       sendUpdateStatus('checking'); // Notify renderer immediately
       const result = await autoUpdater.checkForUpdates();
-      console.log('[Updater IPC] checkForUpdates result:', result);
+      console.log('[Updater IPC] checkForUpdates result:', result ? 'Update check triggered' : 'Update check failed or no result'); // Log confirmation
       // Note: The actual status updates are sent via the event listeners above.
-      // This handler primarily triggers the check. We might return the result if needed.
-      return result; // Contains updateInfo and cancellationToken
+      // This handler primarily triggers the check. We don't need to return the complex result object.
+      return null; // Avoid cloning error by not returning the complex object
     } catch (error) {
       console.error('[Updater IPC] Error during checkForUpdates:', error);
       sendUpdateStatus('error', `手动检查更新失败: ${error.message}`); // Send error status
@@ -363,7 +369,7 @@ ipcMain.handle('getModelImage', async (event, { sourceId, imagePath }) => {
 });
 // IPC: 保存配置
 ipcMain.handle('save-config', async (event, newConfig) => {
-  const configPath = path.join(process.cwd(), 'config.json');
+  const configPath = path.join(app.getPath('userData'), 'config.json');
   try {
     // 1. 验证和清理 newConfig (可选但推荐)
     //    - 确保 modelSources 是数组等
