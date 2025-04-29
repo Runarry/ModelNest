@@ -1,8 +1,8 @@
 // Import necessary initialization functions and utilities
 import { initThemeSwitcher } from './ui.js';
 import { initMainView, loadModels as loadModelsForView, renderSources } from './main-view.js';
-import { initDetailModel, showDetailModel, hideDetailModel } from './detail-Model.js';
-import { initSettingsModel } from './settings-Model.js';
+import { initDetailModel, showDetailModel, hideDetailModel } from './detail-model.js';
+import { initSettingsModel } from './settings-model.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './ui-utils.js';
 

@@ -1,5 +1,6 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
+console.log('[Preload] Exposing API via contextBridge...');
 contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('getConfig'),
   listModels: (sourceId, directory = null) => ipcRenderer.invoke('listModels', { sourceId, directory }), // 添加 directory 参数
@@ -37,3 +38,4 @@ contextBridge.exposeInMainWorld('api', {
   // 渲染进程错误上报 (保留现有，或考虑统一到 logMessage)
   sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo)
 });
+console.log('[Preload] API exposed successfully.');

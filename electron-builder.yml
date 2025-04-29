@@ -3,6 +3,7 @@ productName: ModelNest
 files:
   - 'node_modules/**'
   - 'src/**'
+  - 'src/**/**'
 
   - 'icon.png'
   - 'main.js'

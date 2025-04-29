@@ -55,9 +55,10 @@ function createWindow() {
   });
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  if (!app.isPackaged) {
-    mainWindow.webContents.openDevTools();
-  }
+  mainWindow.webContents.openDevTools();
+  // if (!app.isPackaged) {
+  //   mainWindow.webContents.openDevTools();
+  // }
   mainWindow.on('closed', () => {
     log.info('[Lifecycle] 主窗口已关闭');
   });
@@ -115,58 +116,88 @@ app.whenReady().then(async () => { // 改为 async 回调
 
   createWindow();
 
-  // --- Electron Updater Logic ---
-  log.info('[Updater] Initializing...');
+  // --- Electron Updater Logic with Enhanced Logging ---
+  log.info('[Updater] Starting autoUpdater initialization...');
+  let sendUpdateStatus; // Declare here to be accessible in catch block if needed
+  try {
+    // 配置 autoUpdater 日志为 electron-log
+    log.info('[Updater] Configuring logger...');
+    autoUpdater.logger = log;
+    log.info('[Updater] Logger configured successfully.');
 
-  // 配置 autoUpdater 日志为 electron-log，级别已全局设置
-  autoUpdater.logger = log;
-  log.info('[Updater] Logger configured.');
+    // Helper function to send status to renderer
+    sendUpdateStatus = (status, ...args) => {
+      // 检查 mainWindow 是否存在且未被销毁
+      if (mainWindow && mainWindow.webContents && !mainWindow.isDestroyed()) {
+        log.debug(`[Updater] Sending status to renderer: ${status}`, args);
+        try {
+          mainWindow.webContents.send('updater.onUpdateStatus', status, ...args);
+        } catch (sendError) {
+          // 捕获发送消息时可能发生的错误 (例如窗口已关闭)
+          log.error('[Updater] Error sending status to renderer:', { message: sendError.message, stack: sendError.stack });
+        }
+      } else {
+        log.warn('[Updater] Cannot send status, mainWindow is not available or destroyed.');
+      }
+    };
 
-  // Helper function to send status to renderer
-  const sendUpdateStatus = (status, ...args) => {
-    if (mainWindow && mainWindow.webContents) {
-      log.debug(`[Updater] Sending status to renderer: ${status}`, args);
-      mainWindow.webContents.send('updater.onUpdateStatus', status, ...args);
-    } else {
-      log.warn('[Updater] Cannot send status, mainWindow is not available.');
-    }
-  };
-
-  autoUpdater.on('checking-for-update', () => {
-    log.info('[Updater] 检查更新...');
-    sendUpdateStatus('checking');
-  });
-  autoUpdater.on('update-available', (info) => {
-    log.info('[Updater] 检测到可用更新', info);
-    sendUpdateStatus('available', info);
-  });
-  autoUpdater.on('update-not-available', (info) => {
-    log.info('[Updater] 当前为最新版本', info);
-    sendUpdateStatus('not-available', info);
-  });
-  autoUpdater.on('error', (err) => {
-    log.error('[Updater] 更新出错:', err && err.message, err && err.stack, err);
-    sendUpdateStatus('error', err && err.message ? err.message : 'Unknown update error');
-  });
-  autoUpdater.on('download-progress', (progressObj) => {
-    log.verbose('[Updater] 下载进度', progressObj);
-    sendUpdateStatus('downloading', progressObj);
-  });
-  autoUpdater.on('update-downloaded', (info) => {
-    log.info('[Updater] 更新已下载', info);
-    sendUpdateStatus('downloaded', info);
-  });
-
-  // Check for updates after a delay (e.g., 3 seconds)
-  setTimeout(() => {
-    log.info('[Updater] 启动后延迟检查更新');
-    autoUpdater.checkForUpdatesAndNotify().catch(err => {
-      log.error('[Updater] checkForUpdatesAndNotify error:', err && err.message, err && err.stack);
-      sendUpdateStatus('error', `自动检查更新失败: ${err && err.message}`);
+    log.info('[Updater] Registering event listeners...');
+    autoUpdater.on('checking-for-update', () => {
+      log.info('[Updater] Event: checking-for-update');
+      sendUpdateStatus('checking');
     });
-  }, 3000);
+    autoUpdater.on('update-available', (info) => {
+      log.info('[Updater] Event: update-available', info);
+      sendUpdateStatus('available', info);
+    });
+    autoUpdater.on('update-not-available', (info) => {
+      log.info('[Updater] Event: update-not-available', info);
+      sendUpdateStatus('not-available', info);
+    });
+    autoUpdater.on('error', (err) => {
+      // 记录完整的错误信息，包括堆栈
+      log.error('[Updater] Event: error', { message: err.message, stack: err.stack, error: err });
+      sendUpdateStatus('error', err && err.message ? err.message : 'Unknown update error');
+    });
+    autoUpdater.on('download-progress', (progressObj) => {
+      // 使用 verbose 级别，避免日志过多，仅在需要详细调试时开启
+      log.verbose('[Updater] Event: download-progress', progressObj);
+      sendUpdateStatus('downloading', progressObj);
+    });
+    autoUpdater.on('update-downloaded', (info) => {
+      log.info('[Updater] Event: update-downloaded', info);
+      sendUpdateStatus('downloaded', info);
+    });
+    log.info('[Updater] Event listeners registered.');
 
-  log.info('[Updater] Initialization complete.');
+    // 自动检查更新 (当前被注释掉)
+    // log.info('[Updater] Scheduling check for updates (currently disabled)...');
+    // setTimeout(() => {
+    //   log.info('[Updater] Executing scheduled check for updates...');
+    //   try { // 添加 try-catch 以防 checkForUpdatesAndNotify 本身抛出同步错误
+    //      autoUpdater.checkForUpdatesAndNotify().catch(err => {
+    //        log.error('[Updater] Error during scheduled checkForUpdatesAndNotify:', { message: err.message, stack: err.stack, error: err });
+    //        sendUpdateStatus('error', `自动检查更新失败: ${err && err.message}`);
+    //      });
+    //   } catch (checkError) {
+    //       log.error('[Updater] Synchronous error calling checkForUpdatesAndNotify:', { message: checkError.message, stack: checkError.stack });
+    //       sendUpdateStatus('error', `自动检查更新调用失败: ${checkError && checkError.message}`);
+    //   }
+    // }, 3000);
+
+    log.info('[Updater] AutoUpdater initialization finished successfully.');
+
+  } catch (initError) {
+    // 捕获初始化块中的任何同步错误
+    log.error('[Updater] CRITICAL: Failed during autoUpdater initialization block:', { message: initError.message, stack: initError.stack, error: initError });
+    // 尝试通知渲染进程初始化失败
+    if (typeof sendUpdateStatus === 'function') {
+        sendUpdateStatus('init-error', `Updater 初始化失败: ${initError.message}`);
+    } else {
+        // 如果 sendUpdateStatus 还未定义（例如在定义它之前出错），则记录警告
+        log.warn('[Updater] Cannot send init-error status, sendUpdateStatus function not available.');
+    }
+  }
 // --- Updater IPC Handlers ---
   ipcMain.handle('updater.checkForUpdate', async () => {
     log.info('[Updater IPC] 收到 checkForUpdate 请求');
@@ -309,7 +340,9 @@ app.on('window-all-closed', async function () {
 });
 
  // IPC: 获取配置
+log.info('[IPC] Registering handler for getConfig');
 ipcMain.handle('getConfig', async () => {
+log.info('[IPC getConfig] Received request');
   return config;
 });
 
