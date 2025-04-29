@@ -36,12 +36,17 @@ window.addEventListener('unhandledrejection', function (event) {
 const { loadLocale, t, getCurrentLocale, getSupportedLocales } = window.i18n;
 
 document.addEventListener('DOMContentLoaded', async () => {
-  console.log("Renderer DOMContentLoaded - Initializing application modules...");
+  console.log("[Renderer] DOMContentLoaded - 开始初始化渲染器模块...");
+  const initStartTime = Date.now();
 
   // ===== 1. Initialize i18n =====
+  console.log("[Renderer] 初始化 i18n...");
   const languageSelect = document.getElementById('languageSelect');
   if (!languageSelect) {
-      console.error("Language select element not found!");
+      // Task 1: Error Logging
+      console.error("[Renderer] 初始化失败：找不到语言选择元素 #languageSelect");
+      // Optionally display a user-facing error message here
+      document.body.innerHTML = '<p style="color: red; padding: 20px;">Initialization Error: UI components missing. Please check the console.</p>';
       return; // Stop initialization if critical elements are missing
   }
 
@@ -74,25 +79,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Load initial locale and set up listener
   try {
+      console.debug(`[Renderer] 加载初始区域设置: ${getCurrentLocale()}`);
       await loadLocale(getCurrentLocale());
       renderLanguageOptions();
       setStaticI18nTexts(); // Set initial static texts
+      console.log("[Renderer] i18n 初始化完成");
   } catch (error) {
-      console.error("Failed to load initial locale:", error);
-      // Handle error appropriately, maybe default to a known locale
+       // Task 1: Error Logging
+      console.error("[Renderer] 加载初始区域设置失败:", error.message, error.stack, error);
+      // Handle error appropriately, maybe default to a known locale or show error message
+      showInitializationError("Failed to load language settings.");
   }
 
   languageSelect.addEventListener('change', async () => {
+    const newLocale = languageSelect.value;
+    console.log(`[UI] 切换语言到: ${newLocale}`);
     setLoading(true);
     try {
-        await loadLocale(languageSelect.value);
+        await loadLocale(newLocale);
         // Re-render necessary parts or reload data
         setStaticI18nTexts(); // Update static texts
         // Reloading data will trigger re-renders in modules which use 't'
-        await loadInitialData();
+        await loadInitialData(); // Reload data to apply new translations in dynamic content
         // Potentially notify modules if they need explicit refresh beyond data reload
+        console.log(`[Renderer] 语言切换成功: ${newLocale}`);
     } catch (error) {
-        console.error("Failed to switch locale:", error);
+         // Task 1: Error Logging
+        console.error(`[Renderer] 切换区域设置失败: ${newLocale}`, error.message, error.stack, error);
+        // Optionally show feedback to the user
     } finally {
         setLoading(false);
     }
@@ -100,10 +114,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   // ===== 2. Initialize UI Modules =====
-  initThemeSwitcher();
+  console.log("[Renderer] 初始化 UI 模块...");
+  try {
+      initThemeSwitcher();
 
-  // Configuration for main view module
-  const mainViewConfig = {
+      // Configuration for main view module
+      const mainViewConfig = {
     sourceSelectId: 'sourceSelect',
     filterSelectId: 'filterSelect',
     modelListId: 'modelList',
@@ -115,9 +131,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMainView(mainViewConfig, (model) => {
       const currentSourceId = document.getElementById('sourceSelect')?.value;
       if (currentSourceId) {
-          showDetailModal(model, currentSourceId);
+          showDetailModal(model, currentSourceId); // Logging inside showDetailModal
       } else {
-          console.error("Cannot show detail, no source selected.");
+           // Task 1: Error Logging (Should ideally not happen if UI is consistent)
+          console.error("[Renderer] 无法显示详情：未选择数据源 (main-view 回调)");
           // Optionally show user feedback
       }
   });
@@ -160,47 +177,72 @@ document.addEventListener('DOMContentLoaded', async () => {
        cancelBtnId: 'sourceEditCancelBtn',
        feedbackElementId: 'sourceEditFeedback'
    };
-   initSettingsModal(settingsModalConfig, sourceEditModalConfig);
+   initSettingsModal(settingsModalConfig, sourceEditModalConfig); // Logging inside initSettingsModal if needed
+
+   console.log("[Renderer] UI 模块初始化完成");
+
+ } catch (moduleInitError) {
+      // Task 1: Error Logging
+      console.error("[Renderer] 初始化 UI 模块时出错:", moduleInitError.message, moduleInitError.stack, moduleInitError);
+      showInitializationError("Failed to initialize UI components.");
+      return; // Stop further execution
+ }
 
 
-  // ===== 3. Initial Data Load =====
-  async function loadInitialData() {
-      console.log("Loading initial data (sources and models)...");
-      setLoading(true);
-      try {
-          const config = await window.api.getConfig();
-          const sources = config.modelSources || [];
-          renderSources(sources); // Update the source dropdown via main-view module
+ // ===== 3. Initial Data Load =====
+ async function loadInitialData() {
+     console.log("[Renderer] 开始加载初始数据 (配置和模型)...");
+     const loadStartTime = Date.now();
+     setLoading(true);
+     try {
+         console.debug("[Renderer] 调用 API 获取配置");
+         const config = await window.api.getConfig();
+         console.debug("[Renderer] 获取到的配置:", config);
+         const sources = config?.modelSources || [];
+         renderSources(sources); // Update the source dropdown via main-view module
 
-          const sourceSelectElement = document.getElementById('sourceSelect');
-          if (sources.length > 0 && sourceSelectElement) {
-              // If a source was already selected, keep it, otherwise select the first
-              const selectedSourceId = sourceSelectElement.value || sources[0].id;
-              sourceSelectElement.value = selectedSourceId; // Ensure value is set
-              await loadModelsForView(selectedSourceId, null); // Load models for the selected source (root dir)
-          } else {
-              console.log("No sources found or source select element missing.");
-              // Clear model list etc. if needed (handled within loadModelsForView on error/empty)
-              await loadModelsForView(null, null); // Trigger empty state rendering
-          }
-          document.getElementById('mainSection').style.display = 'grid'; // Show main content
-      } catch (e) {
-          console.error('加载初始配置或模型失败:', e);
-          // Display error to user?
-          document.getElementById('mainSection').innerHTML = `<p class="error-message">Failed to load initial configuration: ${e.message}</p>`;
-      } finally {
-          setLoading(false);
-      }
-  }
+         const sourceSelectElement = document.getElementById('sourceSelect');
+         if (!sourceSelectElement) {
+              // Task 1: Error Logging (Critical UI element missing after init)
+              console.error("[Renderer] 加载初始数据失败：找不到数据源选择元素 #sourceSelect");
+              throw new Error("Source selection UI element is missing.");
+         }
 
-  await loadInitialData(); // Load data after modules are initialized
+         if (sources.length > 0) {
+             // If a source was already selected, keep it, otherwise select the first
+             const selectedSourceId = sourceSelectElement.value || sources[0].id;
+             console.log(`[Renderer] 找到 ${sources.length} 个数据源，将加载源: ${selectedSourceId}`);
+             sourceSelectElement.value = selectedSourceId; // Ensure value is set
+             await loadModelsForView(selectedSourceId, null); // Load models for the selected source (root dir) - logging inside this function
+         } else {
+             console.log("[Renderer] 未找到配置的数据源");
+             // Clear model list etc. if needed (handled within loadModelsForView on error/empty)
+             await loadModelsForView(null, null); // Trigger empty state rendering
+         }
+         document.getElementById('mainSection').style.display = 'grid'; // Show main content
+         const loadDuration = Date.now() - loadStartTime;
+         console.log(`[Renderer] 初始数据加载成功, 耗时: ${loadDuration}ms`);
+     } catch (e) {
+          const loadDuration = Date.now() - loadStartTime;
+          // Task 1: Error Logging
+         console.error(`[Renderer] 加载初始配置或模型失败, 耗时: ${loadDuration}ms`, e.message, e.stack, e);
+         // Display error to user?
+         showInitializationError(`Failed to load initial configuration or models: ${e.message}`);
+     } finally {
+         setLoading(false);
+     }
+ }
+
+ await loadInitialData(); // Load data after modules are initialized
 
 
-  // ===== 4. Event Listeners =====
+ // ===== 4. Event Listeners =====
 
   // Listen for configuration updates from the main process
+  console.log("[Renderer] 设置事件监听器...");
+  // Listen for configuration updates from the main process
   window.api.onConfigUpdated(async () => {
-      console.log('[Renderer] Received config-updated event. Reloading initial data.');
+      console.log('[Renderer] 收到 config-updated 事件，重新加载初始数据');
       // Show feedback to the user that settings were applied?
       // Re-load sources and models
       await loadInitialData();
@@ -208,18 +250,34 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Listen for model updates (e.g., after saving in detail modal)
    window.addEventListener('model-updated', (event) => {
-       console.log('[Renderer] Received model-updated event:', event.detail);
+       console.log('[Renderer] 收到 model-updated 事件:', event.detail);
        // TODO: Implement more granular update instead of full reload?
        // For now, just reload models for the current source/directory
        const currentSourceId = document.getElementById('sourceSelect')?.value;
        // Need to know the current directory from main-view state if possible,
        // otherwise, just reload the root for simplicity.
        if (currentSourceId) {
-           console.log("Reloading models for current source after update...");
-           loadModelsForView(currentSourceId, null); // Reload root for now
+           console.log("[Renderer] 模型更新后重新加载当前数据源的模型...");
+           loadModelsForView(currentSourceId, null); // Reload root for now - logging inside
+       } else {
+            console.warn("[Renderer] 收到 model-updated 事件，但没有选择当前数据源，无法重新加载");
        }
    });
 
+   // Helper function to display critical initialization errors
+   function showInitializationError(message) {
+        const mainSection = document.getElementById('mainSection');
+        const loadingIndicator = document.getElementById('loadingIndicator');
+        if (loadingIndicator) loadingIndicator.style.display = 'none'; // Hide loading indicator
+        if (mainSection) {
+            mainSection.innerHTML = `<p class="error-message" style="padding: 20px; text-align: center;">${message}<br>Please check the developer console (Ctrl+Shift+I) for more details.</p>`;
+            mainSection.style.display = 'block'; // Ensure the error is visible
+        } else {
+            // Fallback if even mainSection is missing
+            document.body.innerHTML = `<p style="color: red; padding: 20px;">${message}</p>`;
+        }
+   }
 
-  console.log("Renderer initialization complete.");
+  const initDuration = Date.now() - initStartTime;
+  console.log(`[Renderer] 渲染器初始化完成, 总耗时: ${initDuration}ms`);
 });

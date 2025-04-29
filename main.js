@@ -96,6 +96,12 @@ app.whenReady().then(async () => { // 改为 async 回调
   log.transports.console.level = level;
   log.info(`[Log] 日志级别已设置为: ${level}`);
 
+  // 配置 electron-log 捕获未处理的异常和拒绝
+  log.errorHandler.startCatching({
+    showDialog: process.env.NODE_ENV !== 'production' // 只在非生产环境显示对话框
+  });
+  log.info('[Log] 配置 electron-log 捕获未处理错误');
+
   // 配置加载完成后再设置 imageCache
   if (config && config.imageCache) {
     imageCache.setConfig(config.imageCache);
@@ -300,14 +306,23 @@ ipcMain.handle('listSubdirectories', async (event, { sourceId }) => {
 // IPC: 获取模型详情
 ipcMain.handle('getModelDetail', async (event, { sourceId, jsonPath }) => {
   const source = (config.modelSources || []).find(s => s.id === sourceId);
-  if (!source) return {};
-  if (source.type === 'local') {
-    const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-    return await ds.readModelDetail(jsonPath);
-  } else if (source.type === 'webdav') {
-    const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-    return await ds.readModelDetail(jsonPath);
+  if (!source) {
+      log.warn(`[IPC getModelDetail] 未找到数据源: ${sourceId}`);
+      return {};
   }
+  try {
+    if (source.type === 'local') {
+      const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      return await ds.readModelDetail(jsonPath);
+    } else if (source.type === 'webdav') {
+      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
+      return await ds.readModelDetail(jsonPath);
+    }
+  } catch (error) {
+    log.error(`[IPC getModelDetail] 获取模型详情失败: sourceId=${sourceId}, jsonPath=${jsonPath}`, error.message, error.stack);
+    throw error; // 将错误传递给渲染进程
+  }
+  log.warn(`[IPC getModelDetail] 未知的数据源类型: ${source.type}`);
   return {};
 });
 

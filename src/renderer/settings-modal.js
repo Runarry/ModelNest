@@ -46,7 +46,8 @@ export function initSettingsModal(config, sourceEditModalConfig) {
 
     if (!settingsModal || !settingsBtn || !settingsCloseBtn || !settingsSaveBtn ||
         !settingsCancelBtn || !settingsForm || !settingsFeedbackEl) {
-        console.error("One or more settings modal elements not found. Check IDs:", config);
+        // Task 1: Error Logging
+        console.error("[SettingsModal] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
         return;
     }
 
@@ -54,14 +55,30 @@ export function initSettingsModal(config, sourceEditModalConfig) {
     initSourceEditModal(sourceEditModalConfig, handleSourceSaved); // Pass the callback
 
     // Attach event listeners
-    settingsBtn.addEventListener('click', openSettingsModal);
-    settingsCloseBtn.addEventListener('click', closeSettingsModal);
-    settingsCancelBtn.addEventListener('click', closeSettingsModal);
-    settingsSaveBtn.addEventListener('click', handleSaveSettings);
+    // Task 4: Click Event Logging
+    settingsBtn.addEventListener('click', () => {
+        console.log('[UI] 点击了设置按钮');
+        openSettingsModal();
+    });
+    settingsCloseBtn.addEventListener('click', () => {
+        console.log('[UI] 点击了设置弹窗的关闭按钮');
+        closeSettingsModal();
+    });
+    settingsCancelBtn.addEventListener('click', () => {
+        console.log('[UI] 点击了设置弹窗的取消按钮');
+        closeSettingsModal();
+    });
+    settingsSaveBtn.addEventListener('click', () => {
+        console.log('[UI] 点击了设置弹窗的保存按钮');
+        handleSaveSettings();
+    });
+
 
     // Close modal if clicking on the backdrop
     settingsModal.addEventListener('click', (event) => {
         if (event.target === settingsModal) {
+            // Task 4: Click Event Logging
+            console.log('[UI] 点击了设置弹窗的背景遮罩');
             closeSettingsModal();
         }
     });
@@ -71,25 +88,33 @@ export function initSettingsModal(config, sourceEditModalConfig) {
 
 /** Opens the settings modal and loads the current configuration. */
 function openSettingsModal() {
-    if (!settingsModal) return;
-    console.log("Opening settings modal...");
+    if (!settingsModal) {
+        console.error("[SettingsModal] openSettingsModal 失败：弹窗元素未初始化");
+        return;
+    }
+    console.log("[SettingsModal] 开始打开设置弹窗");
     clearFeedback(settingsFeedbackEl);
     settingsModal.classList.add('active');
     loadConfigForSettings(); // Load config when opening
+    console.log("[SettingsModal] 设置弹窗已打开");
 }
 
 /** Closes the settings modal. */
 function closeSettingsModal() {
+    console.log("[SettingsModal] 开始关闭设置弹窗");
     if (settingsModal) {
         settingsModal.classList.remove('active');
         // Clear temporary state when closing without saving
         tempModelSources = [];
         // Clean up IPC listener when closing modal
         if (unsubscribeUpdateStatus) {
-            console.log("Unsubscribing from update status events.");
+            console.log("[SettingsModal] 取消订阅更新状态事件");
             unsubscribeUpdateStatus();
             unsubscribeUpdateStatus = null;
         }
+         console.log("[SettingsModal] 设置弹窗已关闭");
+    } else {
+         console.warn("[SettingsModal] closeSettingsModal 调用时弹窗元素未初始化");
     }
 }
 
@@ -97,12 +122,17 @@ function closeSettingsModal() {
 
 /** Loads the current config from the main process and populates the settings form. */
 async function loadConfigForSettings() {
-    if (!settingsForm) return;
+    if (!settingsForm) {
+        console.error("[SettingsModal] loadConfigForSettings 失败：表单元素未初始化");
+        return;
+    }
+    console.log("[SettingsModal] 开始加载配置到设置表单");
     settingsForm.innerHTML = `<p>${t('settings.loading')}</p>`; // Placeholder while loading
+    const startTime = Date.now();
 
     try {
         const currentConfig = await window.api.getConfig();
-        console.log("Loaded config for settings:", currentConfig);
+        console.log("[SettingsModal] 从主进程获取的配置:", currentConfig);
 
         // Deep clone sources into temporary state for editing
         // Ensure it's always an array
@@ -128,7 +158,11 @@ async function loadConfigForSettings() {
         addSourceBtn.textContent = t('settings.modelSources.add');
         addSourceBtn.className = 'btn btn-secondary add-source-btn';
         addSourceBtn.type = 'button'; // Prevent form submission
-        addSourceBtn.addEventListener('click', () => openSourceEditModal(null)); // Open sub-modal for adding
+        // Task 4: Click Event Logging
+        addSourceBtn.addEventListener('click', () => {
+            console.log('[UI] 点击了添加数据源按钮');
+            openSourceEditModal(null); // Open sub-modal for adding
+        });
         sourcesSection.appendChild(addSourceBtn);
 
         // --- Render Supported Extensions ---
@@ -193,10 +227,11 @@ async function loadConfigForSettings() {
         checkUpdateButton = updateSection.querySelector('#check-update-button');
 
         if (!updateStatusEl || !checkUpdateButton) {
-            console.error("Update UI elements not found in settings modal.");
+            // Task 1: Error Logging
+            console.error("[SettingsModal] 初始化更新 UI 失败：状态或按钮元素未找到");
         } else {
              // Add event listener for the update button
-            checkUpdateButton.addEventListener('click', handleUpdateButtonClick);
+            checkUpdateButton.addEventListener('click', handleUpdateButtonClick); // Logging is inside the handler
 
             // Register listener for update status changes from main process
             // Ensure previous listener is removed if modal is reopened
@@ -204,11 +239,15 @@ async function loadConfigForSettings() {
                 unsubscribeUpdateStatus();
             }
             unsubscribeUpdateStatus = window.api.onUpdateStatus(handleUpdateStatus);
-            console.log("Subscribed to update status events.");
+            console.log("[SettingsModal] 已订阅更新状态事件");
         }
+        const duration = Date.now() - startTime;
+        console.log(`[SettingsModal] 配置加载和表单渲染完成, 耗时: ${duration}ms`);
 
     } catch (error) {
-        console.error("Failed to load config for settings:", error);
+        const duration = Date.now() - startTime;
+        // Task 1: Error Logging
+        console.error(`[SettingsModal] 加载配置到设置表单失败, 耗时: ${duration}ms`, error.message, error.stack, error);
         settingsForm.innerHTML = `<p class="error-message">${t('settings.loadError', { message: error.message })}</p>`;
     }
 }
@@ -247,21 +286,26 @@ function renderSourceListForSettings() {
         const editButton = item.querySelector('.edit-btn');
         console.log(`[SettingsModal] Found edit button for source "${source.name}":`, editButton); // Log found button
         if (editButton) {
+            // Task 4: Click Event Logging
             editButton.addEventListener('click', (e) => {
-                console.log(`[SettingsModal] Edit button clicked for source "${source.name}"`); // Log click event
+                console.log(`[UI] 点击了编辑数据源按钮: ${source.name} (ID: ${source.id})`);
                 e.stopPropagation(); // Prevent li click if needed
                 openSourceEditModal(source); // Pass the source object to edit
             });
         } else {
-            console.error(`[SettingsModal] Could not find edit button for source "${source.name}"`);
+             // Task 1: Error Logging (Minor issue, maybe log as warning)
+            console.warn(`[SettingsModal] 未找到数据源 "${source.name}" 的编辑按钮`);
         }
         const deleteButton = item.querySelector('.delete-btn');
-        // console.log(`[SettingsModal] Found delete button for source "${source.name}":`, deleteButton); // Optional: Log delete button too
         if (deleteButton) {
+             // Task 4: Click Event Logging
             deleteButton.addEventListener('click', (e) => {
+                 console.log(`[UI] 点击了删除数据源按钮: ${source.name} (ID: ${source.id})`);
                 e.stopPropagation();
                 handleDeleteSource(source.id);
             });
+        } else {
+             console.warn(`[SettingsModal] 未找到数据源 "${source.name}" 的删除按钮`);
         }
 
         sourceListContainer.appendChild(item);
@@ -270,17 +314,20 @@ function renderSourceListForSettings() {
 
 /** Handles the deletion of a model source from the temporary list. */
 function handleDeleteSource(sourceId) {
+    console.log(`[SettingsModal] 尝试删除临时列表中的数据源: ${sourceId}`);
     // TODO: Replace confirm with a custom confirmation UI later
-    if (!confirm(t('settings.modelSources.deleteConfirm'))) {
+    if (!confirm(t('settings.modelSources.deleteConfirm', { name: tempModelSources.find(s => s.id === sourceId)?.name || sourceId }))) {
+         console.log(`[SettingsModal] 用户取消删除数据源: ${sourceId}`);
         return;
     }
     const index = tempModelSources.findIndex(s => s.id === sourceId);
     if (index !== -1) {
         tempModelSources.splice(index, 1);
-        console.log("Deleted source with ID from temp list:", sourceId);
+        console.log(`[SettingsModal] 已从临时列表中删除数据源: ${sourceId}`);
         renderSourceListForSettings(); // Re-render the list
     } else {
-        console.error("Source ID not found for deletion in temp list:", sourceId);
+        // Task 1: Error Logging
+        console.error(`[SettingsModal] 删除失败：在临时列表中未找到数据源 ID: ${sourceId}`);
     }
 }
 
@@ -293,12 +340,12 @@ function handleSourceSaved(savedSourceData) {
     const existingIndex = tempModelSources.findIndex(s => s.id === savedSourceData.id);
     if (existingIndex !== -1) {
         // Editing existing: Replace in temp list
+        console.log(`[SettingsModal] 更新临时列表中的数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
         tempModelSources[existingIndex] = savedSourceData;
-        console.log("Updated source in temp list:", savedSourceData);
     } else {
         // Adding new: Push to temp list
+         console.log(`[SettingsModal] 向临时列表添加新数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
         tempModelSources.push(savedSourceData);
-        console.log("Added new source to temp list:", savedSourceData);
     }
     renderSourceListForSettings(); // Re-render the list in the settings modal
 }
@@ -306,8 +353,13 @@ function handleSourceSaved(savedSourceData) {
 
 /** Handles saving the entire settings configuration. */
 async function handleSaveSettings() {
-    if (!settingsForm) return;
-    console.log("Save settings clicked...");
+    // Logging for click is handled by the event listener setup in init
+    if (!settingsForm) {
+         console.error("[SettingsModal] handleSaveSettings 失败：表单元素未初始化");
+        return;
+    }
+    console.log("[SettingsModal] 开始保存设置");
+    const startTime = Date.now();
 
     clearFeedback(settingsFeedbackEl);
     settingsSaveBtn.disabled = true;
@@ -315,6 +367,7 @@ async function handleSaveSettings() {
 
     try {
         // 1. Construct the new config object using tempModelSources
+        console.debug("[SettingsModal] 开始构建新的配置对象");
         const newConfig = {
             modelSources: tempModelSources, // Use the edited list
             supportedExtensions: [],
@@ -337,40 +390,54 @@ async function handleSaveSettings() {
         newConfig.imageCache.compressFormat = formData.get('imageCacheFormat') || 'jpeg';
 
         // 3. Basic validation for numbers
+        console.debug("[SettingsModal] 验证表单数据");
         if (isNaN(quality) || quality < 0 || quality > 100) {
-            showFeedback(settingsFeedbackEl, t('settings.validation.qualityError'), 'error');
+            // Task 1: Error Logging (Validation Failure)
+            const errorMsg = t('settings.validation.qualityError');
+            console.error(`[SettingsModal] 保存失败：验证错误 - ${errorMsg}`);
+            showFeedback(settingsFeedbackEl, errorMsg, 'error');
             settingsForm.querySelector('#imageCacheQuality')?.focus();
             throw new Error(t('settings.validation.failed')); // Throw to prevent saving
         }
         newConfig.imageCache.compressQuality = quality;
 
         if (isNaN(size) || size < 0) {
-            showFeedback(settingsFeedbackEl, t('settings.validation.sizeError'), 'error');
+             // Task 1: Error Logging (Validation Failure)
+            const errorMsg = t('settings.validation.sizeError');
+            console.error(`[SettingsModal] 保存失败：验证错误 - ${errorMsg}`);
+            showFeedback(settingsFeedbackEl, errorMsg, 'error');
             settingsForm.querySelector('#imageCacheSize')?.focus();
             throw new Error(t('settings.validation.failed')); // Throw to prevent saving
         }
         newConfig.imageCache.maxCacheSizeMB = size;
 
-
-        console.log("Saving new config:", newConfig);
+        console.log("[SettingsModal] 构造的新配置对象:", newConfig);
 
         // 4. Send to main process
+        console.log("[SettingsModal] 调用 API 保存配置");
+        const apiStartTime = Date.now();
         await window.api.saveConfig(newConfig);
+        const apiDuration = Date.now() - apiStartTime;
+        console.log(`[SettingsModal] API 保存配置成功, 耗时: ${apiDuration}ms`);
 
         // 5. Handle success
+        const duration = Date.now() - startTime;
+        console.log(`[SettingsModal] 设置保存成功, 总耗时: ${duration}ms`);
         showFeedback(settingsFeedbackEl, t('settings.saveSuccess'), 'success', 2000);
         setTimeout(closeSettingsModal, 2100); // Close after feedback
         // Main process should notify renderer via 'config-updated' to reload state
 
     } catch (error) {
-        console.error("Failed to save settings:", error);
+         const duration = Date.now() - startTime;
+         // Task 1: Error Logging
+        console.error(`[SettingsModal] 保存设置失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
         // Don't show feedback if validation already did
-        if (!settingsFeedbackEl.textContent) {
+        if (!settingsFeedbackEl.textContent || settingsFeedbackEl.textContent === t('settings.saving')) {
              showFeedback(settingsFeedbackEl, t('settings.saveError', { message: error.message }), 'error');
         }
     } finally {
         // Re-enable button and restore text only if modal didn't close
-         if (settingsModal.classList.contains('active')) {
+         if (settingsModal && settingsModal.classList.contains('active')) {
             settingsSaveBtn.disabled = false;
             settingsSaveBtn.textContent = t('settings.save');
          }
@@ -382,20 +449,25 @@ async function handleSaveSettings() {
  * Handles clicks on the "Check for Updates" / "Restart & Install" button.
  */
 function handleUpdateButtonClick() {
-    if (!checkUpdateButton || !updateStatusEl) return;
+    if (!checkUpdateButton || !updateStatusEl) {
+        console.error("[SettingsModal] handleUpdateButtonClick 失败：更新按钮或状态元素未初始化");
+        return;
+    }
 
     // Read the current button text to determine the action
     const currentActionText = checkUpdateButton.textContent;
 
     // Compare with translated strings to decide action
     if (currentActionText === t('settings.update.install')) {
-        console.log("Requesting app quit and install...");
+        // Task 4: Click Event Logging
+        console.log("[UI] 点击了更新按钮：执行退出并安装");
         window.api.quitAndInstall();
     } else {
-        console.log("Requesting check for updates...");
+         // Task 4: Click Event Logging
+        console.log("[UI] 点击了更新按钮：执行检查更新");
         window.api.checkForUpdate();
         // Optionally disable button and show checking status immediately
-        // checkUpdateButton.disabled = true;
+        // checkUpdateButton.disabled = true; // Let handleUpdateStatus manage disabled state
         // checkUpdateButton.textContent = t('settings.update.checking');
         // updateStatusEl.textContent = t('settings.update.statusChecking');
     }
@@ -409,10 +481,10 @@ function handleUpdateButtonClick() {
  */
 function handleUpdateStatus(status, ...args) {
     if (!updateStatusEl || !checkUpdateButton) {
-        console.warn("Update UI elements not available to handle status:", status);
+        console.warn(`[SettingsModal] 无法处理更新状态 '${status}'：UI 元素不可用`);
         return;
     }
-    console.log(`Received update status: ${status}`, args);
+    console.log(`[SettingsModal] 收到更新状态: ${status}`, args);
 
     // Reset button state initially, enable by default unless specified otherwise
     checkUpdateButton.disabled = false;
@@ -448,13 +520,15 @@ function handleUpdateStatus(status, ...args) {
             break;
         case 'error':
             const error = args[0]; // Error object or message is usually the first arg
-            const errorMessage = error instanceof Error ? error.message : String(error || 'Unknown error');
+            const errorMessage = error instanceof Error ? error.message : String(error || t('settings.update.unknownError'));
+             // Task 1: Error Logging (Update Error)
+            console.error(`[SettingsModal] 更新过程中发生错误: ${errorMessage}`, error);
             updateStatusEl.textContent = t('settings.update.statusError', { message: errorMessage });
             // Button remains enabled with "Check for Updates" text.
             break;
         default:
             // Optional: Handle any unexpected status or reset to a known idle state
-            console.warn(`Unhandled update status: ${status}`);
+            console.warn(`[SettingsModal] 未处理的更新状态: ${status}`);
             // updateStatusEl.textContent = t('settings.update.statusIdle'); // Uncomment to reset explicitly
             break;
     }

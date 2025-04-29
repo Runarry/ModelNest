@@ -33,15 +33,22 @@ export function initDetailModal(config) {
     detailCloseBtn = document.getElementById(config.closeBtnId);
 
     if (!detailModal || !detailName || !detailImage || !detailDescriptionContainer || !detailCloseBtn) {
-        console.error("One or more detail modal elements not found. Check IDs:", config);
+        // Task 1: Error Logging
+        console.error("[DetailModal] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
         return;
     }
 
-    detailCloseBtn.addEventListener('click', hideDetailModal);
+    // Task 4: Click Event Logging
+    detailCloseBtn.addEventListener('click', () => {
+        console.log('[UI] 点击了详情弹窗的关闭按钮');
+        hideDetailModal();
+    });
 
     // Close modal if clicking on the backdrop
     detailModal.addEventListener('click', (event) => {
         if (event.target === detailModal) {
+            // Task 4: Click Event Logging
+            console.log('[UI] 点击了详情弹窗的背景遮罩');
             hideDetailModal();
         }
     });
@@ -55,7 +62,17 @@ export function initDetailModal(config) {
  * @param {string} sourceId - The ID of the source the model belongs to.
  */
 export async function showDetailModal(model, sourceId) {
-    if (!detailModal || !model) return;
+    const startTime = Date.now();
+    console.log(`[DetailModal] 开始显示模型详情: ${model?.name} (Source: ${sourceId})`);
+    if (!detailModal) {
+        console.error("[DetailModal] showDetailModal 失败：弹窗元素未初始化");
+        return;
+    }
+     if (!model) {
+        console.error("[DetailModal] showDetailModal 失败：传入的 model 为空");
+        return;
+    }
+
 
     currentModel = model; // Store the model
     currentSourceId = sourceId; // Store the source ID
@@ -83,24 +100,39 @@ export async function showDetailModal(model, sourceId) {
              detailImage.style.display = 'none';
          }
          // Add onload listener to ensure display is set correctly after async loading
-         detailImage.onload = () => { detailImage.style.display = 'block'; };
-         detailImage.onerror = () => { detailImage.style.display = 'none'; };
+         detailImage.onload = () => {
+             console.debug(`[DetailModal] 图片加载成功: ${model.image}`);
+             detailImage.style.display = 'block';
+         };
+         detailImage.onerror = () => {
+             // Task 1: Error Logging
+             console.error(`[DetailModal] 图片加载失败: ${model.image} (Source: ${sourceId})`);
+             detailImage.style.display = 'none';
+         };
 
 
-    }
+   } else {
+       console.log(`[DetailModal] 模型 ${model.name} 没有图片`);
+   }
 
-    // --- Render Dynamic Content (Tabs, Inputs) ---
-    renderModalContent(model);
+   // --- Render Dynamic Content (Tabs, Inputs) ---
+   console.debug('[DetailModal] 开始渲染弹窗内容');
+   renderModalContent(model);
+   console.debug('[DetailModal] 弹窗内容渲染完成');
 
-    detailModal.classList.add('active');
+   detailModal.classList.add('active');
+   const duration = Date.now() - startTime;
+   console.log(`[DetailModal] 显示模型详情完成: ${model.name}, 耗时: ${duration}ms`);
 }
 
 /** Hides the detail modal. */
 export function hideDetailModal() {
+    console.log(`[DetailModal] 开始隐藏模型详情: ${currentModel?.name || '未知'}`);
     if (detailModal) {
         detailModal.classList.remove('active');
         // Optional: Clean up object URLs if created for images/blobs
         if (detailImage && detailImage.src.startsWith('blob:')) {
+            console.debug(`[DetailModal] 撤销 Blob URL: ${detailImage.src}`);
             URL.revokeObjectURL(detailImage.src);
             detailImage.src = '';
             detailImage.style.display = 'none';
@@ -108,6 +140,9 @@ export function hideDetailModal() {
         currentModel = null; // Clear stored model
         currentSourceId = null;
         if(detailDescriptionContainer) detailDescriptionContainer.innerHTML = ''; // Clear dynamic content
+        console.log('[DetailModal] 模型详情已隐藏');
+    } else {
+        console.warn('[DetailModal] hideDetailModal 调用时弹窗元素未初始化');
     }
 }
 
@@ -238,16 +273,22 @@ function attachTabListeners() {
     const tabButtons = detailModal.querySelectorAll('.tab-btn');
     tabButtons.forEach(button => {
         button.addEventListener('click', () => {
+            const tabId = button.getAttribute('data-tab');
+            // Task 4: Click Event Logging
+            console.log(`[UI] 点击了详情弹窗的标签页按钮: ${tabId}`);
+
             // Remove active class from all buttons and content
             detailModal.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
             detailModal.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
             // Add active class to the clicked button and corresponding content
             button.classList.add('active');
-            const tabId = button.getAttribute('data-tab');
             const contentToShow = detailModal.querySelector(`#${tabId}-tab`);
             if (contentToShow) {
                 contentToShow.classList.add('active');
+            } else {
+                 // Task 1: Error Logging (Potential failure point if HTML structure is wrong)
+                 console.error(`[DetailModal] 找不到与标签按钮 "${tabId}" 对应的标签内容元素 (#${tabId}-tab)`);
             }
         });
     });
@@ -260,16 +301,27 @@ function attachSaveListener() {
 
     if (saveBtn) {
         saveBtn.onclick = async () => {
+            // Task 4: Click Event Logging
+            console.log(`[UI] 点击了详情弹窗的保存按钮 (Model: ${currentModel?.name})`);
+
             if (!currentModel || !currentSourceId) {
-                console.error("Cannot save, model or sourceId missing.");
-                if (feedbackEl) feedbackEl.textContent = t('detail.saveErrorMissingData');
+                // Task 1: Error Logging
+                console.error("[DetailModal] 保存失败：currentModel 或 currentSourceId 丢失");
+                if (feedbackEl) {
+                    feedbackEl.textContent = t('detail.saveErrorMissingData');
+                    feedbackEl.className = 'modal-feedback feedback-error';
+                }
                 return;
             }
 
             saveBtn.disabled = true;
-            if (feedbackEl) feedbackEl.textContent = t('detail.saving'); // Indicate saving
+            if (feedbackEl) {
+                feedbackEl.textContent = t('detail.saving'); // Indicate saving
+                feedbackEl.className = 'modal-feedback feedback-info'; // Use info class
+            }
 
             // --- Collect Updated Data ---
+            console.debug('[DetailModal] 开始收集更新后的模型数据');
             const updatedModelData = {
                 ...currentModel, // Start with original model data
                 id: currentModel.id, // Ensure ID is preserved
@@ -291,11 +343,15 @@ function attachSaveListener() {
              }
 
 
-            console.log("Saving updated model data:", updatedModelData);
+            console.debug("[DetailModal] 更新后的模型数据:", updatedModelData);
 
             // --- Call API ---
+            const saveStartTime = Date.now();
+            console.log(`[DetailModal] 调用 API 保存模型: ${updatedModelData.name}`);
             try {
                 await window.api.saveModel(updatedModelData);
+                const saveDuration = Date.now() - saveStartTime;
+                console.log(`[DetailModal] API 保存模型成功: ${updatedModelData.name}, 耗时: ${saveDuration}ms`);
                 if (feedbackEl) {
                     feedbackEl.textContent = t('detail.saveSuccess');
                     feedbackEl.className = 'modal-feedback feedback-success';
@@ -305,14 +361,16 @@ function attachSaveListener() {
                     // Check if modal is still open before hiding
                     if (detailModal.classList.contains('active')) {
                          hideDetailModal();
-                         // TODO: Notify the main view to potentially reload/refresh the specific model card
-                         // This might involve emitting a custom event or calling a callback
+                         // Notify the main view to potentially reload/refresh the specific model card
+                         console.log(`[DetailModal] 触发 model-updated 事件: ${updatedModelData.name}`);
                          window.dispatchEvent(new CustomEvent('model-updated', { detail: updatedModelData }));
                     }
                 }, 1500);
 
             } catch (e) {
-                console.error('Failed to save model:', e);
+                 const saveDuration = Date.now() - saveStartTime;
+                // Task 1: Error Logging
+                console.error(`[DetailModal] API 保存模型失败: ${updatedModelData.name}, 耗时: ${saveDuration}ms`, e.message, e.stack, e);
                 if (feedbackEl) {
                     feedbackEl.textContent = t('detail.saveFail', { message: e.message });
                     feedbackEl.className = 'modal-feedback feedback-error';
@@ -322,7 +380,8 @@ function attachSaveListener() {
             // Do not re-enable button on success, as modal will close
         };
     } else {
-        console.error('Save button #saveDetailBtn not found in detail modal.');
+         // Task 1: Error Logging
+        console.error('[DetailModal] 初始化保存监听器失败：找不到保存按钮 #saveDetailBtn');
     }
 }
 

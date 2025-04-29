@@ -16,11 +16,36 @@ function getDefaultLocale() {
 }
 
 async function loadLocale(locale) {
-  if (!SUPPORTED_LOCALES.some(l => l.code === locale)) locale = 'zh-CN';
-  const res = await fetch(`./locales/${locale}.json`);
-  messages = await res.json();
-  currentLocale = locale;
-  localStorage.setItem(LOCALE_KEY, locale);
+  const originalLocale = locale;
+  if (!SUPPORTED_LOCALES.some(l => l.code === locale)) {
+      console.warn(`[i18n] 不支持的区域设置 "${locale}"，回退到默认值 'zh-CN'`);
+      locale = 'zh-CN';
+  }
+  console.log(`[i18n] 开始加载区域设置文件: ${locale}.json`);
+  try {
+      const res = await fetch(`./locales/${locale}.json`);
+      if (!res.ok) {
+          // Task 1: Error Logging (Fetch failed)
+          console.error(`[i18n] 获取区域设置文件失败: ${locale}.json, 状态: ${res.status} ${res.statusText}`);
+          throw new Error(`HTTP error ${res.status}`);
+      }
+      messages = await res.json();
+      currentLocale = locale;
+      try {
+          localStorage.setItem(LOCALE_KEY, locale);
+          console.debug(`[i18n] 区域设置偏好已保存到 localStorage: ${locale}`);
+      } catch (storageError) {
+           // Task 1: Error Logging (LocalStorage failed)
+           console.error(`[i18n] 保存区域设置偏好到 localStorage 失败: ${locale}`, storageError.message, storageError.stack);
+      }
+      console.log(`[i18n] 区域设置文件加载成功: ${locale}.json`);
+  } catch (error) {
+       // Task 1: Error Logging (Fetch or JSON parse failed)
+      console.error(`[i18n] 加载或解析区域设置文件时出错: ${locale}.json (请求的: ${originalLocale})`, error.message, error.stack, error);
+      // Optionally load a fallback locale or clear messages
+      // messages = {}; // Clear messages on error?
+      throw error; // Re-throw so the caller knows loading failed
+  }
 }
 
 function t(key) {

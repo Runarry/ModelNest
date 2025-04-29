@@ -26,7 +26,9 @@ class LocalDataSource extends DataSource {
     super(config);
   }
   async listSubdirectories() {
+    const startTime = Date.now();
     const root = this.config.path;
+    log.info(`[LocalDataSource] 开始列出子目录: ${root}`);
     try {
       // Check existence using access
       await fs.promises.access(root);
@@ -34,30 +36,38 @@ class LocalDataSource extends DataSource {
       return entries
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name);
+      const duration = Date.now() - startTime;
+      log.info(`[LocalDataSource] 列出子目录完成: ${root}, 耗时: ${duration}ms, 找到 ${entries.filter(e => e.isDirectory()).length} 个子目录`);
+      return entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
     } catch (error) {
+      const duration = Date.now() - startTime;
       // If directory doesn't exist (ENOENT), return empty array, otherwise log error
       if (error.code === 'ENOENT') {
+        log.warn(`[LocalDataSource] 列出子目录失败 (目录不存在): ${root}, 耗时: ${duration}ms`);
         return [];
       }
-      log.error(`[LocalDataSource] Error reading subdirectories in ${root}:`, error.message, error.stack);
+      log.error(`[LocalDataSource] 列出子目录时出错: ${root}, 耗时: ${duration}ms`, error.message, error.stack);
       return [];
     }
   }
 
   async listModels(directory = null) { // 添加 directory 参数
+    const startTime = Date.now();
     const root = this.config.path;
     const startPath = directory ? path.join(root, directory) : root; // 确定起始路径
     const supportedExtensions = this.config.supportedExtensions || [];
+    log.info(`[LocalDataSource] 开始列出模型: ${startPath}`);
 
     try {
       // Check existence using access
       await fs.promises.access(startPath);
     } catch (error) {
+      const duration = Date.now() - startTime;
       if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource] Directory not found: ${startPath}`);
+        log.warn(`[LocalDataSource] 列出模型失败 (目录不存在): ${startPath}, 耗时: ${duration}ms`);
         return [];
       }
-      log.error(`[LocalDataSource] Error accessing directory ${startPath}:`, error.message, error.stack);
+      log.error(`[LocalDataSource] 访问模型目录时出错: ${startPath}, 耗时: ${duration}ms`, error.message, error.stack);
       return []; // Return empty on other access errors too
     }
 
@@ -81,34 +91,45 @@ class LocalDataSource extends DataSource {
       } catch (error) {
         // Handle errors, especially ENOENT (directory not found) which might occur
         // if a directory is deleted between readdir and the recursive walk call.
-        if (error.code !== 'ENOENT') { // Ignore 'Not Found' errors if desired, or handle specifically
-            log.error(`[LocalDataSource] Error walking directory ${dir}:`, error.message, error.stack);
+        if (error.code === 'ENOENT') {
+             log.warn(`[LocalDataSource] 遍历时目录不存在 (可能已被删除): ${dir}`);
+        } else {
+             log.error(`[LocalDataSource] 遍历目录时出错: ${dir}`, error.message, error.stack);
         }
         // Continue walking other directories even if one fails
       }
     };
 
-    log.debug(`[LocalDataSource] 开始遍历模型目录: ${startPath}`);
+    log.debug(`[LocalDataSource] 开始递归遍历模型目录: ${startPath}`);
     await walk(startPath); // Await the initial call
-    log.debug(`[LocalDataSource] 遍历完成，模型数量: ${allModels.length}`);
+    const duration = Date.now() - startTime;
+    log.info(`[LocalDataSource] 列出模型完成: ${startPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型`);
     return allModels;
   }
   async readModelDetail(jsonPath) {
-    if (!jsonPath) return {};
+    const startTime = Date.now();
+    if (!jsonPath) {
+        log.warn('[LocalDataSource] readModelDetail 调用时 jsonPath 为空');
+        return {};
+    }
+    log.debug(`[LocalDataSource] 开始读取模型详情: ${jsonPath}`);
     try {
       // Check existence using access before reading
       await fs.promises.access(jsonPath);
       const data = await fs.promises.readFile(jsonPath, 'utf-8');
-      return JSON.parse(data);
+      const detail = JSON.parse(data);
+      const duration = Date.now() - startTime;
+      log.debug(`[LocalDataSource] 读取模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
+      return detail;
     } catch (error) {
+      const duration = Date.now() - startTime;
       // If file doesn't exist (ENOENT) or cannot be accessed, return empty object
       if (error.code === 'ENOENT') {
-        // Optional: Log a warning if the file is expected but not found
-        // console.warn(`[LocalDataSource] Model detail file not found: ${jsonPath}`);
+        log.warn(`[LocalDataSource] 读取模型详情失败 (文件不存在): ${jsonPath}, 耗时: ${duration}ms`);
         return {};
       }
       // Log other errors (parsing errors, permission errors, etc.)
-      log.error(`[LocalDataSource] Error reading model detail ${jsonPath}:`, error.message, error.stack);
+      log.error(`[LocalDataSource] 读取模型详情时出错: ${jsonPath}, 耗时: ${duration}ms`, error.message, error.stack);
       return {};
     }
   }

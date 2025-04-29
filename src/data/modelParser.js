@@ -10,8 +10,15 @@ function parseLocalModels(dir, supportedExtensions) {
     log.warn(`[modelParser] 目录不存在: ${dir}`);
     return [];
   }
-  const files = fs.readdirSync(dir);
-  log.debug(`[modelParser] 目录文件:`, files);
+  let files;
+  try {
+      files = fs.readdirSync(dir);
+      log.debug(`[modelParser] 目录文件:`, files);
+  } catch (readError) {
+      // Task 1: Error Logging
+      log.error(`[modelParser] 读取目录失败: ${dir}`, readError.message, readError.stack);
+      return []; // Return empty array if directory cannot be read
+  }
   const models = [];
 
   // 调试输出当前目录和文件列表

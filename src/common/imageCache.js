@@ -16,6 +16,8 @@ const fs = require('fs');
 const os = require('os');
 const sharp = require('sharp');
 const crypto = require('crypto'); // 添加加密模块用于生成hash
+const log = require('electron-log'); // 导入 electron-log
+
 // 默认配置
 const defaultConfig = {
     cacheDir: path.join(process.cwd(), 'cache', 'images'),
@@ -52,24 +54,28 @@ function setConfig(options = {}) {
  */
 
 async function getCompressedImage(srcPath, hashKey) {
-    if (hashKey && config.debug) console.log(`[ImageCache] 使用外部hashKey: ${hashKey}`); // Keep debug log conditional
+    const startTime = Date.now();
+    log.info(`[ImageCache] 开始处理图片: ${srcPath}, hashKey: ${hashKey || '无'}`);
+    if (hashKey && config.debug) log.debug(`[ImageCache] 使用外部hashKey: ${hashKey}`);
     stats.totalRequests++;
-    
+
     // 1. 确保缓存目录存在
     try {
         await fs.promises.access(config.cacheDir);
+        log.debug(`[ImageCache] 缓存目录存在: ${config.cacheDir}`);
     } catch (error) {
         if (error.code === 'ENOENT') {
+            log.info(`[ImageCache] 缓存目录不存在，尝试创建: ${config.cacheDir}`);
             try {
                 await fs.promises.mkdir(config.cacheDir, { recursive: true, mode: 0o755 });
-                if (config.debug) console.log(`[ImageCache] 缓存目录已创建: ${config.cacheDir}`);
+                log.info(`[ImageCache] 缓存目录已创建: ${config.cacheDir}`);
             } catch (mkdirError) {
-                console.error(`[ImageCache] 创建缓存目录失败: ${mkdirError.message}`);
+                log.error(`[ImageCache] 创建缓存目录失败: ${config.cacheDir}`, mkdirError.message, mkdirError.stack);
                 throw mkdirError; // Re-throw if mkdir fails
             }
         } else {
             // Handle other access errors (e.g., permissions)
-            console.error(`[ImageCache] 访问缓存目录失败: ${error.message}`);
+            log.error(`[ImageCache] 访问缓存目录失败: ${config.cacheDir}`, error.message, error.stack);
             throw error;
         }
     }
@@ -81,30 +87,35 @@ async function getCompressedImage(srcPath, hashKey) {
     const cachePath = path.join(config.cacheDir, hash + ext);
 
     // 3. 检查缓存是否存在并更新访问时间
+    log.debug(`[ImageCache] 检查缓存文件: ${cachePath}`);
     try {
         await fs.promises.access(cachePath); // Check if file exists and is accessible
+        log.debug(`[ImageCache] 缓存文件存在，更新访问时间: ${cachePath}`);
         // Update access time asynchronously
         await fs.promises.utimes(cachePath, new Date(), new Date());
         stats.cacheHits++;
-        if (config.debug) {
-            console.log(`[ImageCache] 缓存命中: ${path.basename(srcPath)} -> ${cachePath}`);
-        }
+        const duration = Date.now() - startTime;
+        log.info(`[ImageCache] 缓存命中: ${path.basename(srcPath)} -> ${path.basename(cachePath)}, 耗时: ${duration}ms`);
         return cachePath; // Return cached path
     } catch (error) {
-        if (error.code !== 'ENOENT') {
+        if (error.code === 'ENOENT') {
+            log.debug(`[ImageCache] 缓存未命中: ${cachePath}`);
+        } else {
             // Log errors other than 'file not found'
-            console.error(`[ImageCache] 缓存检查/更新时间异常: ${error.message}`);
+            log.warn(`[ImageCache] 缓存检查或更新时间时出错: ${cachePath}`, error.message, error.stack);
             // Decide if we should proceed or re-throw. For now, proceed to compression.
         }
         // If file doesn't exist (ENOENT) or other error occurred, proceed to compression.
     }
 
     // 4. 压缩图片并写入缓存
-    // 4. 压缩图片并写入缓存
+
+    log.info(`[ImageCache] 开始压缩图片: ${srcPath} -> ${cachePath}`);
     try {
         // Get source file stats asynchronously
         const srcStats = await fs.promises.stat(srcPath);
         stats.originalSize += srcStats.size;
+        log.debug(`[ImageCache] 源文件大小: ${(srcStats.size / 1024).toFixed(1)} KB`);
 
         const sharpInstance = sharp(srcPath)
             .rotate()
@@ -131,13 +142,13 @@ let retryCount = 0;
             try {
                 await fs.promises.access(cachePath); // Check existence
                 writeSuccess = true;
-                if (config.debug) {
-                    console.log(`[ImageCache] 缓存文件写入成功: ${cachePath}`);
-                }
+                log.debug(`[ImageCache] 缓存文件写入成功确认: ${cachePath}`);
                 break;
             } catch (accessError) {
                 if (accessError.code !== 'ENOENT') {
-                    console.warn(`[ImageCache] 检查缓存文件时出错 (重试 ${retryCount}): ${accessError.message}`);
+                    log.warn(`[ImageCache] 检查缓存文件时出错 (重试 ${retryCount}): ${cachePath}`, accessError.message);
+                } else {
+                    log.warn(`[ImageCache] 缓存文件写入后未找到 (重试 ${retryCount}): ${cachePath}`);
                 }
                 // Wait before retrying
                 await new Promise(resolve => setTimeout(resolve, 100));
@@ -145,27 +156,26 @@ let retryCount = 0;
         }
 
         if (!writeSuccess) {
-            console.error(`[ImageCache] 缓存文件写入失败或无法访问: ${cachePath}`);
+            log.error(`[ImageCache] 缓存文件写入失败或无法访问: ${cachePath}`);
             // Attempt to remove potentially corrupted file
             try { await fs.promises.unlink(cachePath); } catch (unlinkErr) { /* Ignore */ }
-            throw new Error('CACHE_WRITE_FAILED');
+            throw new Error(`CACHE_WRITE_FAILED: ${cachePath}`);
         }
 
         // Get destination file stats asynchronously
         const destStats = await fs.promises.stat(cachePath);
         stats.compressedSize += destStats.size;
+        const duration = Date.now() - startTime;
+        log.info(`[ImageCache] 图片压缩完成: ${path.basename(srcPath)} -> ${path.basename(cachePath)}, 大小: ${(srcStats.size / 1024).toFixed(1)}KB -> ${(destStats.size / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
 
-        if (config.debug) {
-            // Removed compression summary log
-        }
 
         // 5. 检查缓存空间
         await checkAndCleanCache();
 
         return cachePath;
     } catch (e) {
-        console.error('图片压缩失败:', e);
-        if (config.debug) console.error(e.stack);
+        const duration = Date.now() - startTime;
+        log.error(`[ImageCache] 图片压缩失败: ${srcPath}, 耗时: ${duration}ms`, e.message, e.stack);
         return srcPath; // 降级为原图
     }
 }
