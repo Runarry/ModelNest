@@ -74,6 +74,20 @@
       "qualityError": "Compression quality must be between 0 and 100.",
       "sizeError": "Max cache size must be a non-negative number.",
       "failed": "Validation failed"
+    },
+    "update": {
+      "title": "Application Update",
+      "currentVersion": "Current Version: {version}",
+      "statusIdle": "Ready",
+      "statusChecking": "Checking for updates...",
+      "statusAvailable": "New version available!",
+      "statusNotAvailable": "Already up to date",
+      "statusError": "Failed to check for updates: {error}",
+      "check": "Check for Updates",
+      "checking": "Checking...",
+      "downloading": "Downloading... ({progress}%)",
+      "install": "Download complete, click to install",
+      "hint": "The application will automatically check for updates in the background."
     }
   }
 }
