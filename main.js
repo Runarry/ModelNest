@@ -1,3 +1,5 @@
+// 定义 __DEV__ 常量，用于区分开发和生产环境
+const __DEV__ = process.env.IS_DEV_MODE === 'true';
 const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dialog here
 const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
@@ -55,10 +57,10 @@ function createWindow() {
   });
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  mainWindow.webContents.openDevTools();
-  // if (!app.isPackaged) {
-  //   mainWindow.webContents.openDevTools();
-  // }
+  // 在开发模式下打开 DevTools
+  if (__DEV__) {
+    mainWindow.webContents.openDevTools();
+  }
   mainWindow.on('closed', () => {
     log.info('[Lifecycle] 主窗口已关闭');
   });
