@@ -1,5 +1,5 @@
 import { showFeedback, clearFeedback, clearChildren } from './ui-utils.js';
-import { openSourceEditModel, initSourceEditModel } from './source-edit-Model.js'; // Import functions for the sub-Model
+import { openSourceEditModel, initSourceEditModel } from './source-edit-model.js'; // Import functions for the sub-Model
 
 // Assume i18n is initialized and 't' is available globally or passed/imported
 const t = window.i18n?.t || ((key) => key); // Fallback
