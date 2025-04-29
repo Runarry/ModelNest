@@ -55,7 +55,9 @@ function createWindow() {
   });
   mainWindow.removeMenu();
   mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  mainWindow.webContents.openDevTools();
+  if (!app.isPackaged) {
+    mainWindow.webContents.openDevTools();
+  }
   mainWindow.on('closed', () => {
     log.info('[Lifecycle] 主窗口已关闭');
   });
