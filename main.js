@@ -199,17 +199,49 @@ app.whenReady().then(async () => { // 改为 async 回调
 
   // 监听保存模型请求
   ipcMain.handle('saveModel', async (event, model) => {
+    log.debug('[IPC saveModel] Received model data from renderer:', JSON.stringify(model, null, 2)); // 添加详细日志，检查前端发送的数据
     log.info('[IPC] saveModel 请求', { jsonPath: model && model.jsonPath });
     try {
       if (!model.jsonPath) throw new Error('模型JSON路径不存在');
-      // 合并必要字段和extra字段
-      const saveData = Object.assign({}, model.extra || {}, {
-        modelType: model.type,
-        description: model.description,
-        triggerWord: model.triggerWord
-      });
-      const data = JSON.stringify(saveData, null, 2);
-      await fs.promises.writeFile(model.jsonPath, data, 'utf-8');
+      // 1. 读取现有数据
+      let existingData = {};
+      try {
+        const rawData = await fs.promises.readFile(model.jsonPath, 'utf-8');
+        existingData = JSON.parse(rawData);
+        log.debug(`[IPC saveModel] 成功读取现有模型数据: ${model.jsonPath}`);
+      } catch (readError) {
+        // 如果文件不存在或无法读取/解析，则从空对象开始合并
+        // 但记录一个警告，因为通常文件应该存在
+        if (readError.code !== 'ENOENT') {
+            log.warn(`[IPC saveModel] 读取现有模型JSON失败 (${model.jsonPath}): ${readError.message}. 将创建新文件或覆盖。`);
+        } else {
+             log.info(`[IPC saveModel] 现有模型JSON不存在 (${model.jsonPath}). 将创建新文件。`);
+        }
+        existingData = {}; // 确保从空对象开始
+      }
+
+      // 2. 合并数据：将前端传来的 model 字段合并到现有数据上
+      //    确保包含所有从 detail-modal.js 发送的字段
+      //    注意：前端发送的 model 对象包含了 id, sourceId, jsonPath 等元数据，
+      //    以及 type, description, triggerWord, tags 等实际模型数据。
+      //    注意：根据实际 JSON 结构，不应保存 name 和 extra。type 应映射到 modelType。
+      const mergedData = {
+        ...existingData, // 保留原始数据中未被前端修改的字段 (如 uuid, image, file, examplePrompt, basic 等)
+        // name: model.name, // 不保存 name 到 JSON 文件
+        modelType: model.type, // 使用前端传来的 type，但保存为 modelType
+        description: model.description, // 使用前端传来的 description
+        triggerWord: model.triggerWord, // 使用前端传来的 triggerWord
+        tags: model.tags, // 使用前端传来的 tags
+        // extra: model.extra || {}, // 不保存 extra 到 JSON 文件
+      };
+      // 注意：我们不需要手动删除 id, sourceId, jsonPath，因为它们不在 existingData 中，
+      // 并且 ...existingData 会保留原始文件中的字段。
+      // 我们只合并前端明确编辑过的字段。
+
+      // 3. 写入合并后的完整数据
+      const dataToWrite = JSON.stringify(mergedData, null, 2);
+      log.debug(`[IPC saveModel] 准备写入合并后的数据到: ${model.jsonPath}`, mergedData);
+      await fs.promises.writeFile(model.jsonPath, dataToWrite, 'utf-8');
       log.info('[IPC] 模型保存成功', { jsonPath: model.jsonPath });
       return { success: true };
     } catch (error) {
@@ -233,6 +265,18 @@ ipcMain.on('renderer-error', (event, errorInfo) => {
     log.error('[RendererError] 渲染进程错误上报:', errorInfo && errorInfo.message, errorInfo && errorInfo.stack, errorInfo);
   } catch (e) {
     log.error('[RendererError] 记录渲染进程错误时异常:', e.message, e.stack);
+  }
+});
+
+// 监听来自渲染进程的通用日志消息
+ipcMain.on('log-message', (event, level, message, ...args) => {
+  // 使用 electron-log 记录日志
+  // log[level] 会调用对应级别的日志方法，如 log.info, log.warn 等
+  if (log[level] && typeof log[level] === 'function') {
+    log[level](`[Renderer] ${message}`, ...args);
+  } else {
+    // 如果级别无效，默认使用 info
+    log.info(`[Renderer] [${level.toUpperCase()}] ${message}`, ...args);
   }
 });
 
