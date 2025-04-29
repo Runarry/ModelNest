@@ -37,7 +37,7 @@ class WebDavDataSource extends DataSource {
         )
         .map(item => item.basename); // Return just the directory name
     } catch (error) {
-      console.error(`[WebDavDataSource] Error listing subdirectories in ${basePath}:`, error);
+      log.error(`[WebDavDataSource] Error listing subdirectories in ${basePath}:`, error.message, error.stack);
       // Handle cases like 404 Not Found gracefully
       if (error.response && error.response.status === 404) {
         return []; // Directory doesn't exist, return empty list
@@ -87,7 +87,7 @@ class WebDavDataSource extends DataSource {
               const content = await this.client.getFileContents(jsonFile.filename);
               detail = JSON.parse(content.toString());
             } catch (e) {
-              console.error(`[WebDavDataSource] Error reading json ${jsonFile.filename}:`, e);
+              log.error(`[WebDavDataSource] Error reading json ${jsonFile.filename}:`, e.message, e.stack);
             }
           }
           
@@ -115,7 +115,7 @@ class WebDavDataSource extends DataSource {
           await walk(dir.filename);
         }
       } catch (error) {
-        console.error(`[WebDavDataSource] Error walking directory ${dir}:`, error);
+        log.error(`[WebDavDataSource] Error walking directory ${dir}:`, error.message, error.stack);
       }
     };
     
@@ -124,14 +124,16 @@ class WebDavDataSource extends DataSource {
       await this.client.stat(startPath);
     } catch (error) {
       if (error.response && error.response.status === 404) {
-        console.warn(`[WebDavDataSource] Directory not found: ${startPath}`);
+        log.warn(`[WebDavDataSource] Directory not found: ${startPath}`);
         return []; // Directory doesn't exist
       }
-      console.error(`[WebDavDataSource] Error accessing start path ${startPath}:`, error);
+      log.error(`[WebDavDataSource] Error accessing start path ${startPath}:`, error.message, error.stack);
       throw error; // Re-throw other errors
     }
 
+    log.debug(`[WebDavDataSource] 开始遍历模型目录: ${startPath}`);
     await walk(startPath); // Start walking from the determined path
+    log.debug(`[WebDavDataSource] 遍历完成，模型数量: ${allModels.length}`);
     return allModels;
   }
 
@@ -146,7 +148,7 @@ class WebDavDataSource extends DataSource {
       const detail = JSON.parse(content.toString());
       return detail;
     } catch (e) {
-      console.error('[WebDavDataSource] Error reading model detail:', e);
+      log.error('[WebDavDataSource] Error reading model detail:', e.message, e.stack);
       return {};
     }
   }
@@ -165,7 +167,7 @@ class WebDavDataSource extends DataSource {
         mimeType: 'image/png'
       };
     } catch (e) {
-      console.error('[WebDavDataSource] Error reading image:', e);
+      log.error('[WebDavDataSource] Error reading image:', e.message, e.stack);
       return null;
     }
   }

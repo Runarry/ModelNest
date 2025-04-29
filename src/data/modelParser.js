@@ -1,10 +1,17 @@
+const log = require('electron-log');
 const fs = require('fs');
 const path = require('path');
 
 // 解析本地模型目录，返回标准模型对象数组
+// 解析本地模型目录，返回标准模型对象数组
 function parseLocalModels(dir, supportedExtensions) {
-  if (!fs.existsSync(dir)) return [];
+  log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}`);
+  if (!fs.existsSync(dir)) {
+    log.warn(`[modelParser] 目录不存在: ${dir}`);
+    return [];
+  }
   const files = fs.readdirSync(dir);
+  log.debug(`[modelParser] 目录文件:`, files);
   const models = [];
 
   // 调试输出当前目录和文件列表
@@ -23,6 +30,7 @@ function parseLocalModels(dir, supportedExtensions) {
         try {
           detail = JSON.parse(fs.readFileSync(path.join(dir, jsonFile), 'utf-8'));
         } catch (e) {
+          log.error(`[modelParser] 解析模型 JSON 失败: ${path.join(dir, jsonFile)}`, e.message, e.stack);
           detail = {};
         }
       }
@@ -40,6 +48,7 @@ function parseLocalModels(dir, supportedExtensions) {
       models.push(modelObj);
     }
   });
+  log.debug(`[modelParser] 解析完成，模型数量: ${models.length}`);
   return models;
 }
 

@@ -5,20 +5,20 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "pack": "electron-builder --dir -c electron-builder.yml",
-    "dist": "electron-builder -c electron-builder.yml"
+    "pack": "cross-env BUILD_DEFAULT_LOG_LEVEL=warn electron-builder --dir -c electron-builder.yml",
+    "dist": "cross-env BUILD_DEFAULT_LOG_LEVEL=warn electron-builder -c electron-builder.yml"
   },
   "dependencies": {
-    "sharp": "^0.34.1",
-    "webdav": "^5.8.0",
+    "electron-log": "^5.3.4",
     "electron-updater": "^6.6.2",
-    "electron-log": "^5.3.4"
+    "sharp": "^0.34.1",
+    "webdav": "^5.8.0"
   },
   "devDependencies": {
+    "cross-env": "^7.0.3",
     "electron": "^36.0.0",
     "electron-builder": "^26.0.13"
   },
   "author": "Banazzle",
   "license": "MIT"
 }
-

@@ -1,6 +1,7 @@
 const { parseLocalModels } = require('./modelParser');
 const fs = require('fs');
 const path = require('path');
+const log = require('electron-log');
 
 // 数据源抽象与实现
 
@@ -38,7 +39,7 @@ class LocalDataSource extends DataSource {
       if (error.code === 'ENOENT') {
         return [];
       }
-      console.error(`[LocalDataSource] Error reading subdirectories in ${root}:`, error);
+      log.error(`[LocalDataSource] Error reading subdirectories in ${root}:`, error.message, error.stack);
       return [];
     }
   }
@@ -53,10 +54,10 @@ class LocalDataSource extends DataSource {
       await fs.promises.access(startPath);
     } catch (error) {
       if (error.code === 'ENOENT') {
-        console.warn(`[LocalDataSource] Directory not found: ${startPath}`);
+        log.warn(`[LocalDataSource] Directory not found: ${startPath}`);
         return [];
       }
-      console.error(`[LocalDataSource] Error accessing directory ${startPath}:`, error);
+      log.error(`[LocalDataSource] Error accessing directory ${startPath}:`, error.message, error.stack);
       return []; // Return empty on other access errors too
     }
 
@@ -81,13 +82,15 @@ class LocalDataSource extends DataSource {
         // Handle errors, especially ENOENT (directory not found) which might occur
         // if a directory is deleted between readdir and the recursive walk call.
         if (error.code !== 'ENOENT') { // Ignore 'Not Found' errors if desired, or handle specifically
-            console.error(`[LocalDataSource] Error walking directory ${dir}:`, error);
+            log.error(`[LocalDataSource] Error walking directory ${dir}:`, error.message, error.stack);
         }
         // Continue walking other directories even if one fails
       }
     };
 
+    log.debug(`[LocalDataSource] 开始遍历模型目录: ${startPath}`);
     await walk(startPath); // Await the initial call
+    log.debug(`[LocalDataSource] 遍历完成，模型数量: ${allModels.length}`);
     return allModels;
   }
   async readModelDetail(jsonPath) {
@@ -105,7 +108,7 @@ class LocalDataSource extends DataSource {
         return {};
       }
       // Log other errors (parsing errors, permission errors, etc.)
-      console.error(`[LocalDataSource] Error reading model detail ${jsonPath}:`, error);
+      log.error(`[LocalDataSource] Error reading model detail ${jsonPath}:`, error.message, error.stack);
       return {};
     }
   }

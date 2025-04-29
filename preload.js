@@ -20,6 +20,9 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.on('updater.onUpdateStatus', listener);
     // Return a function to remove the listener
     return () => ipcRenderer.removeListener('updater.onUpdateStatus', listener);
-  }
+  },
   // --- End Updater API ---
+
+  // 渲染进程错误上报
+  sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo)
 });

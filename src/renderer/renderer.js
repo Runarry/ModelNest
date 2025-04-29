@@ -6,6 +6,32 @@ import { initSettingsModal } from './settings-modal.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './ui-utils.js';
 
+// 全局错误与未处理 Promise 拒绝上报到主进程日志
+window.onerror = function (message, source, lineno, colno, error) {
+  if (window.api && typeof window.api.sendRendererError === 'function') {
+    window.api.sendRendererError({
+      type: 'window.onerror',
+      message: message,
+      stack: error && error.stack,
+      source,
+      lineno,
+      colno,
+      url: window.location.href,
+      time: new Date().toISOString()
+    });
+  }
+};
+window.addEventListener('unhandledrejection', function (event) {
+  if (window.api && typeof window.api.sendRendererError === 'function') {
+    window.api.sendRendererError({
+      type: 'unhandledrejection',
+      message: event.reason && event.reason.message ? event.reason.message : String(event.reason),
+      stack: event.reason && event.reason.stack,
+      url: window.location.href,
+      time: new Date().toISOString()
+    });
+  }
+});
 // i18n is loaded globally via script tag in index.html, but we can reference it
 const { loadLocale, t, getCurrentLocale, getSupportedLocales } = window.i18n;
 
