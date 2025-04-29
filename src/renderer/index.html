@@ -70,37 +70,37 @@
       </main>
     </div>
 
-    <div id="detailModal" class="modal">
-      <div class="modal-content">
-        <button id="detailClose" class="modal-close">&times;</button>
-        <h2 id="detailName" class="modal-title"></h2>
-        <img id="detailImage" class="modal-image" alt="" />
-        <div id="detailDescription" class="modal-description"></div>
+    <div id="detailModel" class="Model">
+      <div class="Model-content">
+        <button id="detailClose" class="Model-close">&times;</button>
+        <h2 id="detailName" class="Model-title"></h2>
+        <img id="detailImage" class="Model-image" alt="" />
+        <div id="detailDescription" class="Model-description"></div>
       </div>
     </div>
 
-    <!-- Settings Modal -->
-    <div id="settingsModal" class="modal">
-      <div class="modal-content settings-modal-content"> <!-- Added specific class for sizing -->
-        <button id="settingsClose" class="modal-close">&times;</button>
-        <h2 id="settingsTitle" class="modal-title">Settings</h2> <!-- id="settingsTitle" already exists -->
+    <!-- Settings Model -->
+    <div id="settingsModel" class="Model">
+      <div class="Model-content settings-Model-content"> <!-- Added specific class for sizing -->
+        <button id="settingsClose" class="Model-close">&times;</button>
+        <h2 id="settingsTitle" class="Model-title">Settings</h2> <!-- id="settingsTitle" already exists -->
         <form id="settingsForm" class="settings-form">
           <!-- Configuration form elements will go here -->
           <p>Configuration options will appear here.</p>
         </form>
-        <div id="settingsFeedback" class="modal-feedback"></div> <!-- Feedback Area -->
-        <div class="modal-actions">
+        <div id="settingsFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
+        <div class="Model-actions">
           <button type="button" id="settingsCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Ensure type="button" -->
           <button type="button" id="settingsSaveBtn" class="btn btn-primary">Save</button> <!-- Ensure type="button" -->
         </div>
       </div>
     </div>
 
-    <!-- Add/Edit Source Modal -->
-    <div id="sourceEditModal" class="modal">
-      <div class="modal-content source-edit-modal-content">
-        <button id="sourceEditClose" class="modal-close">&times;</button>
-        <h2 id="sourceEditTitle" class="modal-title">Add/Edit Model Source</h2> <!-- id="sourceEditTitle" already exists -->
+    <!-- Add/Edit Source Model -->
+    <div id="sourceEditModel" class="Model">
+      <div class="Model-content source-edit-Model-content">
+        <button id="sourceEditClose" class="Model-close">&times;</button>
+        <h2 id="sourceEditTitle" class="Model-title">Add/Edit Model Source</h2> <!-- id="sourceEditTitle" already exists -->
         <form id="sourceEditForm">
           <input type="hidden" id="sourceEditId"> <!-- Hidden field for editing existing source ID -->
 
@@ -143,8 +143,8 @@
           </div>
 
         </form>
-        <div id="sourceEditFeedback" class="modal-feedback"></div> <!-- Feedback Area -->
-        <div class="modal-actions">
+        <div id="sourceEditFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
+        <div class="Model-actions">
           <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Already type="button" -->
           <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm">Save Source</button> <!-- type="submit" is correct here -->
         </div>

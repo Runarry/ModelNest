@@ -221,7 +221,7 @@ select:hover {
 /* Note: Some general .model-card, .model-image, .tag styles might be needed here if shared */
 /* Or ensure they are defined within card-view.css and list-view.css appropriately */
 
-.modal {
+.Model {
   position: fixed;
   top: 0;
   left: 0;
@@ -237,12 +237,12 @@ select:hover {
   transition: opacity 0.3s ease, visibility 0.3s ease;
 }
 
-.modal.active {
+.Model.active {
   opacity: 1;
   visibility: visible;
 }
 
-.modal-content {
+.Model-content {
   background-color: var(--card-bg);
   border-radius: 8px;
   width: 90%;
@@ -254,7 +254,7 @@ select:hover {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
 }
 
-.modal-close {
+.Model-close {
   position: absolute;
   top: 1rem;
   right: 1rem;
@@ -265,12 +265,12 @@ select:hover {
   color: var(--text-color);
 }
 
-.modal-title {
+.Model-title {
   margin-bottom: 1.5rem;
   color: var(--primary-color);
 }
 
-.modal-image {
+.Model-image {
   width: 100%;
   max-height: 300px;
   object-fit: contain;
@@ -278,7 +278,7 @@ select:hover {
   border-radius: 4px;
 }
 
-.modal-description {
+.Model-description {
   white-space: normal;
   font-family: Arial, sans-serif;
   background-color: rgba(0, 0, 0, 0.05);
@@ -385,36 +385,36 @@ select:hover {
 
 /* 移动端适配 */
 @media (max-width: 768px) {
-  .detail-modal-content .detail-row,
-  .detail-modal-content .extra-info-item {
+  .detail-Model-content .detail-row,
+  .detail-Model-content .extra-info-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
   }
 
-  .detail-modal-content .detail-row label,
-  .detail-modal-content .extra-info-item label {
+  .detail-Model-content .detail-row label,
+  .detail-Model-content .extra-info-item label {
     width: 100%;
     padding-top: 0;
   }
 
-  .detail-modal-content .detail-row input[type="text"],
-  .detail-modal-content .detail-row textarea,
-  .detail-modal-content .extra-info-item input[type="text"] {
+  .detail-Model-content .detail-row input[type="text"],
+  .detail-Model-content .detail-row textarea,
+  .detail-Model-content .extra-info-item input[type="text"] {
     width: 100%;
   }
 
-  .detail-modal-content .extra-info-group {
+  .detail-Model-content .extra-info-group {
     padding: 16px;
   }
 }
 
-.detail-modal-content .btn-save {
+.detail-Model-content .btn-save {
   align-self: flex-end; /* 保存按钮右对齐 */
   margin-top: 20px; /* 增加与上方内容的间距 */
 }
 
-.detail-modal-content hr.separator {
+.detail-Model-content hr.separator {
   margin: 20px 0; /* 增加分隔线上下的间距 */
   border: none;
   border-top: 1px solid var(--border-color);
@@ -572,9 +572,9 @@ select:hover {
  /* background-image: url('path/to/webdav-icon.svg'); */
  font-size: 14px; /* Adjust emoji size if needed */
 }
-/* Settings Modal Specific Styles */
-.settings-modal-content {
-  max-width: 800px; /* Allow settings modal to be wider */
+/* Settings Model Specific Styles */
+.settings-Model-content {
+  max-width: 800px; /* Allow settings Model to be wider */
   display: flex;
   flex-direction: column;
 }
@@ -586,7 +586,7 @@ select:hover {
   margin-bottom: 1rem; /* Space before action buttons */
 }
 
-.modal-actions {
+.Model-actions {
   display: flex;
   justify-content: flex-end; /* Align buttons to the right */
   gap: 0.8rem; /* Space between buttons */
@@ -742,8 +742,8 @@ select:hover {
 .add-source-btn {
   margin-top: 0.5rem;
 }
-/* Modal Feedback Area Styles */
-.modal-feedback {
+/* Model Feedback Area Styles */
+.Model-feedback {
   padding: 0.8rem 1rem;
   margin-bottom: 1rem; /* Space between feedback and actions */
   border-radius: 4px;
@@ -752,21 +752,21 @@ select:hover {
   border: 1px solid transparent;
 }
 
-.modal-feedback.feedback-success {
+.Model-feedback.feedback-success {
   color: #155724; /* Dark green text */
   background-color: #d4edda; /* Light green background */
   border-color: #c3e6cb; /* Green border */
   display: block; /* Show when class is added */
 }
 
-.modal-feedback.feedback-error {
+.Model-feedback.feedback-error {
   color: #721c24; /* Dark red text */
   background-color: #f8d7da; /* Light red background */
   border-color: #f5c6cb; /* Red border */
   display: block; /* Show when class is added */
 }
 
-.modal-feedback.feedback-info {
+.Model-feedback.feedback-info {
   color: #0c5460; /* Dark cyan text */
   background-color: #d1ecf1; /* Light cyan background */
   border-color: #bee5eb; /* Cyan border */

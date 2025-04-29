@@ -1,8 +1,8 @@
 // Import necessary initialization functions and utilities
 import { initThemeSwitcher } from './ui.js';
 import { initMainView, loadModels as loadModelsForView, renderSources } from './main-view.js';
-import { initDetailModal, showDetailModal, hideDetailModal } from './detail-modal.js';
-import { initSettingsModal } from './settings-modal.js';
+import { initDetailModel, showDetailModel, hideDetailModel } from './detail-Model.js';
+import { initSettingsModel } from './settings-Model.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './ui-utils.js';
 
@@ -71,8 +71,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       document.getElementById('listViewBtn').title = t('viewList');
       document.getElementById('loadingModels').textContent = t('loadingModels');
       document.getElementById('settingsBtn').title = t('settings.title');
-      // Detail modal image alt is set dynamically within detail-modal
-      // Settings/SourceEdit modal static texts are set within their respective modules if needed,
+      // Detail Model image alt is set dynamically within detail-Model
+      // Settings/SourceEdit Model static texts are set within their respective modules if needed,
       // but ideally defined directly in index.html with data-i18n attributes.
       // Let's assume most static texts are now in HTML or handled by modules.
   }
@@ -127,11 +127,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     listViewBtnId: 'listViewBtn',
     directoryTabsSelector: '.directory-tabs' // Selector for the container
   };
-  // Pass showDetailModal (from detail-modal module) as the callback
+  // Pass showDetailModel (from detail-Model module) as the callback
   initMainView(mainViewConfig, (model) => {
       const currentSourceId = document.getElementById('sourceSelect')?.value;
       if (currentSourceId) {
-          showDetailModal(model, currentSourceId); // Logging inside showDetailModal
+          showDetailModel(model, currentSourceId); // Logging inside showDetailModel
       } else {
            // Task 1: Error Logging (Should ideally not happen if UI is consistent)
           console.error("[Renderer] 无法显示详情：未选择数据源 (main-view 回调)");
@@ -139,19 +139,19 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
   });
 
-  // Configuration for detail modal module
-  const detailModalConfig = {
-    modalId: 'detailModal',
+  // Configuration for detail Model module
+  const detailModelConfig = {
+    ModelId: 'detailModel',
     nameId: 'detailName',
     imageId: 'detailImage',
     descriptionContainerId: 'detailDescription', // Container for tabs/inputs
     closeBtnId: 'detailClose'
   };
-  initDetailModal(detailModalConfig);
+  initDetailModel(detailModelConfig);
 
-   // Configuration for settings modal module, including sub-modal config
-   const settingsModalConfig = {
-       modalId: 'settingsModal',
+   // Configuration for settings Model module, including sub-Model config
+   const settingsModelConfig = {
+       ModelId: 'settingsModel',
        openBtnId: 'settingsBtn',
        closeBtnId: 'settingsClose',
        saveBtnId: 'settingsSaveBtn',
@@ -159,8 +159,8 @@ document.addEventListener('DOMContentLoaded', async () => {
        formId: 'settingsForm', // Make sure index.html has form with this ID
        feedbackElementId: 'settingsFeedback'
    };
-   const sourceEditModalConfig = { // Config for the sub-modal
-       modalId: 'sourceEditModal',
+   const sourceEditModelConfig = { // Config for the sub-Model
+       ModelId: 'sourceEditModel',
        formId: 'sourceEditForm',
        titleId: 'sourceEditTitle',
        idInputId: 'sourceEditId',
@@ -177,7 +177,7 @@ document.addEventListener('DOMContentLoaded', async () => {
        cancelBtnId: 'sourceEditCancelBtn',
        feedbackElementId: 'sourceEditFeedback'
    };
-   initSettingsModal(settingsModalConfig, sourceEditModalConfig); // Logging inside initSettingsModal if needed
+   initSettingsModel(settingsModelConfig, sourceEditModelConfig); // Logging inside initSettingsModel if needed
 
    console.log("[Renderer] UI 模块初始化完成");
 
@@ -248,7 +248,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       await loadInitialData();
   });
 
-  // Listen for model updates (e.g., after saving in detail modal)
+  // Listen for model updates (e.g., after saving in detail Model)
    window.addEventListener('model-updated', (event) => {
        console.log('[Renderer] 收到 model-updated 事件:', event.detail);
        // TODO: Implement more granular update instead of full reload?

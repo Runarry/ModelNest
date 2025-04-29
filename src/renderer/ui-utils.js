@@ -17,13 +17,13 @@ export function showFeedback(feedbackElement, message, type = 'info', duration =
     }
 
     feedbackElement.textContent = message;
-    feedbackElement.className = `modal-feedback feedback-${type}`; // Set class based on type
+    feedbackElement.className = `Model-feedback feedback-${type}`; // Set class based on type
 
     // Auto-hide after duration (if duration is positive)
     if (duration > 0) {
         feedbackTimeout = setTimeout(() => {
             feedbackElement.textContent = '';
-            feedbackElement.className = 'modal-feedback'; // Reset class
+            feedbackElement.className = 'Model-feedback'; // Reset class
             feedbackTimeout = null;
         }, duration);
     }
@@ -40,7 +40,7 @@ export function clearFeedback(feedbackElement) {
         feedbackTimeout = null;
      }
      feedbackElement.textContent = '';
-     feedbackElement.className = 'modal-feedback';
+     feedbackElement.className = 'Model-feedback';
 }
 
 

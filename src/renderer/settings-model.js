@@ -1,17 +1,17 @@
 import { showFeedback, clearFeedback, clearChildren } from './ui-utils.js';
-import { openSourceEditModal, initSourceEditModal } from './source-edit-modal.js'; // Import functions for the sub-modal
+import { openSourceEditModel, initSourceEditModel } from './source-edit-Model.js'; // Import functions for the sub-Model
 
 // Assume i18n is initialized and 't' is available globally or passed/imported
 const t = window.i18n?.t || ((key) => key); // Fallback
 
 // ===== DOM Element References =====
-let settingsModal;
-let settingsBtn; // The button that opens the settings modal
+let settingsModel;
+let settingsBtn; // The button that opens the settings Model
 let settingsCloseBtn;
 let settingsSaveBtn;
 let settingsCancelBtn;
 let settingsForm;
-let settingsFeedbackEl; // Feedback element specific to this modal
+let settingsFeedbackEl; // Feedback element specific to this Model
 let sourceListContainer; // Element within the form to hold the list of sources
 let updateSection; // Container for the update UI
 let updateStatusEl; // Span to display update status messages
@@ -24,19 +24,19 @@ let unsubscribeUpdateStatus = null; // Function to unsubscribe from update statu
 // ===== Initialization =====
 
 /**
- * Initializes the settings modal module.
+ * Initializes the settings Model module.
  * @param {object} config - Configuration object containing element IDs.
- * @param {string} config.modalId
- * @param {string} config.openBtnId - ID of the button that opens this modal.
+ * @param {string} config.ModelId
+ * @param {string} config.openBtnId - ID of the button that opens this Model.
  * @param {string} config.closeBtnId
  * @param {string} config.saveBtnId
  * @param {string} config.cancelBtnId
  * @param {string} config.formId
  * @param {string} config.feedbackElementId
- * @param {object} sourceEditModalConfig - Config object to pass to initSourceEditModal.
+ * @param {object} sourceEditModelConfig - Config object to pass to initSourceEditModel.
  */
-export function initSettingsModal(config, sourceEditModalConfig) {
-    settingsModal = document.getElementById(config.modalId);
+export function initSettingsModel(config, sourceEditModelConfig) {
+    settingsModel = document.getElementById(config.ModelId);
     settingsBtn = document.getElementById(config.openBtnId);
     settingsCloseBtn = document.getElementById(config.closeBtnId);
     settingsSaveBtn = document.getElementById(config.saveBtnId);
@@ -44,29 +44,29 @@ export function initSettingsModal(config, sourceEditModalConfig) {
     settingsForm = document.getElementById(config.formId);
     settingsFeedbackEl = document.getElementById(config.feedbackElementId);
 
-    if (!settingsModal || !settingsBtn || !settingsCloseBtn || !settingsSaveBtn ||
+    if (!settingsModel || !settingsBtn || !settingsCloseBtn || !settingsSaveBtn ||
         !settingsCancelBtn || !settingsForm || !settingsFeedbackEl) {
         // Task 1: Error Logging
-        console.error("[SettingsModal] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
+        console.error("[SettingsModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
         return;
     }
 
-    // Initialize the source edit modal (it's controlled from here)
-    initSourceEditModal(sourceEditModalConfig, handleSourceSaved); // Pass the callback
+    // Initialize the source edit Model (it's controlled from here)
+    initSourceEditModel(sourceEditModelConfig, handleSourceSaved); // Pass the callback
 
     // Attach event listeners
     // Task 4: Click Event Logging
     settingsBtn.addEventListener('click', () => {
         console.log('[UI] 点击了设置按钮');
-        openSettingsModal();
+        openSettingsModel();
     });
     settingsCloseBtn.addEventListener('click', () => {
         console.log('[UI] 点击了设置弹窗的关闭按钮');
-        closeSettingsModal();
+        closeSettingsModel();
     });
     settingsCancelBtn.addEventListener('click', () => {
         console.log('[UI] 点击了设置弹窗的取消按钮');
-        closeSettingsModal();
+        closeSettingsModel();
     });
     settingsSaveBtn.addEventListener('click', () => {
         console.log('[UI] 点击了设置弹窗的保存按钮');
@@ -74,47 +74,47 @@ export function initSettingsModal(config, sourceEditModalConfig) {
     });
 
 
-    // Close modal if clicking on the backdrop
-    settingsModal.addEventListener('click', (event) => {
-        if (event.target === settingsModal) {
+    // Close Model if clicking on the backdrop
+    settingsModel.addEventListener('click', (event) => {
+        if (event.target === settingsModel) {
             // Task 4: Click Event Logging
             console.log('[UI] 点击了设置弹窗的背景遮罩');
-            closeSettingsModal();
+            closeSettingsModel();
         }
     });
 }
 
 // ===== Core Functions =====
 
-/** Opens the settings modal and loads the current configuration. */
-function openSettingsModal() {
-    if (!settingsModal) {
-        console.error("[SettingsModal] openSettingsModal 失败：弹窗元素未初始化");
+/** Opens the settings Model and loads the current configuration. */
+function openSettingsModel() {
+    if (!settingsModel) {
+        console.error("[SettingsModel] openSettingsModel 失败：弹窗元素未初始化");
         return;
     }
-    console.log("[SettingsModal] 开始打开设置弹窗");
+    console.log("[SettingsModel] 开始打开设置弹窗");
     clearFeedback(settingsFeedbackEl);
-    settingsModal.classList.add('active');
+    settingsModel.classList.add('active');
     loadConfigForSettings(); // Load config when opening
-    console.log("[SettingsModal] 设置弹窗已打开");
+    console.log("[SettingsModel] 设置弹窗已打开");
 }
 
-/** Closes the settings modal. */
-function closeSettingsModal() {
-    console.log("[SettingsModal] 开始关闭设置弹窗");
-    if (settingsModal) {
-        settingsModal.classList.remove('active');
+/** Closes the settings Model. */
+function closeSettingsModel() {
+    console.log("[SettingsModel] 开始关闭设置弹窗");
+    if (settingsModel) {
+        settingsModel.classList.remove('active');
         // Clear temporary state when closing without saving
         tempModelSources = [];
-        // Clean up IPC listener when closing modal
+        // Clean up IPC listener when closing Model
         if (unsubscribeUpdateStatus) {
-            console.log("[SettingsModal] 取消订阅更新状态事件");
+            console.log("[SettingsModel] 取消订阅更新状态事件");
             unsubscribeUpdateStatus();
             unsubscribeUpdateStatus = null;
         }
-         console.log("[SettingsModal] 设置弹窗已关闭");
+         console.log("[SettingsModel] 设置弹窗已关闭");
     } else {
-         console.warn("[SettingsModal] closeSettingsModal 调用时弹窗元素未初始化");
+         console.warn("[SettingsModel] closeSettingsModel 调用时弹窗元素未初始化");
     }
 }
 
@@ -123,16 +123,16 @@ function closeSettingsModal() {
 /** Loads the current config from the main process and populates the settings form. */
 async function loadConfigForSettings() {
     if (!settingsForm) {
-        console.error("[SettingsModal] loadConfigForSettings 失败：表单元素未初始化");
+        console.error("[SettingsModel] loadConfigForSettings 失败：表单元素未初始化");
         return;
     }
-    console.log("[SettingsModal] 开始加载配置到设置表单");
+    console.log("[SettingsModel] 开始加载配置到设置表单");
     settingsForm.innerHTML = `<p>${t('settings.loading')}</p>`; // Placeholder while loading
     const startTime = Date.now();
 
     try {
         const currentConfig = await window.api.getConfig();
-        console.log("[SettingsModal] 从主进程获取的配置:", currentConfig);
+        console.log("[SettingsModel] 从主进程获取的配置:", currentConfig);
 
         // Deep clone sources into temporary state for editing
         // Ensure it's always an array
@@ -161,7 +161,7 @@ async function loadConfigForSettings() {
         // Task 4: Click Event Logging
         addSourceBtn.addEventListener('click', () => {
             console.log('[UI] 点击了添加数据源按钮');
-            openSourceEditModal(null); // Open sub-modal for adding
+            openSourceEditModel(null); // Open sub-Model for adding
         });
         sourcesSection.appendChild(addSourceBtn);
 
@@ -228,26 +228,26 @@ async function loadConfigForSettings() {
 
         if (!updateStatusEl || !checkUpdateButton) {
             // Task 1: Error Logging
-            console.error("[SettingsModal] 初始化更新 UI 失败：状态或按钮元素未找到");
+            console.error("[SettingsModel] 初始化更新 UI 失败：状态或按钮元素未找到");
         } else {
              // Add event listener for the update button
             checkUpdateButton.addEventListener('click', handleUpdateButtonClick); // Logging is inside the handler
 
             // Register listener for update status changes from main process
-            // Ensure previous listener is removed if modal is reopened
+            // Ensure previous listener is removed if Model is reopened
             if (unsubscribeUpdateStatus) {
                 unsubscribeUpdateStatus();
             }
             unsubscribeUpdateStatus = window.api.onUpdateStatus(handleUpdateStatus);
-            console.log("[SettingsModal] 已订阅更新状态事件");
+            console.log("[SettingsModel] 已订阅更新状态事件");
         }
         const duration = Date.now() - startTime;
-        console.log(`[SettingsModal] 配置加载和表单渲染完成, 耗时: ${duration}ms`);
+        console.log(`[SettingsModel] 配置加载和表单渲染完成, 耗时: ${duration}ms`);
 
     } catch (error) {
         const duration = Date.now() - startTime;
         // Task 1: Error Logging
-        console.error(`[SettingsModal] 加载配置到设置表单失败, 耗时: ${duration}ms`, error.message, error.stack, error);
+        console.error(`[SettingsModel] 加载配置到设置表单失败, 耗时: ${duration}ms`, error.message, error.stack, error);
         settingsForm.innerHTML = `<p class="error-message">${t('settings.loadError', { message: error.message })}</p>`;
     }
 }
@@ -284,17 +284,17 @@ function renderSourceListForSettings() {
 
         // Add event listeners for edit/delete buttons
         const editButton = item.querySelector('.edit-btn');
-        console.log(`[SettingsModal] Found edit button for source "${source.name}":`, editButton); // Log found button
+        console.log(`[SettingsModel] Found edit button for source "${source.name}":`, editButton); // Log found button
         if (editButton) {
             // Task 4: Click Event Logging
             editButton.addEventListener('click', (e) => {
                 console.log(`[UI] 点击了编辑数据源按钮: ${source.name} (ID: ${source.id})`);
                 e.stopPropagation(); // Prevent li click if needed
-                openSourceEditModal(source); // Pass the source object to edit
+                openSourceEditModel(source); // Pass the source object to edit
             });
         } else {
              // Task 1: Error Logging (Minor issue, maybe log as warning)
-            console.warn(`[SettingsModal] 未找到数据源 "${source.name}" 的编辑按钮`);
+            console.warn(`[SettingsModel] 未找到数据源 "${source.name}" 的编辑按钮`);
         }
         const deleteButton = item.querySelector('.delete-btn');
         if (deleteButton) {
@@ -305,7 +305,7 @@ function renderSourceListForSettings() {
                 handleDeleteSource(source.id);
             });
         } else {
-             console.warn(`[SettingsModal] 未找到数据源 "${source.name}" 的删除按钮`);
+             console.warn(`[SettingsModel] 未找到数据源 "${source.name}" 的删除按钮`);
         }
 
         sourceListContainer.appendChild(item);
@@ -314,40 +314,40 @@ function renderSourceListForSettings() {
 
 /** Handles the deletion of a model source from the temporary list. */
 function handleDeleteSource(sourceId) {
-    console.log(`[SettingsModal] 尝试删除临时列表中的数据源: ${sourceId}`);
+    console.log(`[SettingsModel] 尝试删除临时列表中的数据源: ${sourceId}`);
     // TODO: Replace confirm with a custom confirmation UI later
     if (!confirm(t('settings.modelSources.deleteConfirm', { name: tempModelSources.find(s => s.id === sourceId)?.name || sourceId }))) {
-         console.log(`[SettingsModal] 用户取消删除数据源: ${sourceId}`);
+         console.log(`[SettingsModel] 用户取消删除数据源: ${sourceId}`);
         return;
     }
     const index = tempModelSources.findIndex(s => s.id === sourceId);
     if (index !== -1) {
         tempModelSources.splice(index, 1);
-        console.log(`[SettingsModal] 已从临时列表中删除数据源: ${sourceId}`);
+        console.log(`[SettingsModel] 已从临时列表中删除数据源: ${sourceId}`);
         renderSourceListForSettings(); // Re-render the list
     } else {
         // Task 1: Error Logging
-        console.error(`[SettingsModal] 删除失败：在临时列表中未找到数据源 ID: ${sourceId}`);
+        console.error(`[SettingsModel] 删除失败：在临时列表中未找到数据源 ID: ${sourceId}`);
     }
 }
 
 /**
- * Callback function passed to source-edit-modal.
+ * Callback function passed to source-edit-Model.
  * Updates the temporary list when a source is added or edited.
- * @param {object} savedSourceData - The source data returned from the edit modal.
+ * @param {object} savedSourceData - The source data returned from the edit Model.
  */
 function handleSourceSaved(savedSourceData) {
     const existingIndex = tempModelSources.findIndex(s => s.id === savedSourceData.id);
     if (existingIndex !== -1) {
         // Editing existing: Replace in temp list
-        console.log(`[SettingsModal] 更新临时列表中的数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
+        console.log(`[SettingsModel] 更新临时列表中的数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
         tempModelSources[existingIndex] = savedSourceData;
     } else {
         // Adding new: Push to temp list
-         console.log(`[SettingsModal] 向临时列表添加新数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
+         console.log(`[SettingsModel] 向临时列表添加新数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
         tempModelSources.push(savedSourceData);
     }
-    renderSourceListForSettings(); // Re-render the list in the settings modal
+    renderSourceListForSettings(); // Re-render the list in the settings Model
 }
 
 
@@ -355,10 +355,10 @@ function handleSourceSaved(savedSourceData) {
 async function handleSaveSettings() {
     // Logging for click is handled by the event listener setup in init
     if (!settingsForm) {
-         console.error("[SettingsModal] handleSaveSettings 失败：表单元素未初始化");
+         console.error("[SettingsModel] handleSaveSettings 失败：表单元素未初始化");
         return;
     }
-    console.log("[SettingsModal] 开始保存设置");
+    console.log("[SettingsModel] 开始保存设置");
     const startTime = Date.now();
 
     clearFeedback(settingsFeedbackEl);
@@ -367,7 +367,7 @@ async function handleSaveSettings() {
 
     try {
         // 1. Construct the new config object using tempModelSources
-        console.debug("[SettingsModal] 开始构建新的配置对象");
+        console.debug("[SettingsModel] 开始构建新的配置对象");
         const newConfig = {
             modelSources: tempModelSources, // Use the edited list
             supportedExtensions: [],
@@ -390,11 +390,11 @@ async function handleSaveSettings() {
         newConfig.imageCache.compressFormat = formData.get('imageCacheFormat') || 'jpeg';
 
         // 3. Basic validation for numbers
-        console.debug("[SettingsModal] 验证表单数据");
+        console.debug("[SettingsModel] 验证表单数据");
         if (isNaN(quality) || quality < 0 || quality > 100) {
             // Task 1: Error Logging (Validation Failure)
             const errorMsg = t('settings.validation.qualityError');
-            console.error(`[SettingsModal] 保存失败：验证错误 - ${errorMsg}`);
+            console.error(`[SettingsModel] 保存失败：验证错误 - ${errorMsg}`);
             showFeedback(settingsFeedbackEl, errorMsg, 'error');
             settingsForm.querySelector('#imageCacheQuality')?.focus();
             throw new Error(t('settings.validation.failed')); // Throw to prevent saving
@@ -404,40 +404,40 @@ async function handleSaveSettings() {
         if (isNaN(size) || size < 0) {
              // Task 1: Error Logging (Validation Failure)
             const errorMsg = t('settings.validation.sizeError');
-            console.error(`[SettingsModal] 保存失败：验证错误 - ${errorMsg}`);
+            console.error(`[SettingsModel] 保存失败：验证错误 - ${errorMsg}`);
             showFeedback(settingsFeedbackEl, errorMsg, 'error');
             settingsForm.querySelector('#imageCacheSize')?.focus();
             throw new Error(t('settings.validation.failed')); // Throw to prevent saving
         }
         newConfig.imageCache.maxCacheSizeMB = size;
 
-        console.log("[SettingsModal] 构造的新配置对象:", newConfig);
+        console.log("[SettingsModel] 构造的新配置对象:", newConfig);
 
         // 4. Send to main process
-        console.log("[SettingsModal] 调用 API 保存配置");
+        console.log("[SettingsModel] 调用 API 保存配置");
         const apiStartTime = Date.now();
         await window.api.saveConfig(newConfig);
         const apiDuration = Date.now() - apiStartTime;
-        console.log(`[SettingsModal] API 保存配置成功, 耗时: ${apiDuration}ms`);
+        console.log(`[SettingsModel] API 保存配置成功, 耗时: ${apiDuration}ms`);
 
         // 5. Handle success
         const duration = Date.now() - startTime;
-        console.log(`[SettingsModal] 设置保存成功, 总耗时: ${duration}ms`);
+        console.log(`[SettingsModel] 设置保存成功, 总耗时: ${duration}ms`);
         showFeedback(settingsFeedbackEl, t('settings.saveSuccess'), 'success', 2000);
-        setTimeout(closeSettingsModal, 2100); // Close after feedback
+        setTimeout(closeSettingsModel, 2100); // Close after feedback
         // Main process should notify renderer via 'config-updated' to reload state
 
     } catch (error) {
          const duration = Date.now() - startTime;
          // Task 1: Error Logging
-        console.error(`[SettingsModal] 保存设置失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
+        console.error(`[SettingsModel] 保存设置失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
         // Don't show feedback if validation already did
         if (!settingsFeedbackEl.textContent || settingsFeedbackEl.textContent === t('settings.saving')) {
              showFeedback(settingsFeedbackEl, t('settings.saveError', { message: error.message }), 'error');
         }
     } finally {
-        // Re-enable button and restore text only if modal didn't close
-         if (settingsModal && settingsModal.classList.contains('active')) {
+        // Re-enable button and restore text only if Model didn't close
+         if (settingsModel && settingsModel.classList.contains('active')) {
             settingsSaveBtn.disabled = false;
             settingsSaveBtn.textContent = t('settings.save');
          }
@@ -450,7 +450,7 @@ async function handleSaveSettings() {
  */
 function handleUpdateButtonClick() {
     if (!checkUpdateButton || !updateStatusEl) {
-        console.error("[SettingsModal] handleUpdateButtonClick 失败：更新按钮或状态元素未初始化");
+        console.error("[SettingsModel] handleUpdateButtonClick 失败：更新按钮或状态元素未初始化");
         return;
     }
 
@@ -481,10 +481,10 @@ function handleUpdateButtonClick() {
  */
 function handleUpdateStatus(status, ...args) {
     if (!updateStatusEl || !checkUpdateButton) {
-        console.warn(`[SettingsModal] 无法处理更新状态 '${status}'：UI 元素不可用`);
+        console.warn(`[SettingsModel] 无法处理更新状态 '${status}'：UI 元素不可用`);
         return;
     }
-    console.log(`[SettingsModal] 收到更新状态: ${status}`, args);
+    console.log(`[SettingsModel] 收到更新状态: ${status}`, args);
 
     // Reset button state initially, enable by default unless specified otherwise
     checkUpdateButton.disabled = false;
@@ -522,13 +522,13 @@ function handleUpdateStatus(status, ...args) {
             const error = args[0]; // Error object or message is usually the first arg
             const errorMessage = error instanceof Error ? error.message : String(error || t('settings.update.unknownError'));
              // Task 1: Error Logging (Update Error)
-            console.error(`[SettingsModal] 更新过程中发生错误: ${errorMessage}`, error);
+            console.error(`[SettingsModel] 更新过程中发生错误: ${errorMessage}`, error);
             updateStatusEl.textContent = t('settings.update.statusError', { message: errorMessage });
             // Button remains enabled with "Check for Updates" text.
             break;
         default:
             // Optional: Handle any unexpected status or reset to a known idle state
-            console.warn(`[SettingsModal] 未处理的更新状态: ${status}`);
+            console.warn(`[SettingsModel] 未处理的更新状态: ${status}`);
             // updateStatusEl.textContent = t('settings.update.statusIdle'); // Uncomment to reset explicitly
             break;
     }
