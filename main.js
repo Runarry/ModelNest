@@ -14,9 +14,10 @@ const { parseLocalModels, parseModelDetailFromJsonContent, prepareModelDataForSa
 const { writeModelJson } = require('./src/data/dataSourceInterface'); // <--- 导入新的接口函数
 
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the new initializer
+const { setConfig, getConfig } = require('./src/configManager.js'); // Import config manager functions
 
 let mainWindow; // Declare mainWindow globally
-let config = null;
+let config = null; // Keep local config for loading/saving logic in main.js
 
 // 加载配置文件 (异步)
 async function loadConfig() {
@@ -27,7 +28,7 @@ async function loadConfig() {
     // 使用 fs.promises.readFile 读取文件
     const configData = await fs.promises.readFile(configPath, 'utf-8');
     config = JSON.parse(configData);
-    // 转换本地路径为绝对路径
+    // 转换本地路径为绝对路径 (在 setConfig 之前完成)
     if (Array.isArray(config.modelSources)) {
       config.modelSources.forEach(source => {
         if (source.type === 'local' && source.path) {
@@ -35,6 +36,8 @@ async function loadConfig() {
         }
       });
     }
+    setConfig(config); // Update config manager after loading and processing
+    log.info('[Config] Loaded config set in configManager');
   } catch (error) {
     // 如果文件不存在或读取/解析失败，则使用默认配置
     if (error.code === 'ENOENT') {
@@ -43,6 +46,8 @@ async function loadConfig() {
       log.error('加载或解析 config.json 失败:', error.message, error.stack);
     }
     config = { modelSources: [], supportedExtensions: [] };
+    setConfig(config); // Update config manager with default config
+    log.warn('[Config] Default config set in configManager');
   }
 }
 
@@ -230,11 +235,11 @@ app.whenReady().then(async () => { // 改为 async 回调
   // --- End Updater IPC Handlers ---
   // --- End Electron Updater Logic ---
 
-  // Initialize Model Library IPC Handlers
-  initializeModelLibraryIPC(config);
+  // Initialize Model Library IPC Handlers (no longer needs config passed)
+  initializeModelLibraryIPC();
 
 
-  app.on('activate', function () {
+app.on('activate', function () {
     log.info('[Lifecycle] 应用激活');
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
   });
@@ -329,7 +334,8 @@ ipcMain.handle('save-config', async (event, newConfig) => {
           }
         });
       }
-
+    setConfig(config); // Update config manager after saving and processing
+    log.info('[Config] Saved config updated in configManager');
 
     // 4. 更新图片缓存配置
     imageCache.setConfig(config.imageCache || {});

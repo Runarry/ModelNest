@@ -10,10 +10,11 @@ const imageCache = require('../common/imageCache'); // Adjusted path
 const { parseModelDetailFromJsonContent, prepareModelDataForSaving } = require('../data/modelParser'); // Adjusted path
 // Import all necessary functions from the interface
 const dataSourceInterface = require('../data/dataSourceInterface'); // Adjusted path
+const { getConfig } = require('../configManager.js'); // Import getConfig
 
-// 注意：config 将作为参数传递给 initializeModelLibraryIPC
+// config is no longer passed as a parameter, use getConfig() instead
 
-function initializeModelLibraryIPC(config) {
+function initializeModelLibraryIPC() { // Remove config parameter
   log.info('[IPC] Initializing Model Library IPC Handlers...');
 
 
@@ -53,10 +54,11 @@ function initializeModelLibraryIPC(config) {
       const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
       log.debug(`[IPC saveModel] 准备写入序列化后的数据到: ${model.jsonPath}`); // Log the exact data being written (removed dataToWrite for brevity)
 
-      // 查找对应的 sourceConfig
-      const sourceConfig = (config.modelSources || []).find(s => s.id === model.sourceId);
+      // 查找对应的 sourceConfig using getConfig()
+      const currentConfig = getConfig();
+      const sourceConfig = (currentConfig.modelSources || []).find(s => s.id === model.sourceId);
       if (!sourceConfig) {
-          log.error(`[IPC saveModel] 未找到源配置 ID: ${model.sourceId}`);
+          log.error(`[IPC saveModel] 未找到源配置 ID: ${model.sourceId} in config:`, currentConfig);
           throw new Error(`Configuration for source ID ${model.sourceId} not found.`);
       }
 
@@ -71,12 +73,13 @@ function initializeModelLibraryIPC(config) {
   });
 
   // --- Model Listing ---
-  ipcMain.handle('listModels', async (event, { sourceId, directory }) => { 
+  ipcMain.handle('listModels', async (event, { sourceId, directory }) => {
     // Change log level to info to ensure visibility
-    // 从 config 中获取 supportedExts
-    const supportedExts = config.supportedExtensions || []; // 从 config 获取，提供默认空数组
+    // 从 getConfig() 中获取 supportedExts 和 modelSources
+    const currentConfig = getConfig();
+    const supportedExts = currentConfig.supportedExtensions || []; // 从 getConfig() 获取
     log.info(`[IPC listModels] Received request. sourceId: ${sourceId}, directory: ${directory}. Using supportedExts from config: ${supportedExts}`);
-    const sourceConfig = (config.modelSources || []).find(s => s.id === sourceId);
+    const sourceConfig = (currentConfig.modelSources || []).find(s => s.id === sourceId); // 从 getConfig() 获取
     log.debug(`[IPC listModels] Found sourceConfig: ${sourceConfig ? JSON.stringify(sourceConfig) : 'Not Found'}`); // Keep this debug for now
     if (!sourceConfig) {
         log.warn(`[IPC listModels] 未找到数据源配置: ${sourceId}`);
@@ -93,9 +96,10 @@ function initializeModelLibraryIPC(config) {
 
   // --- Subdirectory Listing ---
   ipcMain.handle('listSubdirectories', async (event, { sourceId }) => {
-    const sourceConfig = (config.modelSources || []).find(s => s.id === sourceId);
+    const currentConfig = getConfig();
+    const sourceConfig = (currentConfig.modelSources || []).find(s => s.id === sourceId); // 从 getConfig() 获取
      if (!sourceConfig) {
-        log.warn(`[IPC listSubdirectories] 未找到数据源配置: ${sourceId}`);
+        log.warn(`[IPC listSubdirectories] 未找到数据源配置: ${sourceId} in config:`, currentConfig);
         return [];
     }
     try {
@@ -109,9 +113,10 @@ function initializeModelLibraryIPC(config) {
 
   // --- Model Detail Fetching ---
   ipcMain.handle('getModelDetail', async (event, { sourceId, jsonPath }) => {
-    const sourceConfig = (config.modelSources || []).find(s => s.id === sourceId);
+    const currentConfig = getConfig();
+    const sourceConfig = (currentConfig.modelSources || []).find(s => s.id === sourceId); // 从 getConfig() 获取
     if (!sourceConfig) {
-        log.warn(`[IPC getModelDetail] 未找到数据源配置: ${sourceId}`);
+        log.warn(`[IPC getModelDetail] 未找到数据源配置: ${sourceId} in config:`, currentConfig);
         return {}; // Return empty object as before
     }
     try {
@@ -127,9 +132,10 @@ function initializeModelLibraryIPC(config) {
 
   // --- Model Image Fetching ---
   ipcMain.handle('getModelImage', async (event, { sourceId, imagePath }) => {
-    const sourceConfig = (config.modelSources || []).find(s => s.id === sourceId);
+    const currentConfig = getConfig();
+    const sourceConfig = (currentConfig.modelSources || []).find(s => s.id === sourceId); // 从 getConfig() 获取
     if (!sourceConfig) {
-      log.error(`[ImageLoader] 未找到数据源配置: ${sourceId}`);
+      log.error(`[ImageLoader] 未找到数据源配置: ${sourceId} in config:`, currentConfig);
       return null;
     }
 
