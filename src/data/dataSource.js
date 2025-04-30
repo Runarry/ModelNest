@@ -33,12 +33,12 @@ class LocalDataSource extends DataSource {
       // Check existence using access
       await fs.promises.access(root);
       const entries = await fs.promises.readdir(root, { withFileTypes: true });
+      const duration = Date.now() - startTime;
+      log.info(`[LocalDataSource] 列出子目录完成: ${root}, 耗时: ${duration}ms, 找到 ${entries.filter(e => e.isDirectory()).length} 个子目录`);
       return entries
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name);
-      const duration = Date.now() - startTime;
-      log.info(`[LocalDataSource] 列出子目录完成: ${root}, 耗时: ${duration}ms, 找到 ${entries.filter(e => e.isDirectory()).length} 个子目录`);
-      return entries.filter(entry => entry.isDirectory()).map(entry => entry.name);
+
     } catch (error) {
       const duration = Date.now() - startTime;
       // If directory doesn't exist (ENOENT), return empty array, otherwise log error
