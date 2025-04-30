@@ -63,26 +63,62 @@ document.addEventListener('DOMContentLoaded', async () => {
     languageSelect.value = getCurrentLocale();
   }
 
-  // Set initial texts based on loaded locale
-  function setStaticI18nTexts() {
-      // Only set texts not handled by specific modules during their rendering
-      document.getElementById('appTitle').textContent = t('appTitle');
-      document.getElementById('cardViewBtn').title = t('viewCard');
-      document.getElementById('listViewBtn').title = t('viewList');
-      document.getElementById('loadingModels').textContent = t('loadingModels');
-      document.getElementById('settingsBtn').title = t('settings.title');
-      // Detail Model image alt is set dynamically within detail-Model
-      // Settings/SourceEdit Model static texts are set within their respective modules if needed,
-      // but ideally defined directly in index.html with data-i18n attributes.
-      // Let's assume most static texts are now in HTML or handled by modules.
+  // Update UI elements with data-i18n attributes
+  function updateUIWithTranslations() {
+    window.api.logMessage('debug', '[Renderer] 开始更新 UI 翻译...');
+    const elements = document.querySelectorAll('[data-i18n-key]');
+    elements.forEach(el => {
+      const key = el.getAttribute('data-i18n-key');
+      const translation = t(key);
+      if (translation !== key) { // Only update if translation exists
+        // Handle common properties
+        if (el.hasAttribute('value')) { // Input fields, buttons
+            el.value = translation;
+        } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+             // Fallback for inputs without value attr? Unlikely needed but safe.
+             el.textContent = translation; // Or maybe placeholder? See below.
+        }
+        else { // Spans, divs, buttons, etc.
+            el.textContent = translation;
+        }
+      } else {
+        window.api.logMessage('warn', `[i18n] 翻译 key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
+      }
+    });
+
+    // Handle title attributes specifically
+    const titleElements = document.querySelectorAll('[data-i18n-title-key]');
+    titleElements.forEach(el => {
+        const key = el.getAttribute('data-i18n-title-key');
+        const translation = t(key);
+        if (translation !== key) {
+            el.title = translation;
+        } else {
+             window.api.logMessage('warn', `[i18n] 翻译 title key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
+        }
+    });
+
+     // Handle placeholder attributes specifically
+     const placeholderElements = document.querySelectorAll('[data-i18n-placeholder-key]');
+     placeholderElements.forEach(el => {
+         const key = el.getAttribute('data-i18n-placeholder-key');
+         const translation = t(key);
+         if (translation !== key) {
+             el.placeholder = translation;
+         } else {
+              window.api.logMessage('warn', `[i18n] 翻译 placeholder key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
+         }
+     });
+     window.api.logMessage('debug', '[Renderer] UI 翻译更新完成');
   }
+
 
   // Load initial locale and set up listener
   try {
       window.api.logMessage('debug', `[Renderer] 加载初始区域设置: ${getCurrentLocale()}`);
       await loadLocale(getCurrentLocale());
       renderLanguageOptions();
-      setStaticI18nTexts(); // Set initial static texts
+      updateUIWithTranslations(); // Apply translations using the new function
       window.api.logMessage('info', "[Renderer] i18n 初始化完成");
   } catch (error) {
        // Task 1: Error Logging
@@ -98,10 +134,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         await loadLocale(newLocale);
         // Re-render necessary parts or reload data
-        setStaticI18nTexts(); // Update static texts
-        // Reloading data will trigger re-renders in modules which use 't'
-        await loadInitialData(); // Reload data to apply new translations in dynamic content
-        // Potentially notify modules if they need explicit refresh beyond data reload
+        updateUIWithTranslations(); // Update UI with new translations
+        // Reloading data might still be necessary if dynamic content relies on locale-specific data fetching/formatting
+        // but for pure text translation, updateUIWithTranslations should handle most cases.
+        // Let's keep loadInitialData for now as it might re-render components using t() internally.
+        await loadInitialData();
         window.api.logMessage('info', `[Renderer] 语言切换成功: ${newLocale}`);
     } catch (error) {
          // Task 1: Error Logging

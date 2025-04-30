@@ -5,6 +5,16 @@
   "viewList": "列表视图",
   "filterAll": "全部",
   "uncategorized": "未分类",
+  "tooltip": {
+    "toggleTheme": "切换主题",
+    "settings": "设置"
+  },
+  "directory": {
+    "title": "目录"
+  },
+  "main": {
+    "labelModelSource": "模型库:"
+  },
   "detail": {
     "type": "类型:",
     "filePath": "文件路径:",
@@ -26,6 +36,7 @@
     "loading": "正在加载设置...",
     "cancel": "取消",
     "save": "保存设置",
+    "placeholderText": "配置选项将显示在此处。",
     "loadError": "加载设置失败: {message}",
     "saveSuccess": "设置保存成功！",
     "saveError": "保存设置失败: {message}",
@@ -88,6 +99,11 @@
       "downloading": "下载中... ({progress}%)",
       "install": "下载完成，点击安装",
       "hint": "应用将在后台自动检查更新。"
+    }
+  },
+  "sourceEdit": {
+    "error": {
+      "saveCallbackUndefined": "内部错误：保存回调未设置。"
     }
   }
 }

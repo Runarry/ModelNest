@@ -5,6 +5,16 @@
   "viewList": "List View",
   "filterAll": "All",
   "uncategorized": "Uncategorized",
+  "tooltip": {
+    "toggleTheme": "Toggle Theme",
+    "settings": "Settings"
+  },
+  "directory": {
+    "title": "Directory"
+  },
+  "main": {
+    "labelModelSource": "Model Source:"
+  },
   "detail": {
     "type": "Type:",
     "filePath": "File Path:",
@@ -26,6 +36,7 @@
     "loading": "Loading settings...",
     "cancel": "Cancel",
     "save": "Save Settings",
+    "placeholderText": "Configuration options will appear here.",
     "loadError": "Failed to load settings: {message}",
     "saveSuccess": "Settings saved successfully!",
     "saveError": "Failed to save settings: {message}",
@@ -88,6 +99,11 @@
       "downloading": "Downloading... ({progress}%)",
       "install": "Download complete, click to install",
       "hint": "The application will automatically check for updates in the background."
+    }
+  },
+  "sourceEdit": {
+    "error": {
+      "saveCallbackUndefined": "Internal error: Save callback is not set."
     }
   }
 }

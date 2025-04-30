@@ -238,7 +238,7 @@ function handleSourceEditFormSubmit(event) {
     if (!_onSaveCallback) {
          // Task 1: Error Logging
         api.logMessage('error', "[SourceEditModel] 保存失败：_onSaveCallback 未定义");
-        showFeedback(sourceEditFeedbackEl, '内部错误：保存回调未设置', 'error'); // Provide generic user feedback
+        showFeedback(sourceEditFeedbackEl, t('sourceEdit.error.saveCallbackUndefined'), 'error'); // Provide generic user feedback
         return;
     }
 

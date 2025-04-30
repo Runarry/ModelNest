@@ -11,14 +11,14 @@
 <body>
   <div id="app">
     <nav class="top-menu-bar">
-      <h1 id="appTitle"></h1>
+      <h1 id="appTitle" data-i18n-key="appTitle"></h1>
       <!-- Source selector removed from top bar -->
       <div class="settings-controls">
         <select id="languageSelect" class="lang-select"></select>
-        <button id="themeToggleBtn" class="view-btn" title="Toggle Theme">
+        <button id="themeToggleBtn" class="view-btn">
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
         </button>
-        <button id="settingsBtn" class="view-btn" title="Settings"> <!-- Title will be set by JS -->
+        <button id="settingsBtn" class="view-btn" > 
           <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         </button> <!-- id="settingsBtn" already exists -->
       </div>
@@ -30,7 +30,7 @@
         <div class="content-layout">
           <!-- 左侧目录 Tab 栏 -->
           <div id="directoryTabs" class="directory-tabs">
-            <div class="tab-header">目录</div>
+            <div class="tab-header" data-i18n-key="directory.title">目录</div>
             <div class="tab-list"></div>
           </div>
 
@@ -39,7 +39,7 @@
             <!-- Source selector moved into filter-header -->
             <header class="filter-header">
           <div class="source-selector">
-            <label for="sourceSelect" class="content-label">模型库:</label>
+            <label for="sourceSelect" class="content-label" data-i18n-key="main.labelModelSource">模型库:</label>
             <select id="sourceSelect"></select>
           </div>
           <div class="filters">
@@ -59,7 +59,7 @@
 
         <div id="loading">
           <div class="loading-spinner"></div>
-          <span id="loadingModels"></span>
+          <span id="loadingModels"  data-i18n-key="loadingModels"></span>
         </div>
 
         <section id="mainSection">
@@ -83,15 +83,15 @@
     <div id="settingsModel" class="Model">
       <div class="Model-content settings-Model-content"> <!-- Added specific class for sizing -->
         <button id="settingsClose" class="Model-close">&times;</button>
-        <h2 id="settingsTitle" class="Model-title">Settings</h2> <!-- id="settingsTitle" already exists -->
+        <h2 id="settingsTitle" class="Model-title" data-i18n-key="settings.title">Settings</h2> <!-- id="settingsTitle" already exists -->
         <form id="settingsForm" class="settings-form">
           <!-- Configuration form elements will go here -->
-          <p>Configuration options will appear here.</p>
+          <p data-i18n-key="settings.placeholderText">Configuration options will appear here.</p>
         </form>
         <div id="settingsFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
         <div class="Model-actions">
-          <button type="button" id="settingsCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Ensure type="button" -->
-          <button type="button" id="settingsSaveBtn" class="btn btn-primary">Save</button> <!-- Ensure type="button" -->
+          <button type="button" id="settingsCancelBtn" class="btn btn-secondary" data-i18n-key="settings.cancel">Cancel</button> <!-- Ensure type="button" -->
+          <button type="button" id="settingsSaveBtn" class="btn btn-primary" data-i18n-key="settings.save">Save</button> <!-- Ensure type="button" -->
         </div>
       </div>
     </div>
@@ -100,44 +100,44 @@
     <div id="sourceEditModel" class="Model">
       <div class="Model-content source-edit-Model-content">
         <button id="sourceEditClose" class="Model-close">&times;</button>
-        <h2 id="sourceEditTitle" class="Model-title">Add/Edit Model Source</h2> <!-- id="sourceEditTitle" already exists -->
+        <h2 id="sourceEditTitle" class="Model-title">Add/Edit Model Source</h2> <!-- id="sourceEditTitle" already exists - text set by JS -->
         <form id="sourceEditForm">
           <input type="hidden" id="sourceEditId"> <!-- Hidden field for editing existing source ID -->
 
           <div class="form-group">
-            <label for="sourceEditName" id="labelSourceEditName">Name</label>
+            <label for="sourceEditName" id="labelSourceEditName" data-i18n-key="settings.modelSources.nameLabel">Name</label>
             <input type="text" id="sourceEditName" required>
           </div>
 
           <div class="form-group">
-            <label for="sourceEditType" id="labelSourceEditType">Type</label>
+            <label for="sourceEditType" id="labelSourceEditType" data-i18n-key="settings.modelSources.typeLabel">Type</label>
             <select id="sourceEditType" required>
-              <option value="local" id="optionSourceEditTypeLocal">Local Folder</option>
-              <option value="webdav" id="optionSourceEditTypeWebdav">WebDAV</option>
+              <option value="local" id="optionSourceEditTypeLocal" data-i18n-key="settings.modelSources.typeLocal">Local Folder</option>
+              <option value="webdav" id="optionSourceEditTypeWebdav" data-i18n-key="settings.modelSources.typeWebdav">WebDAV</option>
             </select>
           </div>
 
           <!-- Fields for Local Type -->
           <div id="sourceEditLocalFields" class="form-group source-type-fields">
-            <label for="sourceEditPath" id="labelSourceEditPath">Folder Path</label>
+            <label for="sourceEditPath" id="labelSourceEditPath" data-i18n-key="settings.modelSources.pathLabel">Folder Path</label>
             <div class="input-group">
               <input type="text" id="sourceEditPath" required>
-              <button type="button" id="sourceEditBrowseBtn" class="btn btn-secondary">Browse...</button> <!-- id="sourceEditBrowseBtn" already exists -->
+              <button type="button" id="sourceEditBrowseBtn" class="btn btn-secondary" data-i18n-key="settings.modelSources.browse">Browse...</button> <!-- id="sourceEditBrowseBtn" already exists -->
             </div>
           </div>
 
           <!-- Fields for WebDAV Type -->
           <div id="sourceEditWebdavFields" class="form-group source-type-fields" style="display: none;">
             <div class="form-group">
-              <label for="sourceEditUrl" id="labelSourceEditUrl">WebDAV URL</label>
+              <label for="sourceEditUrl" id="labelSourceEditUrl" data-i18n-key="settings.modelSources.urlLabel">WebDAV URL</label>
               <input type="url" id="sourceEditUrl" required>
             </div>
             <div class="form-group">
-              <label for="sourceEditUsername" id="labelSourceEditUsername">Username</label>
+              <label for="sourceEditUsername" id="labelSourceEditUsername" data-i18n-key="settings.modelSources.usernameLabel">Username</label>
               <input type="text" id="sourceEditUsername">
             </div>
             <div class="form-group">
-              <label for="sourceEditPassword" id="labelSourceEditPassword">Password</label>
+              <label for="sourceEditPassword" id="labelSourceEditPassword" data-i18n-key="settings.modelSources.passwordLabel">Password</label>
               <input type="password" id="sourceEditPassword">
             </div>
           </div>
@@ -145,8 +145,8 @@
         </form>
         <div id="sourceEditFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
         <div class="Model-actions">
-          <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary">Cancel</button> <!-- Already type="button" -->
-          <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm">Save Source</button> <!-- type="submit" is correct here -->
+          <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary" data-i18n-key="settings.cancel">Cancel</button> <!-- Already type="button" -->
+          <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm" data-i18n-key="settings.modelSources.saveSource">Save Source</button> <!-- type="submit" is correct here -->
         </div>
       </div>
     </div>
