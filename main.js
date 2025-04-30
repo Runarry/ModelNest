@@ -4,14 +4,11 @@ const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dial
 const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
 const fs = require('fs');
-const { LocalDataSource } = require('./src/data/dataSource');
-const { WebDavDataSource } = require('./src/data/webdavDataSource');
+
 const imageCache = require('./src/common/imageCache');
 const os = require('os');
 const crypto = require('crypto');
 const log = require('electron-log');
-const { parseLocalModels, parseModelDetailFromJsonContent, prepareModelDataForSaving } = require('./src/data/modelParser'); // 添加导入
-const { writeModelJson } = require('./src/data/dataSourceInterface'); // <--- 导入新的接口函数
 
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the new initializer
 const { setConfig, getConfig } = require('./src/configManager.js'); // Import config manager functions
