@@ -43,7 +43,7 @@ export function initMainView(config, showDetailCallback) {
 
     if (!sourceSelect || !filterSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer) {
         // Task 1: Error Logging
-        console.error("[MainView] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID/选择器:", config);
+        api.logMessage('error', "[MainView] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID/选择器:", config);
         return;
     }
 
@@ -52,11 +52,11 @@ export function initMainView(config, showDetailCallback) {
     filterSelect.addEventListener('change', handleFilterChange); // Logged within handler
     // Task 4: Click Event Logging
     cardViewBtn.addEventListener('click', () => {
-        console.log('[UI] 点击了卡片视图按钮');
+        api.logMessage('info', '[UI] 点击了卡片视图按钮');
         switchViewMode('card');
     });
     listViewBtn.addEventListener('click', () => {
-        console.log('[UI] 点击了列表视图按钮');
+        api.logMessage('info', '[UI] 点击了列表视图按钮');
         switchViewMode('list');
     });
 
@@ -75,7 +75,7 @@ export function initMainView(config, showDetailCallback) {
 
 // Internal reference to the showDetail function provided by the main module
 let _showDetail = (model) => {
-    console.warn("showDetailCallback not initialized in main-view.js");
+    api.logMessage('warn', "showDetailCallback not initialized in main-view.js");
 };
 
 
@@ -89,7 +89,7 @@ let _showDetail = (model) => {
  */
 export async function loadModels(sourceId, directory = null) {
   const startTime = Date.now();
-  console.log(`[MainView] 开始加载模型: sourceId=${sourceId}, directory=${directory ?? 'root'}`);
+  api.logMessage('info', `[MainView] 开始加载模型: sourceId=${sourceId}, directory=${directory ?? 'root'}`);
   setLoading(true);
   currentSourceId = sourceId; // Update current source ID
   currentDirectory = directory; // Update current directory
@@ -100,19 +100,19 @@ export async function loadModels(sourceId, directory = null) {
     modelCount = models.length;
     // If loading the root directory, also fetch subdirectories
     if (directory === null) {
-      console.debug(`[MainView] 加载根目录，同时获取子目录: sourceId=${sourceId}`);
+      api.logMessage('debug', `[MainView] 加载根目录，同时获取子目录: sourceId=${sourceId}`);
       subdirectories = await window.api.listSubdirectories(sourceId);
       subdirCount = subdirectories.length;
-      console.debug(`[MainView] 获取到 ${subdirCount} 个子目录`);
+      api.logMessage('debug', `[MainView] 获取到 ${subdirCount} 个子目录`);
       renderDirectoryTabs(); // Render tabs only when loading root
     }
     renderFilterTypes(); // Update filters based on loaded models
     renderModels(); // Render the models
     const duration = Date.now() - startTime;
-    console.log(`[MainView] 模型加载成功: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms, 模型数: ${modelCount}, 子目录数: ${subdirCount}`);
+    api.logMessage('info', `[MainView] 模型加载成功: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms, 模型数: ${modelCount}, 子目录数: ${subdirCount}`);
   } catch (e) {
     const duration = Date.now() - startTime;
-    console.error(`[MainView] 加载模型失败: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms`, e.message, e.stack, e);
+    api.logMessage('error', `[MainView] 加载模型失败: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms`, e.message, e.stack, e);
     models = []; // Clear models on error
     subdirectories = []; // Clear subdirectories on error
     renderModels(); // Render empty list
@@ -268,7 +268,7 @@ function renderModels() {
         moreBtn.textContent = t('showMore');
         moreBtn.onclick = (event) => {
           // Task 4: Click Event Logging
-          console.log(`[UI] 点击了模型 "${model.name}" 的 "显示更多/更少" 标签按钮`);
+          api.logMessage('info', `[UI] 点击了模型 "${model.name}" 的 "显示更多/更少" 标签按钮`);
           event.stopPropagation();
           const container = event.target.closest('.tags-container');
           const isExpanded = container.classList.toggle('expanded');
@@ -282,13 +282,13 @@ function renderModels() {
     // --- Click Event ---
     card.addEventListener('click', () => {
         // Task 4: Click Event Logging
-        console.log(`[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
+        api.logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
         // Call the callback provided during initialization
         if (_showDetail) {
             _showDetail(model);
         } else {
             // Task 1: Error Logging (Potential failure point)
-            console.error('[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
+            api.logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
         }
     });
 
@@ -302,7 +302,7 @@ function renderDirectoryTabs() {
   if (!directoryTabsContainer) return;
   const tabList = directoryTabsContainer.querySelector('.tab-list'); // Assuming a .tab-list inside
   if (!tabList) {
-      console.warn("'.tab-list' not found within directory tabs container:", directoryTabsContainer);
+      api.logMessage('warn', "'.tab-list' not found within directory tabs container:", directoryTabsContainer);
       return;
   }
 
@@ -314,7 +314,7 @@ function renderDirectoryTabs() {
   allTab.textContent = t('all'); // Use translation key 'all'
   allTab.onclick = () => {
     // Task 4: Click Event Logging
-    console.log(`[UI] 点击了目录标签: "全部" (Source: ${currentSourceId})`);
+    api.logMessage('info', `[UI] 点击了目录标签: "全部" (Source: ${currentSourceId})`);
     if (currentDirectory !== null) {
       setActiveTab(allTab);
       loadModels(currentSourceId, null); // Load root directory
@@ -330,7 +330,7 @@ function renderDirectoryTabs() {
     tab.textContent = dir; // Directory names likely don't need translation
     tab.onclick = () => {
       // Task 4: Click Event Logging
-      console.log(`[UI] 点击了目录标签: "${dir}" (Source: ${currentSourceId})`);
+      api.logMessage('info', `[UI] 点击了目录标签: "${dir}" (Source: ${currentSourceId})`);
       if (currentDirectory !== dir) {
         setActiveTab(tab);
         loadModels(currentSourceId, dir); // Load specific directory
@@ -357,19 +357,19 @@ function setActiveTab(activeTabElement) {
 /** Handles the change event for the source select dropdown. */
 async function handleSourceChange() {
   if (!sourceSelect) {
-      console.warn('[MainView] handleSourceChange: sourceSelect 元素不存在');
+      api.logMessage('warn', '[MainView] handleSourceChange: sourceSelect 元素不存在');
       return;
   }
   const selectedSourceId = sourceSelect.value;
   // Task 4: Click Event Logging (Implicit via change)
-  console.log(`[UI] 切换数据源: ${selectedSourceId || '无'} (选择器值: ${sourceSelect.options[sourceSelect.selectedIndex]?.text})`);
+  api.logMessage('info', `[UI] 切换数据源: ${selectedSourceId || '无'} (选择器值: ${sourceSelect.options[sourceSelect.selectedIndex]?.text})`);
   if (selectedSourceId) {
     // Reset directory and load models for the new source
     // loadModels already has logging
     await loadModels(selectedSourceId, null);
   } else {
       // Handle case where no source is selected (e.g., empty list)
-      console.log('[MainView] 没有选择数据源，清空视图');
+      api.logMessage('info', '[MainView] 没有选择数据源，清空视图');
       models = [];
       subdirectories = [];
       renderModels();
@@ -381,22 +381,22 @@ async function handleSourceChange() {
 /** Handles the change event for the filter select dropdown. */
 function handleFilterChange() {
   if (!filterSelect) {
-      console.warn('[MainView] handleFilterChange: filterSelect 元素不存在');
+      api.logMessage('warn', '[MainView] handleFilterChange: filterSelect 元素不存在');
       return;
   }
   const newFilterType = filterSelect.value;
   // Task 4: Click Event Logging (Implicit via change)
-  console.log(`[UI] 切换模型类型过滤器: "${newFilterType || '全部'}"`);
+  api.logMessage('info', `[UI] 切换模型类型过滤器: "${newFilterType || '全部'}"`);
   if (filterType !== newFilterType) {
     filterType = newFilterType;
     setLoading(true); // Show loading indicator briefly for visual feedback
     // Use setTimeout to allow the loading indicator to render before blocking the thread
     setTimeout(() => {
-      console.debug('[MainView] 开始渲染过滤后的模型');
+      api.logMessage('debug', '[MainView] 开始渲染过滤后的模型');
       const renderStart = Date.now();
       renderModels();
       const renderEnd = Date.now();
-      console.debug(`[MainView] 渲染过滤后的模型完成, 耗时: ${renderEnd - renderStart}ms`);
+      api.logMessage('debug', `[MainView] 渲染过滤后的模型完成, 耗时: ${renderEnd - renderStart}ms`);
       setLoading(false);
     }, 10); // Shorter delay, just enough to yield
   }
@@ -406,7 +406,7 @@ function handleFilterChange() {
 function switchViewMode(newMode) {
   if (displayMode !== newMode) {
     // Task 4: Click Event Logging (Handled by callers)
-    console.log(`[UI] 切换视图模式到: ${newMode}`);
+    api.logMessage('info', `[UI] 切换视图模式到: ${newMode}`);
     displayMode = newMode;
     // Update button active states
     if (newMode === 'card') {

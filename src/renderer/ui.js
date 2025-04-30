@@ -5,10 +5,10 @@ export function initThemeSwitcher() {
 
   if (!themeToggleBtn) {
     // Task 1: Error Logging
-    console.error('[UI] 初始化主题切换器失败：找不到按钮 #themeToggleBtn');
+    api.logMessage('error', '[UI] 初始化主题切换器失败：找不到按钮 #themeToggleBtn');
     return; // Exit if the button doesn't exist
   }
-  console.log('[UI] 初始化主题切换器');
+  api.logMessage('info', '[UI] 初始化主题切换器');
 
   // Define SVG icons for light/dark mode for consistency with other buttons
   const moonIcon = `<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>`;
@@ -22,7 +22,7 @@ export function initThemeSwitcher() {
     const html = document.documentElement;
     const currentTheme = html.getAttribute('data-theme');
     const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-    console.log(`[UI] 点击了主题切换按钮，切换到 ${newTheme} 模式`);
+    api.logMessage('info', `[UI] 点击了主题切换按钮，切换到 ${newTheme} 模式`);
 
     html.setAttribute('data-theme', newTheme);
     themeToggleBtn.innerHTML = newTheme === 'dark' ? sunIcon : moonIcon; // Use SVG icons
@@ -33,7 +33,7 @@ export function initThemeSwitcher() {
       console.debug(`[UI] 主题偏好已保存到 localStorage: ${newTheme}`);
     } catch (e) {
        // Task 1: Error Logging
-      console.error('[UI] 保存主题偏好到 localStorage 失败:', e.message, e.stack, e);
+      api.logMessage('error', '[UI] 保存主题偏好到 localStorage 失败:', e.message, e.stack, e);
     }
   });
 
@@ -44,13 +44,13 @@ export function initThemeSwitcher() {
     console.debug(`[UI] 从 localStorage 读取到主题偏好: ${savedTheme}`);
     document.documentElement.setAttribute('data-theme', savedTheme);
     themeToggleBtn.innerHTML = savedTheme === 'dark' ? sunIcon : moonIcon; // Set initial icon
-    console.log(`[UI] 应用初始主题: ${savedTheme}`);
+    api.logMessage('info', `[UI] 应用初始主题: ${savedTheme}`);
   } catch (e) {
      // Task 1: Error Logging
-    console.error('[UI] 从 localStorage 读取主题偏好失败:', e.message, e.stack, e);
+    api.logMessage('error', '[UI] 从 localStorage 读取主题偏好失败:', e.message, e.stack, e);
     // Set default icon if storage fails
     themeToggleBtn.innerHTML = moonIcon;
     document.documentElement.setAttribute('data-theme', 'light');
-     console.warn('[UI] 应用默认主题: light');
+     api.logMessage('warn', '[UI] 应用默认主题: light');
   }
 }
