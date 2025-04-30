@@ -1,4 +1,4 @@
-import { clearChildren, setLoading, imageObserver, loadImage } from './ui-utils.js';
+import { clearChildren, setLoading, imageObserver, loadImage } from '../utils/ui-utils.js';
 
 // Assume i18n is initialized and 't' is available globally or passed/imported
 const t = window.i18n?.t || ((key) => key); // Fallback if i18n isn't ready/global

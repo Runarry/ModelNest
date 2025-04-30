@@ -1,4 +1,4 @@
-import { showFeedback, clearFeedback, clearChildren } from './ui-utils.js';
+import { showFeedback, clearFeedback, clearChildren } from '../utils/ui-utils.js';
 import { openSourceEditModel, initSourceEditModel } from './source-edit-model.js'; // Import functions for the sub-Model
 
 // Assume i18n is initialized and 't' is available globally or passed/imported

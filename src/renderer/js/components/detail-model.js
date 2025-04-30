@@ -1,4 +1,4 @@
-import { loadImage } from './ui-utils.js'; // Assuming loadImage handles API call and blob creation
+import { loadImage } from '../utils/ui-utils.js'; // Assuming loadImage handles API call and blob creation
 
 // Assume i18n is initialized and 't' is available globally or passed/imported
 const t = window.i18n?.t || ((key) => key); // Fallback

@@ -1,4 +1,4 @@
-import { showFeedback, clearFeedback } from './ui-utils.js';
+import { showFeedback, clearFeedback } from '../utils/ui-utils.js';
 
 // Assume i18n is initialized and 't' is available globally or passed/imported
 const t = window.i18n?.t || ((key) => key); // Fallback

@@ -1,10 +1,10 @@
 // Import necessary initialization functions and utilities
-import { initThemeSwitcher } from './ui.js';
-import { initMainView, loadModels as loadModelsForView, renderSources } from './main-view.js';
-import { initDetailModel, showDetailModel, hideDetailModel } from './detail-model.js';
-import { initSettingsModel } from './settings-model.js';
+import { initThemeSwitcher } from './js/utils/theme.js';
+import { initMainView, loadModels as loadModelsForView, renderSources } from './js/components/main-view.js';
+import { initDetailModel, showDetailModel, hideDetailModel } from './js/components/detail-model.js';
+import { initSettingsModel } from './js/components/settings-model.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
-import { setLoading } from './ui-utils.js';
+import { setLoading } from './js/utils/ui-utils.js';
 
 // 全局错误与未处理 Promise 拒绝上报到主进程日志
 window.onerror = function (message, source, lineno, colno, error) {
