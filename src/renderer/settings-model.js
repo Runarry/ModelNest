@@ -51,6 +51,10 @@ export function initSettingsModel(config, sourceEditModelConfig) {
         return;
     }
 
+    // Set initial button text using translations
+    settingsSaveBtn.textContent = t('settings.save');
+    settingsCancelBtn.textContent = t('settings.cancel');
+
     // Initialize the source edit Model (it's controlled from here)
     initSourceEditModel(sourceEditModelConfig, handleSourceSaved); // Pass the callback
 
