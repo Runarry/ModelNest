@@ -11,6 +11,7 @@ const os = require('os');
 const crypto = require('crypto');
 const log = require('electron-log');
 const { parseLocalModels, parseModelDetailFromJsonContent, prepareModelDataForSaving } = require('./src/data/modelParser'); // 添加导入
+const { writeModelJson } = require('./src/data/dataSourceInterface'); // <--- 导入新的接口函数
 
 let mainWindow; // Declare mainWindow globally
 let config = null;
@@ -267,9 +268,18 @@ app.whenReady().then(async () => { // 改为 async 回调
 
       // 4. 序列化准备好的数据
       const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
-      log.debug(`[IPC saveModel] 准备写入序列化后的数据到: ${model.jsonPath}`, dataToWrite); // Log the exact data being written
-      await fs.promises.writeFile(model.jsonPath, dataToWrite, 'utf-8');
-      log.info('[IPC] 模型保存成功', { jsonPath: model.jsonPath });
+      log.debug(`[IPC saveModel] 准备写入序列化后的数据到: ${model.jsonPath}`); // Log the exact data being written (removed dataToWrite for brevity)
+
+      // 查找对应的 sourceConfig
+      const sourceConfig = (config.modelSources || []).find(s => s.id === model.sourceId);
+      if (!sourceConfig) {
+          log.error(`[IPC saveModel] 未找到源配置 ID: ${model.sourceId}`);
+          throw new Error(`Configuration for source ID ${model.sourceId} not found.`);
+      }
+
+      // 使用新的接口函数写入，传入 sourceConfig
+      await writeModelJson(sourceConfig, model, dataToWrite);
+      log.info('[IPC saveModel] 模型保存成功', { sourceId: model.sourceId, jsonPath: model.jsonPath });
       return { success: true }; // Indicate success back to the renderer
     } catch (error) {
       log.error('[IPC] 保存模型失败:', error.message, error.stack, { model });
@@ -306,6 +316,16 @@ ipcMain.on('log-message', (event, level, message, ...args) => {
     log.info(`[Renderer] [${level.toUpperCase()}] ${message}`, ...args);
   }
 });
+
+
+// 应用初始化函数
+async function initializeApp() {
+  log.info('[Lifecycle] 应用初始化开始');
+  await loadConfig(); // 加载配置
+  createWindow(); // 创建窗口
+}
+
+app.whenReady().then(initializeApp); // 应用准备就绪后执行初始化
 
 
 app.on('window-all-closed', async function () {

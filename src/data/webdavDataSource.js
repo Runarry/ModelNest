@@ -211,6 +211,57 @@ class WebDavDataSource extends DataSource {
       return null;
     }
   }
+async writeModelJson(filePath, dataToWrite) {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+    if (!filePath) {
+      log.error('[WebDavDataSource] writeModelJson called with empty filePath.');
+      throw new Error('File path cannot be empty for WebDAV write.');
+    }
+    if (typeof dataToWrite !== 'string') {
+        log.error('[WebDavDataSource] writeModelJson called with non-string dataToWrite:', typeof dataToWrite);
+        throw new Error('Invalid data provided for writing (must be a string).');
+    }
+    log.info(`[WebDavDataSource] Attempting to write model JSON to WebDAV: ${filePath}`);
+
+    try {
+      // Extract directory path using posix path separator as WebDAV uses URLs
+      const dirPath = path.posix.dirname(filePath);
+
+      // Check if directory exists and create if not
+      // Note: Some WebDAV servers might implicitly create directories on PUT,
+      // but explicitly checking/creating is safer.
+      try {
+        await this.client.stat(dirPath);
+        log.debug(`[WebDavDataSource] Parent directory ${dirPath} exists.`);
+      } catch (statError) {
+        // If directory doesn't exist (usually 404), try to create it
+        if (statError.response && statError.response.status === 404) {
+          log.info(`[WebDavDataSource] Parent directory ${dirPath} does not exist, attempting to create...`);
+          // Use { recursive: true } if your webdav client library supports it,
+          // otherwise, you might need to create parent directories iteratively.
+          // The 'webdav' library used here seems to support recursive creation implicitly
+          // when creating a directory path like /a/b/c.
+          await this.client.createDirectory(dirPath);
+          log.info(`[WebDavDataSource] Successfully created directory ${dirPath}`);
+        } else {
+          // Re-throw other stat errors
+          log.error(`[WebDavDataSource] Error checking directory ${dirPath}:`, statError.message, statError.stack, statError.response?.status);
+          throw statError;
+        }
+      }
+
+      // Write the file content
+      await this.client.putFileContents(filePath, dataToWrite, { overwrite: true });
+      const duration = Date.now() - startTime;
+      log.info(`[WebDavDataSource] Successfully wrote model JSON to WebDAV: ${filePath}, 耗时: ${duration}ms`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      log.error(`[WebDavDataSource] Failed to write model JSON to WebDAV: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
+      // Re-throw the error for the interface to handle
+      throw error;
+    }
+  }
 }
 
 module.exports = {
