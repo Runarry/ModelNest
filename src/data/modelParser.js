@@ -33,10 +33,13 @@ function parseLocalModels(dir, supportedExtensions) {
       const jsonFile = files.find(f => f === `${base}.json`) || '';
       let detail = {};
       if (jsonFile) {
+        const jsonFullPath = path.join(dir, jsonFile);
         try {
-          detail = JSON.parse(fs.readFileSync(path.join(dir, jsonFile), 'utf-8'));
+          const jsonContent = fs.readFileSync(jsonFullPath, 'utf-8');
+          detail = parseModelDetailFromJsonContent(jsonContent, jsonFullPath); // 使用新函数
         } catch (e) {
-          log.error(`[modelParser] 解析模型 JSON 失败: ${path.join(dir, jsonFile)}`, e.message, e.stack);
+          // 读取文件本身的错误（例如权限问题）
+          log.error(`[modelParser] 读取模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
           detail = {};
         }
       }
@@ -58,6 +61,61 @@ function parseLocalModels(dir, supportedExtensions) {
   return models;
 }
 
+// 新增：从 JSON 字符串安全解析模型详情
+function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier = '字符串') {
+  try {
+    return JSON.parse(jsonContent);
+  } catch (e) {
+    log.error(`[modelParser] 解析来自 "${sourceIdentifier}" 的 JSON 内容失败`, e.message, e.stack);
+    return {}; // 返回空对象表示解析失败
+  }
+}
+
+
+// 新增：为 WebDAV 数据源创建模型对象
+function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, parsedJsonDetail, sourceId) {
+  // 从 webdavDataSource.js 移动过来的逻辑，并适配参数
+  const base = path.basename(modelFileItem.filename, path.extname(modelFileItem.filename));
+  const modelObj = {
+    id: `${sourceId}::${modelFileItem.filename}`, // 添加唯一 ID
+    sourceId: sourceId, // 添加 sourceId
+    name: base,
+    modelType: parsedJsonDetail.modelType || path.extname(modelFileItem.filename).replace('.', '').toUpperCase(),
+    description: parsedJsonDetail.description || '',
+    image: imageFileItem ? imageFileItem.filename : '', // 使用 imageFileItem
+    file: modelFileItem.filename,
+    jsonPath: jsonFileItem ? jsonFileItem.filename : '', // 使用 jsonFileItem
+    triggerWord: parsedJsonDetail.triggerWord || '',
+    size: modelFileItem.size, // 使用 modelFileItem
+    lastModified: new Date(modelFileItem.lastmod), // 使用 modelFileItem
+    extra: parsedJsonDetail // 使用 parsedJsonDetail
+  };
+  return modelObj;
+}
+
+
+// 准备模型数据用于保存
+function prepareModelDataForSaving(existingData, incomingModelData) {
+  // 合并数据
+  const mergedData = {
+    ...existingData,
+    ...incomingModelData
+  };
+
+  // 清理元数据
+  delete mergedData.id;
+  delete mergedData.sourceId;
+  delete mergedData.jsonPath;
+  delete mergedData.name; // 假设 name 不保存在 JSON 中
+  delete mergedData.file; // 确保不保存文件路径
+  delete mergedData.image; // 确保不保存图像路径
+
+  // 返回清理后的数据
+  return mergedData;
+}
 module.exports = {
-  parseLocalModels
+  parseLocalModels,
+  parseModelDetailFromJsonContent, // 导出新函数
+  createWebDavModelObject, // 导出新创建的函数
+  prepareModelDataForSaving // 导出用于保存模型数据的函数
 };

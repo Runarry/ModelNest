@@ -10,6 +10,7 @@ const imageCache = require('./src/common/imageCache');
 const os = require('os');
 const crypto = require('crypto');
 const log = require('electron-log');
+const { parseLocalModels, parseModelDetailFromJsonContent, prepareModelDataForSaving } = require('./src/data/modelParser'); // 添加导入
 
 let mainWindow; // Declare mainWindow globally
 let config = null;
@@ -260,24 +261,13 @@ app.whenReady().then(async () => { // 改为 async 回调
       //    - Spread the incoming 'model' object from the frontend over it.
       //    - This ensures all fields sent by the frontend (standard and extra)
       //      are included at the top level, overwriting existing values if keys match.
-      const mergedData = {
-        ...existingData, // Load existing data first
-        ...model        // Apply updates and new fields from the frontend model object
-      };
+      // 3. 使用 modelParser 准备要写入的数据（合并和清理）
+      const finalDataToSave = prepareModelDataForSaving(existingData, model);
+      log.debug(`[IPC saveModel] 调用 prepareModelDataForSaving 后准备保存的数据键: ${Object.keys(finalDataToSave)}`);
 
-      // 3. 清理元数据: 从合并后的对象中移除不需要保存到 JSON 文件中的字段
-      delete mergedData.id;       // Internal ID, not part of the model file itself
-      delete mergedData.sourceId; // Identifier for the data source, not part of the model file
-      delete mergedData.jsonPath; // Path to the JSON file, not stored within it
-      delete mergedData.name;     // Assuming 'name' is derived from filename/context, not stored in JSON
-      // 'extra' field is no longer sent by the frontend, so no need to delete it here.
-      // Explicitly remove 'file' and 'image' keys before writing to ensure they are not saved.
-      delete mergedData.file;
-      delete mergedData.image;
-
-      // 4. 写入合并后的完整数据
-      const dataToWrite = JSON.stringify(mergedData, null, 2); // Pretty-print JSON
-      log.debug(`[IPC saveModel] 准备写入合并后的数据到: ${model.jsonPath}`, JSON.stringify(mergedData, null, 2)); // Log the exact data being written
+      // 4. 序列化准备好的数据
+      const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
+      log.debug(`[IPC saveModel] 准备写入序列化后的数据到: ${model.jsonPath}`, dataToWrite); // Log the exact data being written
       await fs.promises.writeFile(model.jsonPath, dataToWrite, 'utf-8');
       log.info('[IPC] 模型保存成功', { jsonPath: model.jsonPath });
       return { success: true }; // Indicate success back to the renderer

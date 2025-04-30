@@ -1,4 +1,4 @@
-const { parseLocalModels } = require('./modelParser');
+const { parseLocalModels, parseModelDetailFromJsonContent } = require('./modelParser'); // 导入新函数
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
@@ -116,10 +116,11 @@ class LocalDataSource extends DataSource {
     try {
       // Check existence using access before reading
       await fs.promises.access(jsonPath);
-      const data = await fs.promises.readFile(jsonPath, 'utf-8');
-      const detail = JSON.parse(data);
+      const jsonContent = await fs.promises.readFile(jsonPath, 'utf-8');
+      const detail = parseModelDetailFromJsonContent(jsonContent, jsonPath); // 使用新函数解析
       const duration = Date.now() - startTime;
-      log.debug(`[LocalDataSource] 读取模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
+      // 日志级别调整为 debug，因为成功读取不一定是 info 级别事件
+      log.debug(`[LocalDataSource] 读取并解析模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
       return detail;
     } catch (error) {
       const duration = Date.now() - startTime;

@@ -1,4 +1,5 @@
 const { DataSource } = require('./dataSource');
+const { parseModelDetailFromJsonContent, createWebDavModelObject } = require('./modelParser'); // 导入 createWebDavModelObject
 const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
 
@@ -97,28 +98,26 @@ class WebDavDataSource extends DataSource {
           if (jsonFile) {
             log.debug(`[WebDavDataSource] 发现 JSON 文件: ${jsonFile.filename}`);
             try {
-              const content = await this.client.getFileContents(jsonFile.filename);
-              detail = JSON.parse(content.toString());
+              const jsonContent = await this.client.getFileContents(jsonFile.filename);
+              detail = parseModelDetailFromJsonContent(jsonContent.toString(), jsonFile.filename); // 使用新函数解析
               log.debug(`[WebDavDataSource] 成功读取并解析 JSON: ${jsonFile.filename}`);
             } catch (e) {
-              log.error(`[WebDavDataSource] 读取或解析 JSON 文件时出错: ${jsonFile?.filename}`, e.message, e.stack, e.response?.status);
+              // 区分读取错误和解析错误（解析错误已在 parseModelDetailFromJsonContent 中处理）
+              log.error(`[WebDavDataSource] 读取 WebDAV JSON 文件时出错: ${jsonFile?.filename}`, e.message, e.stack, e.response?.status);
+              detail = {}; // 确保读取失败时 detail 也是空对象
             }
           } else {
               log.debug(`[WebDavDataSource] 模型 ${base} 未找到对应的 JSON 文件`);
           }
           
-          const modelObj = {
-            name: base,
-            modelType: detail.modelType || path.extname(modelFile.filename).replace('.', '').toUpperCase(),
-            description: detail.description || '',
-            image: image ? image.filename : '',
-            file: modelFile.filename,
-            jsonPath: jsonFile ? jsonFile.filename : '',
-            triggerWord: detail.triggerWord || '',
-            size: modelFile.size,
-            lastModified: new Date(modelFile.lastmod),
-            extra: detail
-          };
+          // 调用新的函数来创建模型对象
+          const modelObj = createWebDavModelObject(
+            modelFile,
+            image,
+            jsonFile,
+            detail,
+            this.config.id // 传递 sourceId
+          );
           allModels.push(modelObj);
         }
         
@@ -171,10 +170,10 @@ class WebDavDataSource extends DataSource {
     }
     log.debug(`[WebDavDataSource] 开始读取模型详情: ${jsonPath}`);
     try {
-      const content = await this.client.getFileContents(jsonPath);
-      const detail = JSON.parse(content.toString());
+      const jsonContent = await this.client.getFileContents(jsonPath);
+      const detail = parseModelDetailFromJsonContent(jsonContent.toString(), jsonPath); // 使用新函数解析
       const duration = Date.now() - startTime;
-      log.debug(`[WebDavDataSource] 读取模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
+      log.debug(`[WebDavDataSource] 读取并解析模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
       return detail;
     } catch (e) {
       const duration = Date.now() - startTime;
