@@ -51,12 +51,13 @@ class LocalDataSource extends DataSource {
     }
   }
 
-  async listModels(directory = null) { // 添加 directory 参数
+  async listModels(directory = null, supportedExts = []) { // 添加 supportedExts 参数
     const startTime = Date.now();
     const root = this.config.path;
     const startPath = directory ? path.join(root, directory) : root; // 确定起始路径
-    const supportedExtensions = this.config.supportedExtensions || [];
-    log.info(`[LocalDataSource] 开始列出模型: ${startPath}`);
+    // 不再从 config 读取，直接使用传入的 supportedExts
+    // const supportedExtensions = this.config.supportedExtensions || [];
+    log.info(`[LocalDataSource] 开始列出模型. Root: ${root}, Directory: ${directory}, Calculated startPath: ${startPath}, SupportedExts: ${supportedExts}`); // 修改日志，添加 supportedExts
 
     try {
       // Check existence using access
@@ -72,20 +73,20 @@ class LocalDataSource extends DataSource {
     }
 
     let allModels = [];
-    // Make walk async
-    const walk = async (dir) => {
+    // Make walk async, pass supportedExts explicitly
+    const walk = async (dir, currentSupportedExts) => { // 参数名改为 currentSupportedExts 避免遮蔽
       try {
         // Use async readdir
         const files = await fs.promises.readdir(dir, { withFileTypes: true });
         // Assuming parseLocalModels remains synchronous. If it becomes async, add await.
-        const modelObjs = parseLocalModels(dir, supportedExtensions);
+        const modelObjs = parseLocalModels(dir, currentSupportedExts); // 使用传入的 currentSupportedExts
         allModels = allModels.concat(modelObjs);
 
         // Use for...of loop for async iteration
         for (const f of files) {
           if (f.isDirectory()) {
-            // Await the recursive call
-            await walk(path.join(dir, f.name));
+            // Await the recursive call, passing currentSupportedExts
+            await walk(path.join(dir, f.name), currentSupportedExts); // 传递 currentSupportedExts
           }
         }
       } catch (error) {
@@ -100,8 +101,8 @@ class LocalDataSource extends DataSource {
       }
     };
 
-    log.debug(`[LocalDataSource] 开始递归遍历模型目录: ${startPath}`);
-    await walk(startPath); // Await the initial call
+    log.debug(`[LocalDataSource] 开始递归遍历模型目录: ${startPath} with exts: ${supportedExts}`);
+    await walk(startPath, supportedExts); // 在初始调用时传递 supportedExts
     const duration = Date.now() - startTime;
     log.info(`[LocalDataSource] 列出模型完成: ${startPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型`);
     return allModels;

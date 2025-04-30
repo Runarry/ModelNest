@@ -13,6 +13,8 @@ const log = require('electron-log');
 const { parseLocalModels, parseModelDetailFromJsonContent, prepareModelDataForSaving } = require('./src/data/modelParser'); // 添加导入
 const { writeModelJson } = require('./src/data/dataSourceInterface'); // <--- 导入新的接口函数
 
+const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the new initializer
+
 let mainWindow; // Declare mainWindow globally
 let config = null;
 
@@ -91,7 +93,7 @@ app.whenReady().then(async () => { // 改为 async 回调
 
   // 日志级别设置：优先 config.json（logLevel），否则环境变量 LOG_LEVEL，否则 'info'
   // 日志级别优先级：config.json（logLevel）> LOG_LEVEL > BUILD_DEFAULT_LOG_LEVEL > 'info'
-  let level = 'info';
+  let level = 'debug';
   if (config && typeof config.logLevel === 'string') {
     level = config.logLevel;
   } else if (process.env.LOG_LEVEL) {
@@ -228,63 +230,13 @@ app.whenReady().then(async () => { // 改为 async 回调
   // --- End Updater IPC Handlers ---
   // --- End Electron Updater Logic ---
 
+  // Initialize Model Library IPC Handlers
+  initializeModelLibraryIPC(config);
+
 
   app.on('activate', function () {
     log.info('[Lifecycle] 应用激活');
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
-  });
-
-  // 监听保存模型请求
-  ipcMain.handle('saveModel', async (event, model) => {
-    log.debug('[IPC saveModel] Received model data from renderer:', JSON.stringify(model, null, 2)); // 添加详细日志，检查前端发送的数据
-    log.info('[IPC] saveModel 请求', { jsonPath: model && model.jsonPath });
-    try {
-      if (!model.jsonPath) throw new Error('模型JSON路径不存在');
-      // 1. 读取现有数据
-      let existingData = {};
-      try {
-        const rawData = await fs.promises.readFile(model.jsonPath, 'utf-8');
-        existingData = JSON.parse(rawData);
-        log.debug(`[IPC saveModel] 成功读取现有模型数据: ${model.jsonPath}`);
-      } catch (readError) {
-        // 如果文件不存在或无法读取/解析，则从空对象开始合并
-        // 但记录一个警告，因为通常文件应该存在
-        if (readError.code !== 'ENOENT') {
-            log.warn(`[IPC saveModel] 读取现有模型JSON失败 (${model.jsonPath}): ${readError.message}. 将创建新文件或覆盖。`);
-        } else {
-             log.info(`[IPC saveModel] 现有模型JSON不存在 (${model.jsonPath}). 将创建新文件。`);
-        }
-        existingData = {}; // 确保从空对象开始
-      }
-
-      // 2. 合并数据:
-      //    - Start with the existing data from the file.
-      //    - Spread the incoming 'model' object from the frontend over it.
-      //    - This ensures all fields sent by the frontend (standard and extra)
-      //      are included at the top level, overwriting existing values if keys match.
-      // 3. 使用 modelParser 准备要写入的数据（合并和清理）
-      const finalDataToSave = prepareModelDataForSaving(existingData, model);
-      log.debug(`[IPC saveModel] 调用 prepareModelDataForSaving 后准备保存的数据键: ${Object.keys(finalDataToSave)}`);
-
-      // 4. 序列化准备好的数据
-      const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
-      log.debug(`[IPC saveModel] 准备写入序列化后的数据到: ${model.jsonPath}`); // Log the exact data being written (removed dataToWrite for brevity)
-
-      // 查找对应的 sourceConfig
-      const sourceConfig = (config.modelSources || []).find(s => s.id === model.sourceId);
-      if (!sourceConfig) {
-          log.error(`[IPC saveModel] 未找到源配置 ID: ${model.sourceId}`);
-          throw new Error(`Configuration for source ID ${model.sourceId} not found.`);
-      }
-
-      // 使用新的接口函数写入，传入 sourceConfig
-      await writeModelJson(sourceConfig, model, dataToWrite);
-      log.info('[IPC saveModel] 模型保存成功', { sourceId: model.sourceId, jsonPath: model.jsonPath });
-      return { success: true }; // Indicate success back to the renderer
-    } catch (error) {
-      log.error('[IPC] 保存模型失败:', error.message, error.stack, { model });
-      throw error;
-    }
   });
 
   // 全局异常处理
@@ -318,16 +270,6 @@ ipcMain.on('log-message', (event, level, message, ...args) => {
 });
 
 
-// 应用初始化函数
-async function initializeApp() {
-  log.info('[Lifecycle] 应用初始化开始');
-  await loadConfig(); // 加载配置
-  createWindow(); // 创建窗口
-}
-
-app.whenReady().then(initializeApp); // 应用准备就绪后执行初始化
-
-
 app.on('window-all-closed', async function () {
   log.info('[Lifecycle] 所有窗口已关闭');
   if (process.platform !== 'darwin') {
@@ -358,167 +300,9 @@ log.info('[IPC getConfig] Received request');
   return config;
 });
 
-// IPC: 获取模型列表
-ipcMain.handle('listModels', async (event, { sourceId, directory }) => { // 添加 directory 参数
-  const source = (config.modelSources || []).find(s => s.id === sourceId);
-  if (!source) return [];
-  try { // 添加 try-catch 块
-    if (source.type === 'local') {
-      const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      return await ds.listModels(directory); // 传递 directory
-    } else if (source.type === 'webdav') {
-      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      return await ds.listModels(directory); // 传递 directory
-    }
-  } catch (error) {
-    log.error(`[IPC listModels] Error listing models for source ${sourceId} in directory ${directory}:`, error.message, error.stack);
-    throw error; // 将错误传递给渲染进程
-  }
-  return [];
-});
-
 // IPC: 获取子目录列表
-ipcMain.handle('listSubdirectories', async (event, { sourceId }) => {
-  const source = (config.modelSources || []).find(s => s.id === sourceId);
-  if (!source) return [];
-  try {
-    if (source.type === 'local') {
-      const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      return await ds.listSubdirectories();
-    } else if (source.type === 'webdav') {
-      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      return await ds.listSubdirectories();
-    }
-  } catch (error) {
-    log.error(`[IPC listSubdirectories] Error listing subdirectories for source ${sourceId}:`, error.message, error.stack);
-    throw error; // 将错误传递给渲染进程
-  }
-  return [];
-});
-
 // IPC: 获取模型详情
-ipcMain.handle('getModelDetail', async (event, { sourceId, jsonPath }) => {
-  const source = (config.modelSources || []).find(s => s.id === sourceId);
-  if (!source) {
-      log.warn(`[IPC getModelDetail] 未找到数据源: ${sourceId}`);
-      return {};
-  }
-  try {
-    if (source.type === 'local') {
-      const ds = new LocalDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      return await ds.readModelDetail(jsonPath);
-    } else if (source.type === 'webdav') {
-      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      return await ds.readModelDetail(jsonPath);
-    }
-  } catch (error) {
-    log.error(`[IPC getModelDetail] 获取模型详情失败: sourceId=${sourceId}, jsonPath=${jsonPath}`, error.message, error.stack);
-    throw error; // 将错误传递给渲染进程
-  }
-  log.warn(`[IPC getModelDetail] 未知的数据源类型: ${source.type}`);
-  return {};
-});
-
 // IPC: 获取模型图片数据
-ipcMain.handle('getModelImage', async (event, { sourceId, imagePath }) => {
-  const source = (config.modelSources || []).find(s => s.id === sourceId);
-  if (!source) {
-    log.error(`[ImageLoader] 未找到数据源: ${sourceId}`);
-    return null;
-  }
-
-  try {
-    // 统一缓存key生成方式：本地用绝对路径，WebDAV用原始网络路径
-    const hashKey = source.type === 'local'
-      ? path.resolve(imagePath)
-      : imagePath.replace(/\\/g, '/').toLowerCase();
-    
-    log.debug('[ImageLoader] Generated hash key:', hashKey);
-    if (source.type === 'webdav') {
-      log.debug('[ImageLoader] WebDAV source details:', {
-        url: source.url,
-        imagePath: imagePath,
-        sourceId: source.id
-      });
-    }
-
-    // 计算缓存路径（使用hashKey而非localPath）
-    const cacheDir = path.join(process.cwd(), 'cache', 'images');
-    const cachePath = path.join(cacheDir,
-      crypto.createHash('md5').update(hashKey).digest('hex') +
-      (imageCache.config.compressFormat === 'webp' ? '.webp' : '.jpg'));
-
-    // 1. 详细检查缓存状态
-    log.debug('[ImageLoader] Checking cache at:', cachePath);
-    try {
-      if (fs.existsSync(cachePath)) {
-        log.debug('[ImageLoader] Cache exists, reading...');
-        const stats = fs.statSync(cachePath);
-        log.debug(`[ImageLoader] Cache file stats: size=${stats.size} bytes, mtime=${stats.mtime}`);
-        
-        const data = await fs.promises.readFile(cachePath);
-        log.debug('[ImageLoader] Successfully read cache file');
-        return {
-          path: cachePath,
-          data,
-          mimeType: imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg'
-        };
-      } else {
-        log.debug('[ImageLoader] Cache does not exist');
-      }
-    } catch (e) {
-      log.error('[ImageLoader] Cache check error:', e.message, e.stack);
-    }
-
-    // 2. 根据类型处理图片
-    let localPath, mimeType = 'image/png';
-    if (source.type === 'local') {
-      localPath = imagePath;
-    } else if (source.type === 'webdav') {
-      const ds = new WebDavDataSource({ ...source, supportedExtensions: config.supportedExtensions });
-      const imageData = await ds.getImageData(imagePath);
-      if (!imageData?.data) {
-        log.error(`[ImageLoader] WebDAV图片下载失败: ${imagePath}`);
-        return null;
-      }
-      
-      // 临时保存WebDAV图片
-      const tempDir = path.join(process.cwd(), 'cache', 'temp_images');
-      if (!fs.existsSync(tempDir)) fs.mkdirSync(tempDir, { recursive: true });
-      localPath = path.join(tempDir, crypto.randomBytes(8).toString('hex') + '.png');
-      await fs.promises.writeFile(localPath, imageData.data);
-      mimeType = imageData.mimeType || 'image/png';
-    }
-
-    // 3. 压缩并缓存图片（带详细日志）
-    log.debug('[ImageLoader] Calling imageCache.getCompressedImage with:', localPath);
-    let compressedPath;
-    try {
-      compressedPath = await imageCache.getCompressedImage(localPath, hashKey);
-      log.debug('[ImageLoader] Compressed image path:', compressedPath);
-    } catch (e) {
-      log.error('[ImageLoader] Image compression failed:', e.message, e.stack);
-      compressedPath = localPath; // 降级使用原图
-    }
-    const data = await fs.promises.readFile(compressedPath);
-    
-    // 4. 清理WebDAV临时文件
-    if (source.type === 'webdav' && localPath !== compressedPath) {
-      fs.promises.unlink(localPath).catch(e =>
-        log.error(`[ImageLoader] 临时文件清理失败: ${localPath}`, e.message, e.stack));
-    }
-
-    return {
-      path: compressedPath,
-      data,
-      mimeType: compressedPath.endsWith('.webp') ? 'image/webp' :
-               compressedPath.endsWith('.jpg') ? 'image/jpeg' : mimeType
-    };
-  } catch (e) {
-    log.error('[ImageLoader] 图片处理流程失败:', e.message, e.stack);
-    return null;
-  }
-});
 // IPC: 保存配置
 ipcMain.handle('save-config', async (event, newConfig) => {
   const configPath = path.join(app.getPath('userData'), 'config.json');

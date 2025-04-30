@@ -55,10 +55,11 @@ class WebDavDataSource extends DataSource {
     }
   }
 
-  async listModels(directory = null) { // Add directory parameter
+  async listModels(directory = null, supportedExts = []) { // 添加 supportedExts 参数
     const startTime = Date.now();
     await this.ensureInitialized();
-    const supportedExtensions = this.config.supportedExtensions || [];
+    // 不再从 config 读取，直接使用传入的 supportedExts
+    // const supportedExtensions = this.config.supportedExtensions || [];
     const basePath = this.config.basePath || '/'; // Use configured base path or default to root
 
     // Construct the starting path, ensuring correct joining with '/'
@@ -67,24 +68,25 @@ class WebDavDataSource extends DataSource {
       // Avoid double slashes if basePath is '/'
       startPath = basePath === '/' ? `/${directory}` : `${basePath}/${directory}`;
     }
-    log.info(`[WebDavDataSource] 开始列出模型: ${startPath}`);
+    // 修改日志，记录 basePath, directory, 计算出的 startPath 和 supportedExts
+    log.info(`[WebDavDataSource] 开始列出模型. BasePath: ${basePath}, Directory: ${directory}, Calculated startPath: ${startPath}, SupportedExts: ${supportedExts}`);
 
     let allModels = [];
-    const walk = async (dir) => {
-      log.debug(`[WebDavDataSource] 正在遍历 WebDAV 目录: ${dir}`);
+    const walk = async (dir, currentSupportedExts) => { // 添加 currentSupportedExts 参数
+      log.debug(`[WebDavDataSource] 正在遍历 WebDAV 目录: ${dir} with exts: ${currentSupportedExts}`);
       try {
         const items = await this.client.getDirectoryContents(dir);
         log.debug(`[WebDavDataSource] 目录 ${dir} 包含 ${items.length} 个项目`);
 
-        // 获取当前目录下的模型文件
+        // 获取当前目录下的模型文件，使用传入的 currentSupportedExts
         const modelFiles = items.filter(item =>
           !item.filename.endsWith('/') &&
-          supportedExtensions.some(ext => item.filename.endsWith(ext)));
-        
+          currentSupportedExts.some(ext => item.filename.endsWith(ext))); // 使用 currentSupportedExts
+
         // 处理每个模型文件
         for (const modelFile of modelFiles) {
-          const base = path.basename(modelFile.filename, path.extname(modelFile.filename));
-          
+          const base = path.posix.basename(modelFile.filename, path.posix.extname(modelFile.filename)); // Use posix path
+
           // 查找同名图片和json
           const image = items.find(f =>
             !f.filename.endsWith('/') &&
@@ -92,7 +94,7 @@ class WebDavDataSource extends DataSource {
           const jsonFile = items.find(f =>
             !f.filename.endsWith('/') &&
             f.filename.endsWith(`${base}.json`));
-          
+
           // 读取json详情
           let detail = {};
           if (jsonFile) {
@@ -109,7 +111,7 @@ class WebDavDataSource extends DataSource {
           } else {
               log.debug(`[WebDavDataSource] 模型 ${base} 未找到对应的 JSON 文件`);
           }
-          
+
           // 调用新的函数来创建模型对象
           const modelObj = createWebDavModelObject(
             modelFile,
@@ -120,14 +122,14 @@ class WebDavDataSource extends DataSource {
           );
           allModels.push(modelObj);
         }
-        
+
         // 递归处理子目录
         const subDirs = items.filter(item =>
           item.type === 'directory' &&
           !item.filename.endsWith('/.') &&
           !item.filename.endsWith('/..'));
-        for (const dir of subDirs) {
-          await walk(dir.filename);
+        for (const subDir of subDirs) { // Renamed loop variable to avoid conflict
+          await walk(subDir.filename, currentSupportedExts); // 传递 currentSupportedExts
         }
       } catch (error) {
         log.error(`[WebDavDataSource] 遍历 WebDAV 目录时出错: ${dir}`, error.message, error.stack, error.response?.status);
@@ -138,7 +140,7 @@ class WebDavDataSource extends DataSource {
         // 可以选择不抛出错误，让遍历继续处理其他目录
       }
     };
-    
+
     // Check if start path exists before walking
     try {
       log.debug(`[WebDavDataSource] 检查起始路径是否存在: ${startPath}`);
@@ -154,8 +156,8 @@ class WebDavDataSource extends DataSource {
       throw error; // Re-throw other errors
     }
 
-    log.debug(`[WebDavDataSource] 开始递归遍历 WebDAV 目录: ${startPath}`);
-    await walk(startPath); // Start walking from the determined path
+    log.debug(`[WebDavDataSource] 开始递归遍历 WebDAV 目录: ${startPath} with exts: ${supportedExts}`);
+    await walk(startPath, supportedExts); // 在初始调用时传递 supportedExts
     const duration = Date.now() - startTime;
     log.info(`[WebDavDataSource] 列出模型完成: ${startPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型`);
     return allModels;

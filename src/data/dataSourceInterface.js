@@ -2,7 +2,8 @@
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
-// 导入 WebDavDataSource 以便在需要时创建实例
+// 导入具体的数据源实现
+const { LocalDataSource } = require('./dataSource');
 const { WebDavDataSource } = require('./webdavDataSource');
 
 /**
@@ -83,6 +84,222 @@ async function writeModelJson(sourceConfig, model, dataToWrite) {
     }
 }
 
+
+/**
+ * Lists models based on the source configuration type.
+ *
+ * @param {object} sourceConfig - The configuration object for the data source.
+ * @param {string|null} directory - The specific subdirectory to list models from (relative to source root), or null for the root.
+ * @param {string[]} supportedExts - An array of supported file extensions (e.g., ['.safetensors', '.ckpt']).
+ * @returns {Promise<Array<object>>} A promise that resolves with an array of model objects.
+ * @throws {Error} If the data source type is unknown or listing fails.
+ */
+async function listModels(sourceConfig, directory = null, supportedExts = []) { // 添加 supportedExts 参数
+    const startTime = Date.now();
+    if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
+        log.error('[DataSourceInterface] listModels called with invalid sourceConfig:', sourceConfig);
+        throw new Error('Invalid source configuration provided (missing type or id).');
+    }
+    if (!Array.isArray(supportedExts)) {
+        log.warn(`[DataSourceInterface] listModels called with non-array supportedExts: ${supportedExts}. Using empty array.`);
+        supportedExts = [];
+    }
+
+    const sourceType = sourceConfig.type;
+    const sourceId = sourceConfig.id;
+    // 更详细的日志记录传入的 sourceConfig 和 supportedExts
+    log.info(`[DataSourceInterface] Attempting to list models. sourceId: ${sourceId}, type: ${sourceType}, directory: ${directory}, supportedExts: ${supportedExts}`);
+    log.debug(`[DataSourceInterface] Received sourceConfig: ${JSON.stringify(sourceConfig)}`); // 添加日志
+
+    try {
+        let models = [];
+        if (sourceType === 'local') {
+            // LocalDataSource doesn't need instantiation for static-like methods if designed that way,
+            // but here we follow the pattern of instantiating it.
+            const ds = new LocalDataSource(sourceConfig);
+            // 传递 supportedExts 给具体实现
+            models = await ds.listModels(directory, supportedExts);
+        } else if (sourceType === 'webdav') {
+            const ds = new WebDavDataSource(sourceConfig);
+            await ds.ensureInitialized(); // Ensure client is ready
+            // 传递 supportedExts 给具体实现
+            models = await ds.listModels(directory, supportedExts);
+        } else {
+            throw new Error(`Unsupported data source type: '${sourceType}' for source ID ${sourceId}`);
+        }
+        const duration = Date.now() - startTime;
+        log.info(`[DataSourceInterface] Successfully listed models for sourceId: ${sourceId}, type: ${sourceType}, directory: ${directory}, supportedExts: ${supportedExts}. Found ${models.length} models. 耗时: ${duration}ms`);
+        return models;
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        log.error(`[DataSourceInterface] Failed to list models for sourceId: ${sourceId}, type: ${sourceType}, directory: ${directory}, supportedExts: ${supportedExts}, 耗时: ${duration}ms`, error.message, error.stack); // 在错误日志中添加 supportedExts
+        throw error; // Re-throw
+    }
+}
+
+/**
+ * Lists subdirectories based on the source configuration type.
+ *
+ * @param {object} sourceConfig - The configuration object for the data source.
+ * @returns {Promise<Array<string>>} A promise that resolves with an array of subdirectory names.
+ * @throws {Error} If the data source type is unknown or listing fails.
+ */
+async function listSubdirectories(sourceConfig) {
+    const startTime = Date.now();
+     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
+        log.error('[DataSourceInterface] listSubdirectories called with invalid sourceConfig:', sourceConfig);
+        throw new Error('Invalid source configuration provided (missing type or id).');
+    }
+
+    const sourceType = sourceConfig.type;
+    const sourceId = sourceConfig.id;
+    log.info(`[DataSourceInterface] Attempting to list subdirectories for sourceId: ${sourceId}, type: ${sourceType}`);
+
+    try {
+        let subdirs = [];
+        if (sourceType === 'local') {
+            const ds = new LocalDataSource(sourceConfig);
+            subdirs = await ds.listSubdirectories();
+        } else if (sourceType === 'webdav') {
+            const ds = new WebDavDataSource(sourceConfig);
+             await ds.ensureInitialized(); // Ensure client is ready
+            subdirs = await ds.listSubdirectories();
+        } else {
+            throw new Error(`Unsupported data source type: '${sourceType}' for source ID ${sourceId}`);
+        }
+        const duration = Date.now() - startTime;
+        log.info(`[DataSourceInterface] Successfully listed subdirectories for sourceId: ${sourceId}, type: ${sourceType}. Found ${subdirs.length} directories. 耗时: ${duration}ms`);
+        return subdirs;
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        log.error(`[DataSourceInterface] Failed to list subdirectories for sourceId: ${sourceId}, type: ${sourceType}, 耗时: ${duration}ms`, error.message, error.stack);
+        throw error; // Re-throw
+    }
+}
+
+/**
+ * Reads model detail based on the source configuration type.
+ *
+ * @param {object} sourceConfig - The configuration object for the data source.
+ * @param {string} jsonPath - The path to the model's JSON file.
+ * @returns {Promise<object>} A promise that resolves with the model detail object.
+ * @throws {Error} If the data source type is unknown or reading fails.
+ */
+async function readModelDetail(sourceConfig, jsonPath) {
+    const startTime = Date.now();
+    if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
+        log.error('[DataSourceInterface] readModelDetail called with invalid sourceConfig:', sourceConfig);
+        throw new Error('Invalid source configuration provided (missing type or id).');
+    }
+     if (!jsonPath) {
+        log.error('[DataSourceInterface] readModelDetail called with invalid jsonPath:', jsonPath);
+        throw new Error('Invalid jsonPath provided for reading model detail.');
+    }
+
+    const sourceType = sourceConfig.type;
+    const sourceId = sourceConfig.id;
+    log.info(`[DataSourceInterface] Attempting to read model detail for sourceId: ${sourceId}, type: ${sourceType}, path: ${jsonPath}`);
+
+    try {
+        let detail = {};
+        if (sourceType === 'local') {
+            const ds = new LocalDataSource(sourceConfig);
+            detail = await ds.readModelDetail(jsonPath);
+        } else if (sourceType === 'webdav') {
+            const ds = new WebDavDataSource(sourceConfig);
+             await ds.ensureInitialized(); // Ensure client is ready
+            detail = await ds.readModelDetail(jsonPath);
+        } else {
+            throw new Error(`Unsupported data source type: '${sourceType}' for source ID ${sourceId}`);
+        }
+        const duration = Date.now() - startTime;
+        log.info(`[DataSourceInterface] Successfully read model detail for sourceId: ${sourceId}, type: ${sourceType}, path: ${jsonPath}. 耗时: ${duration}ms`);
+        return detail;
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        log.error(`[DataSourceInterface] Failed to read model detail for sourceId: ${sourceId}, type: ${sourceType}, path: ${jsonPath}, 耗时: ${duration}ms`, error.message, error.stack);
+        // Don't throw error here, return empty object as per original logic in IPC handler
+        // throw error;
+         return {}; // Return empty object on failure to match previous behavior
+    }
+}
+
+/**
+ * Gets image data based on the source configuration type.
+ *
+ * @param {object} sourceConfig - The configuration object for the data source.
+ * @param {string} imagePath - The path to the image file.
+ * @returns {Promise<object|null>} A promise that resolves with an object containing { path, data, mimeType } or null if not found/error.
+ * @throws {Error} If the data source type is unknown (but returns null for fetch errors).
+ */
+async function getImageData(sourceConfig, imagePath) {
+    const startTime = Date.now();
+    if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
+        log.error('[DataSourceInterface] getImageData called with invalid sourceConfig:', sourceConfig);
+        throw new Error('Invalid source configuration provided (missing type or id).');
+    }
+     if (!imagePath) {
+        log.error('[DataSourceInterface] getImageData called with invalid imagePath:', imagePath);
+        throw new Error('Invalid imagePath provided for getting image data.');
+    }
+
+    const sourceType = sourceConfig.type;
+    const sourceId = sourceConfig.id;
+    log.info(`[DataSourceInterface] Attempting to get image data for sourceId: ${sourceId}, type: ${sourceType}, path: ${imagePath}`);
+
+    try {
+        let imageData = null;
+        if (sourceType === 'local') {
+            // For local files, we just need to check existence and read later if needed.
+            // The actual reading happens in the imageCache logic.
+            // We return the path so the cache logic knows where to find it.
+            // We need to simulate the structure returned by WebDAV's getImageData for consistency.
+             try {
+                await fs.promises.access(imagePath); // Check if file exists and is accessible
+                imageData = {
+                    path: imagePath, // The original path
+                    data: null, // Data will be read by cache logic if needed
+                    mimeType: `image/${path.extname(imagePath).slice(1).toLowerCase()}` // Basic mime type from extension
+                };
+                 log.debug(`[DataSourceInterface] Local image path confirmed: ${imagePath}`);
+            } catch (accessError) {
+                if (accessError.code === 'ENOENT') {
+                    log.warn(`[DataSourceInterface] Local image file not found: ${imagePath}`);
+                } else {
+                    log.error(`[DataSourceInterface] Error accessing local image file ${imagePath}:`, accessError);
+                }
+                imageData = null; // Indicate failure
+            }
+
+        } else if (sourceType === 'webdav') {
+            const ds = new WebDavDataSource(sourceConfig);
+             await ds.ensureInitialized(); // Ensure client is ready
+            // WebDAV needs to actually download the data
+            imageData = await ds.getImageData(imagePath); // This returns { path, data, mimeType } or null
+        } else {
+            throw new Error(`Unsupported data source type: '${sourceType}' for source ID ${sourceId}`);
+        }
+        const duration = Date.now() - startTime;
+        if (imageData) {
+             log.info(`[DataSourceInterface] Successfully prepared/retrieved image data for sourceId: ${sourceId}, type: ${sourceType}, path: ${imagePath}. 耗时: ${duration}ms`);
+        } else {
+             log.warn(`[DataSourceInterface] Failed to get image data for sourceId: ${sourceId}, type: ${sourceType}, path: ${imagePath}. 耗时: ${duration}ms`);
+        }
+        return imageData;
+    } catch (error) {
+         const duration = Date.now() - startTime;
+        // Log errors, but return null to match original behavior (e.g., image not found)
+        log.error(`[DataSourceInterface] Failed to get image data for sourceId: ${sourceId}, type: ${sourceType}, path: ${imagePath}, 耗时: ${duration}ms`, error.message, error.stack);
+        // throw error; // Don't throw, return null
+        return null;
+    }
+}
+
+
 module.exports = {
-    writeModelJson
+    writeModelJson,
+    listModels,
+    listSubdirectories,
+    readModelDetail,
+    getImageData
 };
