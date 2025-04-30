@@ -109,7 +109,7 @@ class WebDavDataSource extends DataSource {
           
           const modelObj = {
             name: base,
-            type: detail.modelType || path.extname(modelFile.filename).replace('.', '').toUpperCase(),
+            modelType: detail.modelType || path.extname(modelFile.filename).replace('.', '').toUpperCase(),
             description: detail.description || '',
             image: image ? image.filename : '',
             file: modelFile.filename,
