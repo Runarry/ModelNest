@@ -470,10 +470,6 @@ function handleUpdateButtonClick() {
          // Task 4: Click Event Logging
         window.api.logMessage('info', "[UI] 点击了更新按钮：执行检查更新");
         window.api.checkForUpdate();
-        // Optionally disable button and show checking status immediately
-        // checkUpdateButton.disabled = true; // Let handleUpdateStatus manage disabled state
-        // checkUpdateButton.textContent = t('settings.update.checking');
-        // updateStatusEl.textContent = t('settings.update.statusChecking');
     }
 }
 
