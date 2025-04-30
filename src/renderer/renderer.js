@@ -63,53 +63,58 @@ document.addEventListener('DOMContentLoaded', async () => {
     languageSelect.value = getCurrentLocale();
   }
 
-  // Update UI elements with data-i18n attributes
+  // Update UI elements with data-i18n attributes (Optimized Version)
   function updateUIWithTranslations() {
-    window.api.logMessage('debug', '[Renderer] 开始更新 UI 翻译...');
-    const elements = document.querySelectorAll('[data-i18n-key]');
-    elements.forEach(el => {
-      const key = el.getAttribute('data-i18n-key');
-      const translation = t(key);
-      if (translation !== key) { // Only update if translation exists
-        // Handle common properties
-        if (el.hasAttribute('value')) { // Input fields, buttons
-            el.value = translation;
-        } else if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
-             // Fallback for inputs without value attr? Unlikely needed but safe.
-             el.textContent = translation; // Or maybe placeholder? See below.
-        }
-        else { // Spans, divs, buttons, etc.
-            el.textContent = translation;
-        }
-      } else {
-        window.api.logMessage('warn', `[i18n] 翻译 key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
-      }
-    });
+    window.api.logMessage('debug', '[Renderer] 开始更新 UI 翻译 (优化版)...');
+    // Use a combined selector to fetch all relevant elements at once
+    const elements = document.querySelectorAll('[data-i18n-key], [data-i18n-title-key], [data-i18n-placeholder-key]');
+    const startTime = performance.now(); // Optional: for performance measurement
 
-    // Handle title attributes specifically
-    const titleElements = document.querySelectorAll('[data-i18n-title-key]');
-    titleElements.forEach(el => {
+    elements.forEach(el => {
+      // Check for data-i18n-key and apply translation to textContent or value
+      if (el.hasAttribute('data-i18n-key')) {
+        const key = el.getAttribute('data-i18n-key');
+        const translation = t(key);
+        if (translation !== key) {
+          // Prioritize 'value' attribute for inputs/buttons if present
+          if (el.hasAttribute('value') && (el.tagName === 'INPUT' || el.tagName === 'BUTTON')) {
+              el.value = translation;
+          // Otherwise, update textContent for most elements
+          } else if (el.textContent !== undefined && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') { // Avoid overwriting input/textarea content unless intended
+              el.textContent = translation;
+          }
+          // Note: This logic assumes 'data-i18n-key' primarily targets text content or button values.
+          // Placeholders and titles are handled by their specific attributes below.
+        } else {
+          window.api.logMessage('warn', `[i18n] 翻译 key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
+        }
+      }
+
+      // Check for data-i18n-title-key and apply translation to title
+      if (el.hasAttribute('data-i18n-title-key')) {
         const key = el.getAttribute('data-i18n-title-key');
         const translation = t(key);
         if (translation !== key) {
-            el.title = translation;
+          el.title = translation;
         } else {
-             window.api.logMessage('warn', `[i18n] 翻译 title key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
+          window.api.logMessage('warn', `[i18n] 翻译 title key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
         }
+      }
+
+      // Check for data-i18n-placeholder-key and apply translation to placeholder
+      if (el.hasAttribute('data-i18n-placeholder-key')) {
+        const key = el.getAttribute('data-i18n-placeholder-key');
+        const translation = t(key);
+        if (translation !== key) {
+          el.placeholder = translation;
+        } else {
+          window.api.logMessage('warn', `[i18n] 翻译 placeholder key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
+        }
+      }
     });
 
-     // Handle placeholder attributes specifically
-     const placeholderElements = document.querySelectorAll('[data-i18n-placeholder-key]');
-     placeholderElements.forEach(el => {
-         const key = el.getAttribute('data-i18n-placeholder-key');
-         const translation = t(key);
-         if (translation !== key) {
-             el.placeholder = translation;
-         } else {
-              window.api.logMessage('warn', `[i18n] 翻译 placeholder key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
-         }
-     });
-     window.api.logMessage('debug', '[Renderer] UI 翻译更新完成');
+    const endTime = performance.now(); // Optional
+    window.api.logMessage('debug', `[Renderer] UI 翻译更新完成 (优化版), 耗时: ${(endTime - startTime).toFixed(2)}ms, 处理了 ${elements.length} 个元素`);
   }
 
 
