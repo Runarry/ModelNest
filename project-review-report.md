@@ -6,7 +6,7 @@
 
 *   **主要问题:**
     *   **“Extra” 字段数据类型丢失:** 编辑模型额外信息时，非字符串类型（如数组）会被强制转为字符串保存，导致数据损坏风险 (`src/renderer/detail-model.js`)。
-    *   **Object URL 内存泄漏:** 图片加载创建的 Object URL 未被撤销，可能导致渲染进程内存泄漏 (`src/renderer/ui-utils.js`)。
+    *   **Object URL 内存泄漏:** 图片加载创建的 Object URL 未被撤销，可能导致渲染进程内存泄漏 (`src/renderer/ui-utils.js`)。 // 已处理
     *   **模型更新后错误的目录重载:** 在子目录视图保存模型后，错误地重新加载了根目录而非当前目录 (`src/renderer/renderer.js`)。
 *   **次要问题与改进点:** 包括路径处理一致性、并发窗口操作风险、缓存清理健壮性、MIME 类型推断不准、配置逻辑重复、`preload.js` 监听器清理、API 设计冗余、`imageCache.js` 导出可变配置、错误处理策略模糊、数据字段冗余、动态导入错误处理、全局重载效率低、状态管理依赖 DOM、阻塞式确认框、WebDAV URL 验证基础、密码处理风险、新源 ID 生成方式等。
 
