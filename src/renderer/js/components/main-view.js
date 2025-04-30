@@ -168,7 +168,7 @@ function renderFilterTypes() {
   allOption.textContent = t('all'); // Use translation key 'all'
   filterSelect.appendChild(allOption);
 
-  const types = Array.from(new Set(models.map(m => m.type).filter(Boolean)));
+  const types = Array.from(new Set(models.map(m => m.modelType).filter(Boolean)));
   types.sort(); // Sort types alphabetically
   types.forEach(type => {
     const option = document.createElement('option');
