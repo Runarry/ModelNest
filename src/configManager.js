@@ -8,7 +8,7 @@ let currentConfig = {}; // 初始化为空对象，或根据需要设为 null
  */
 function setConfig(newConfig) {
   currentConfig = newConfig;
-  console.log('Config updated in configManager:', currentConfig); // 添加日志以便调试
+  //console.log('Config updated in configManager:', currentConfig); // 添加日志以便调试
 }
 
 /**
