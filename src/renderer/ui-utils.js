@@ -116,10 +116,11 @@ export async function loadImage(imgElement) {
               URL.revokeObjectURL(objectUrl); // Clean up failed URL
               imgElement.alt = 'Error loading image from blob'; // Provide feedback
           };
-           imgElement.onload = () => { // Add onload for successful logging
+           imgElement.onload = () => { // Add onload for successful logging and cleanup
                api.logMessage('debug', `${logPrefix} 图片从 Blob URL 加载成功: ${objectUrl}`);
-               // Consider revoking URL here if appropriate for your memory management strategy
-               // URL.revokeObjectURL(objectUrl);
+               // Revoke the object URL once the image is loaded to free up memory
+               URL.revokeObjectURL(objectUrl);
+               api.logMessage('debug', `${logPrefix} Blob URL 已撤销: ${objectUrl}`);
            };
       } catch (blobError) {
            // Task 1: Error Logging
