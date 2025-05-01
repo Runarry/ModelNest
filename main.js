@@ -10,7 +10,8 @@ const os = require('os');
 const crypto = require('crypto');
 const log = require('electron-log');
 
-const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the new initializer
+const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the model library IPC initializer
+const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app IPC initializer
 let mainWindow; // Declare mainWindow globally
 
 // 创建主窗口 (TODO: Modify to accept services and pass webContents to updateService)
@@ -87,7 +88,11 @@ app.whenReady().then(async () => { // 改为 async 回调
 
   // 将 services 对象传递给需要它的地方
   // 注意: initializeIPC 和 createWindow 函数本身尚未修改以接收 services
-  initializeIPC(services); // TODO: Modify initializeIPC to accept and use services
+  // 初始化 IPC Handlers，传入 services 对象
+  initializeAppIPC(services);
+  initializeModelLibraryIPC(services);
+  log.info('[IPC] IPC Handlers 已初始化');
+
   createWindow(services); // TODO: Modify createWindow to accept services and pass webContents to updateService
 
   // --- Electron Updater Logic with Enhanced Logging ---
@@ -201,25 +206,11 @@ app.whenReady().then(async () => { // 改为 async 回调
   // --- End Updater IPC Handlers ---
   // --- End Electron Updater Logic ---
 
-// Placeholder for the combined IPC initialization function
-// TODO: Create or modify this function to accept services
-function initializeIPC(services) {
-  log.info('[IPC] Initializing IPC handlers with services...');
-  // Example: Initialize specific IPC modules, passing services if needed
-  initializeModelLibraryIPC(services); // Pass services to the specific initializer
-  // Register other handlers directly here or call other initializers
-  // e.g., initializeConfigIPC(services.configService);
-  // e.g., initializeUpdateIPC(services.updateService);
+// 移除旧的占位 initializeIPC 函数
 
-  // Register handlers previously in main.js that now use services
-  // (getConfig and save-config were removed as they are handled by ConfigService IPC)
-
-  // Keep handlers that don't directly depend on the new services for now
-  // (open-folder-dialog, renderer-error, log-message)
-}
 app.on('activate', function () {
     log.info('[Lifecycle] 应用激活');
-    if (BrowserWindow.getAllWindows().length === 0) createWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(); // createWindow 应该在 app ready 后调用，这里可能需要调整逻辑，但暂时保留
   });
 
   // 全局异常处理
