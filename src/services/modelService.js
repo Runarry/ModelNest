@@ -1,5 +1,4 @@
 const log = require('electron-log');
-const fs = require('fs');
 const path = require('path');
 const dataSourceInterface = require('../data/dataSourceInterface'); // Adjusted path
 const { prepareModelDataForSaving } = require('../data/modelParser'); // Adjusted path
@@ -31,31 +30,7 @@ class ModelService {
         throw new Error('Source ID (modelData.sourceId) is required for saving.');
       }
 
-      // 1. Read existing data (if any) - Directly using fs here as per original logic
-      let existingData = {};
-      try {
-        // Assuming jsonPath is an absolute path accessible by the main process fs
-        const rawData = await fs.promises.readFile(modelData.jsonPath, 'utf-8');
-        existingData = JSON.parse(rawData);
-        log.debug(`[ModelService saveModel] Successfully read existing model data: ${modelData.jsonPath}`);
-      } catch (readError) {
-        if (readError.code !== 'ENOENT') {
-          log.warn(`[ModelService saveModel] Failed to read existing model JSON (${modelData.jsonPath}): ${readError.message}. Will create new file or overwrite.`);
-        } else {
-          log.info(`[ModelService saveModel] Existing model JSON not found (${modelData.jsonPath}). Will create new file.`);
-        }
-        existingData = {}; // Ensure starting from an empty object
-      }
-
-      // 2. Prepare final data using modelParser
-      const finalDataToSave = prepareModelDataForSaving(existingData, modelData);
-      log.debug(`[ModelService saveModel] Data prepared for saving. Keys: ${Object.keys(finalDataToSave)}`);
-
-      // 3. Serialize data
-      const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
-      log.debug(`[ModelService saveModel] Serialized data prepared for writing to: ${modelData.jsonPath}`);
-
-      // 4. Get source configuration using DataSourceService
+      // 1. Get source configuration using DataSourceService (Moved up)
       const sourceConfig = await this.dataSourceService.getSourceConfig(modelData.sourceId);
       if (!sourceConfig) {
         // DataSourceService already logs error if config not found
@@ -63,7 +38,33 @@ class ModelService {
       }
       log.debug(`[ModelService saveModel] Retrieved source config for ID: ${modelData.sourceId}`);
 
-      // 5. Write data using dataSourceInterface
+      // 2. Read existing data using dataSourceInterface
+      let existingData = {};
+      try {
+        // Use readModelDetail which handles different source types and returns {} on error/not found
+        existingData = await dataSourceInterface.readModelDetail(sourceConfig, modelData.jsonPath);
+        if (Object.keys(existingData).length > 0) {
+             log.debug(`[ModelService saveModel] Successfully read existing model data via interface: ${modelData.jsonPath}`);
+        } else {
+             log.info(`[ModelService saveModel] Existing model JSON not found or empty via interface (${modelData.jsonPath}). Will create new file or overwrite.`);
+        }
+      } catch (readError) {
+          // Although readModelDetail handles errors internally and returns {},
+          // catch potential errors from the interface call itself (e.g., invalid config passed).
+          log.warn(`[ModelService saveModel] Error calling readModelDetail for ${modelData.jsonPath}: ${readError.message}. Assuming no existing data.`);
+          existingData = {}; // Ensure starting from an empty object on interface error
+      }
+
+
+      // 3. Prepare final data using modelParser
+      const finalDataToSave = prepareModelDataForSaving(existingData, modelData);
+      log.debug(`[ModelService saveModel] Data prepared for saving. Keys: ${Object.keys(finalDataToSave)}`);
+
+      // 4. Serialize data
+      const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
+      log.debug(`[ModelService saveModel] Serialized data prepared for writing to: ${modelData.jsonPath}`);
+
+      // 5. Write data using dataSourceInterface (Source config already retrieved)
       await dataSourceInterface.writeModelJson(sourceConfig, modelData, dataToWrite);
       log.info('[ModelService saveModel] Model saved successfully', { sourceId: modelData.sourceId, jsonPath: modelData.jsonPath });
       return { success: true };

@@ -6,6 +6,9 @@ const log = require('electron-log');
 const { LocalDataSource } = require('./dataSource');
 const { WebDavDataSource } = require('./webdavDataSource');
 
+// 缓存数据源实例，键为 sourceId，值为 DataSource 实例
+const dataSourceInstances = {};
+
 /**
  * Writes the model JSON data based on the source configuration type.
  *
@@ -68,9 +71,17 @@ async function writeModelJson(sourceConfig, model, dataToWrite) {
             // Create a temporary instance to perform the write operation
             // Note: This might not be the most efficient way if writes are frequent,
             // as it involves client initialization overhead.
-            const tempWebDavSource = new WebDavDataSource(sourceConfig);
+            // --> 修改：复用或创建 WebDAV 实例
+            let ds = dataSourceInstances[sourceId];
+            if (!ds) {
+                log.debug(`[DataSourceInterface writeModelJson] Creating new WebDavDataSource instance for sourceId: ${sourceId}`);
+                ds = new WebDavDataSource(sourceConfig);
+                dataSourceInstances[sourceId] = ds;
+            } else {
+                log.debug(`[DataSourceInterface writeModelJson] Reusing existing WebDavDataSource instance for sourceId: ${sourceId}`);
+            }
             // The writeModelJson method within WebDavDataSource handles ensureInitialized
-            await tempWebDavSource.writeModelJson(jsonPath, dataToWrite);
+            await ds.writeModelJson(jsonPath, dataToWrite);
             const duration = Date.now() - startTime;
             log.info(`[DataSourceInterface] Successfully wrote to WebDAV: ${jsonPath}, 耗时: ${duration}ms`);
 
@@ -120,7 +131,15 @@ async function listModels(sourceConfig, directory = null, supportedExts = []) { 
             // 传递 supportedExts 给具体实现
             models = await ds.listModels(directory, supportedExts);
         } else if (sourceType === 'webdav') {
-            const ds = new WebDavDataSource(sourceConfig);
+            // --> 修改：复用或创建 WebDAV 实例
+            let ds = dataSourceInstances[sourceId];
+            if (!ds) {
+                log.debug(`[DataSourceInterface listModels] Creating new WebDavDataSource instance for sourceId: ${sourceId}`);
+                ds = new WebDavDataSource(sourceConfig);
+                dataSourceInstances[sourceId] = ds;
+            } else {
+                log.debug(`[DataSourceInterface listModels] Reusing existing WebDavDataSource instance for sourceId: ${sourceId}`);
+            }
             await ds.ensureInitialized(); // Ensure client is ready
             // 传递 supportedExts 给具体实现
             models = await ds.listModels(directory, supportedExts);
@@ -161,7 +180,15 @@ async function listSubdirectories(sourceConfig) {
             const ds = new LocalDataSource(sourceConfig);
             subdirs = await ds.listSubdirectories();
         } else if (sourceType === 'webdav') {
-            const ds = new WebDavDataSource(sourceConfig);
+            // --> 修改：复用或创建 WebDAV 实例
+            let ds = dataSourceInstances[sourceId];
+            if (!ds) {
+                log.debug(`[DataSourceInterface listSubdirectories] Creating new WebDavDataSource instance for sourceId: ${sourceId}`);
+                ds = new WebDavDataSource(sourceConfig);
+                dataSourceInstances[sourceId] = ds;
+            } else {
+                log.debug(`[DataSourceInterface listSubdirectories] Reusing existing WebDavDataSource instance for sourceId: ${sourceId}`);
+            }
              await ds.ensureInitialized(); // Ensure client is ready
             subdirs = await ds.listSubdirectories();
         } else {
@@ -206,7 +233,15 @@ async function readModelDetail(sourceConfig, jsonPath) {
             const ds = new LocalDataSource(sourceConfig);
             detail = await ds.readModelDetail(jsonPath);
         } else if (sourceType === 'webdav') {
-            const ds = new WebDavDataSource(sourceConfig);
+            // --> 修改：复用或创建 WebDAV 实例
+            let ds = dataSourceInstances[sourceId];
+            if (!ds) {
+                log.debug(`[DataSourceInterface readModelDetail] Creating new WebDavDataSource instance for sourceId: ${sourceId}`);
+                ds = new WebDavDataSource(sourceConfig);
+                dataSourceInstances[sourceId] = ds;
+            } else {
+                log.debug(`[DataSourceInterface readModelDetail] Reusing existing WebDavDataSource instance for sourceId: ${sourceId}`);
+            }
              await ds.ensureInitialized(); // Ensure client is ready
             detail = await ds.readModelDetail(jsonPath);
         } else {
@@ -272,7 +307,15 @@ async function getImageData(sourceConfig, imagePath) {
             }
 
         } else if (sourceType === 'webdav') {
-            const ds = new WebDavDataSource(sourceConfig);
+            // --> 修改：复用或创建 WebDAV 实例
+            let ds = dataSourceInstances[sourceId];
+            if (!ds) {
+                log.debug(`[DataSourceInterface getImageData] Creating new WebDavDataSource instance for sourceId: ${sourceId}`);
+                ds = new WebDavDataSource(sourceConfig);
+                dataSourceInstances[sourceId] = ds;
+            } else {
+                log.debug(`[DataSourceInterface getImageData] Reusing existing WebDavDataSource instance for sourceId: ${sourceId}`);
+            }
              await ds.ensureInitialized(); // Ensure client is ready
             // WebDAV needs to actually download the data
             imageData = await ds.getImageData(imagePath); // This returns { path, data, mimeType } or null
