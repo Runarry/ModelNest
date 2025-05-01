@@ -11,45 +11,10 @@ const crypto = require('crypto');
 const log = require('electron-log');
 
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the new initializer
-const { setConfig, getConfig } = require('./src/configManager.js'); // Import config manager functions
-
 let mainWindow; // Declare mainWindow globally
-let config = null; // Keep local config for loading/saving logic in main.js
 
-// 加载配置文件 (异步)
-async function loadConfig() {
-  const configPath = path.join(app.getPath('userData'), 'config.json');
-  try {
-    // 使用 fs.promises.access 检查文件是否存在
-    await fs.promises.access(configPath);
-    // 使用 fs.promises.readFile 读取文件
-    const configData = await fs.promises.readFile(configPath, 'utf-8');
-    config = JSON.parse(configData);
-    // 转换本地路径为绝对路径 (在 setConfig 之前完成)
-    if (Array.isArray(config.modelSources)) {
-      config.modelSources.forEach(source => {
-        if (source.type === 'local' && source.path) {
-          source.path = path.isAbsolute(source.path) ? source.path : path.join(process.cwd(), source.path);
-        }
-      });
-    }
-    setConfig(config); // Update config manager after loading and processing
-    log.info('[Config] Loaded config set in configManager');
-  } catch (error) {
-    // 如果文件不存在或读取/解析失败，则使用默认配置
-    if (error.code === 'ENOENT') {
-      log.warn('config.json 不存在，使用默认配置。');
-    } else {
-      log.error('加载或解析 config.json 失败:', error.message, error.stack);
-    }
-    config = { modelSources: [], supportedExtensions: [] };
-    setConfig(config); // Update config manager with default config
-    log.warn('[Config] Default config set in configManager');
-  }
-}
-
-// 创建主窗口
-function createWindow() {
+// 创建主窗口 (TODO: Modify to accept services and pass webContents to updateService)
+function createWindow(services) {
   log.info('[Lifecycle] 创建主窗口');
   mainWindow = new BrowserWindow({ // Assign to mainWindow
     width: 1270,
@@ -90,14 +55,23 @@ app.whenReady().then(async () => { // 改为 async 回调
   log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] {text}';
   log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
 
-  await loadConfig(); // 等待配置加载完成
-  log.info('[Config] 配置加载完成', config);
+  // 配置 electron-log 捕获未处理的异常和拒绝
+  log.errorHandler.startCatching({
+    showDialog: process.env.NODE_ENV !== 'production' // 只在非生产环境显示对话框
+  });
+  log.info('[Log] 配置 electron-log 捕获未处理错误');
 
-  // 日志级别设置：优先 config.json（logLevel），否则环境变量 LOG_LEVEL，否则 'info'
-  // 日志级别优先级：config.json（logLevel）> LOG_LEVEL > BUILD_DEFAULT_LOG_LEVEL > 'info'
-  let level = 'debug';
-  if (config && typeof config.logLevel === 'string') {
-    level = config.logLevel;
+  // --- Initialize Services ---
+  const { initializeServices } = require('./src/services'); // 引入初始化函数
+  log.info('[Main] 开始初始化服务...');
+  const services = await initializeServices(); // 等待所有服务初始化完成
+  log.info('[Main] 所有服务已初始化');
+
+  // 使用 services.configService 获取配置来设置日志级别
+  const appConfig = await services.configService.getConfig();
+  let level = 'debug'; // Default level
+  if (appConfig && typeof appConfig.logLevel === 'string') {
+    level = appConfig.logLevel;
   } else if (process.env.LOG_LEVEL) {
     level = process.env.LOG_LEVEL;
   } else if (process.env.BUILD_DEFAULT_LOG_LEVEL) {
@@ -105,24 +79,16 @@ app.whenReady().then(async () => { // 改为 async 回调
   }
   log.transports.file.level = level;
   log.transports.console.level = level;
-  log.info(`[Log] 日志级别已设置为: ${level}`);
+  log.info(`[Log] 日志级别已根据服务配置设置为: ${level}`);
 
-  // 配置 electron-log 捕获未处理的异常和拒绝
-  log.errorHandler.startCatching({
-    showDialog: process.env.NODE_ENV !== 'production' // 只在非生产环境显示对话框
-  });
-  log.info('[Log] 配置 electron-log 捕获未处理错误');
+  // 使用 services.configService 获取配置来设置 imageCache
+  imageCache.setConfig(appConfig.imageCache || {});
+  log.info('[ImageCache] ImageCache 配置已根据服务设置');
 
-  // 配置加载完成后再设置 imageCache
-  if (config && config.imageCache) {
-    imageCache.setConfig(config.imageCache);
-    log.info('[ImageCache] 使用配置文件中的 imageCache 配置');
-  } else {
-    imageCache.setConfig({});
-    log.warn('[ImageCache] 未检测到 imageCache 配置，使用默认值');
-  }
-
-  createWindow();
+  // 将 services 对象传递给需要它的地方
+  // 注意: initializeIPC 和 createWindow 函数本身尚未修改以接收 services
+  initializeIPC(services); // TODO: Modify initializeIPC to accept and use services
+  createWindow(services); // TODO: Modify createWindow to accept services and pass webContents to updateService
 
   // --- Electron Updater Logic with Enhanced Logging ---
   log.info('[Updater] Starting autoUpdater initialization...');
@@ -209,33 +175,48 @@ app.whenReady().then(async () => { // 改为 async 回调
 // --- Updater IPC Handlers ---
   ipcMain.handle('updater.checkForUpdate', async () => {
     log.info('[Updater IPC] 收到 checkForUpdate 请求');
+    // Delegate to UpdateService
     try {
-      sendUpdateStatus('checking'); // Notify renderer immediately
-      const result = await autoUpdater.checkForUpdates();
-      log.info('[Updater IPC] checkForUpdates result:', result ? 'Update check triggered' : 'Update check failed or no result');
-      return null; // Avoid cloning error by not returning the complex object
+      await services.updateService.checkForUpdates();
+      // UpdateService will handle sending status updates via webContents
+      return { success: true };
     } catch (error) {
-      log.error('[Updater IPC] Error during checkForUpdates:', error.message, error.stack);
-      sendUpdateStatus('error', `手动检查更新失败: ${error.message}`);
-      throw error;
+      log.error('[Updater IPC] Error during checkForUpdates via service:', error.message, error.stack);
+      // UpdateService should ideally handle sending error status too
+      // sendUpdateStatus('error', `手动检查更新失败: ${error.message}`); // Keep for now if service doesn't send
+      throw error; // Re-throw for the renderer to catch
     }
   });
 
   ipcMain.handle('updater.quitAndInstall', () => {
     log.info('[Updater IPC] 收到 quitAndInstall 请求');
+    // Delegate to UpdateService
     try {
-      autoUpdater.quitAndInstall();
+      services.updateService.quitAndInstall();
     } catch (error) {
-      log.error('[Updater IPC] Error during quitAndInstall:', error.message, error.stack);
+      log.error('[Updater IPC] Error during quitAndInstall via service:', error.message, error.stack);
+      // Optionally send an error status back if needed
     }
   });
   // --- End Updater IPC Handlers ---
   // --- End Electron Updater Logic ---
 
-  // Initialize Model Library IPC Handlers (no longer needs config passed)
-  initializeModelLibraryIPC();
+// Placeholder for the combined IPC initialization function
+// TODO: Create or modify this function to accept services
+function initializeIPC(services) {
+  log.info('[IPC] Initializing IPC handlers with services...');
+  // Example: Initialize specific IPC modules, passing services if needed
+  initializeModelLibraryIPC(services); // Pass services to the specific initializer
+  // Register other handlers directly here or call other initializers
+  // e.g., initializeConfigIPC(services.configService);
+  // e.g., initializeUpdateIPC(services.updateService);
 
+  // Register handlers previously in main.js that now use services
+  // (getConfig and save-config were removed as they are handled by ConfigService IPC)
 
+  // Keep handlers that don't directly depend on the new services for now
+  // (open-folder-dialog, renderer-error, log-message)
+}
 app.on('activate', function () {
     log.info('[Lifecycle] 应用激活');
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -295,63 +276,9 @@ app.on('window-all-closed', async function () {
   }
 });
 
- // IPC: 获取配置
-log.info('[IPC] Registering handler for getConfig');
-ipcMain.handle('getConfig', async () => {
-log.info('[IPC getConfig] Received request');
-  return config;
-});
-
 // IPC: 获取子目录列表
 // IPC: 获取模型详情
 // IPC: 获取模型图片数据
-// IPC: 保存配置
-ipcMain.handle('save-config', async (event, newConfig) => {
-  const configPath = path.join(app.getPath('userData'), 'config.json');
-  try {
-    // 1. 验证和清理 newConfig (可选但推荐)
-    //    - 确保 modelSources 是数组等
-    //    - 移除不必要的临时字段（如果渲染进程添加了的话）
-
-    // 2. 写入文件
-    const configString = JSON.stringify(newConfig, null, 2); // Pretty print JSON
-    await fs.promises.writeFile(configPath, configString, 'utf-8');
-    log.info('[Main] Configuration saved successfully to:', configPath);
-
-    // 3. 更新内存中的配置
-    //    重新加载或直接赋值，确保路径处理等逻辑一致
-    //    简单起见，这里直接赋值，但注意本地路径可能需要重新处理成绝对路径
-    config = newConfig;
-    // 确保本地路径是绝对路径 (如果 loadConfig 中的逻辑需要保持一致)
-    if (Array.isArray(config.modelSources)) {
-        config.modelSources.forEach(source => {
-          if (source.type === 'local' && source.path && !path.isAbsolute(source.path)) {
-            // 注意：这里假设路径是相对于 process.cwd()，如果保存时已经是绝对路径则不需要此步
-             source.path = path.join(process.cwd(), source.path);
-          }
-        });
-      }
-    setConfig(config); // Update config manager after saving and processing
-    log.info('[Config] Saved config updated in configManager');
-
-    // 4. 更新图片缓存配置
-    imageCache.setConfig(config.imageCache || {});
-    log.info('[Main] Image cache configuration updated.');
-
-    // 5. 通知所有渲染进程配置已更新 (重要!)
-     BrowserWindow.getAllWindows().forEach(win => {
-       win.webContents.send('config-updated');
-     });
-     log.info('[Main] Sent config-updated event to all windows.');
-
-
-    return { success: true };
-  } catch (error) {
-    log.error('[Main] Failed to save configuration:', error.message, error.stack);
-    // 将错误信息传递回渲染进程
-    throw new Error(`Failed to save config.json: ${error.message}`);
-  }
-});
 
 // IPC: 打开文件夹选择对话框
 ipcMain.handle('open-folder-dialog', async (event) => {
