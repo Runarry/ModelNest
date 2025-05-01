@@ -79,8 +79,7 @@ app.whenReady().then(async () => { // 改为 async 回调
   } else if (process.env.BUILD_DEFAULT_LOG_LEVEL) {
     level = process.env.BUILD_DEFAULT_LOG_LEVEL;
   }
-  log.transports.file.level = level;
-  log.transports.console.level = level;
+  log.level = level; // 设置主日志级别，影响所有 transports
   log.info(`[Log] 日志级别已根据服务配置设置为: ${level}`);
 
   // 使用 services.configService 获取配置来设置 imageCache
