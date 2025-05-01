@@ -13,6 +13,7 @@ const log = require('electron-log');
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the model library IPC initializer
 const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app IPC initializer
 let mainWindow; // Declare mainWindow globally
+let services = null; // Declare services globally
 
 // 创建主窗口 (TODO: Modify to accept services and pass webContents to updateService)
 function createWindow(services) {
@@ -65,7 +66,7 @@ app.whenReady().then(async () => { // 改为 async 回调
   // --- Initialize Services ---
   const { initializeServices } = require('./src/services'); // 引入初始化函数
   log.info('[Main] 开始初始化服务...');
-  const services = await initializeServices(); // 等待所有服务初始化完成
+  services = await initializeServices(); // Assign to the global services variable
   log.info('[Main] 所有服务已初始化');
 
   // 使用 services.configService 获取配置来设置日志级别
@@ -244,23 +245,18 @@ ipcMain.on('log-message', (event, level, message, ...args) => {
 });
 
 
-app.on('window-all-closed', async function () {
+app.on('window-all-closed', async function () { // Ensure the function is async
   log.info('[Lifecycle] 所有窗口已关闭');
   if (process.platform !== 'darwin') {
     try {
-      // 清理图片缓存
-      // TODO: Move cache clearing logic to appropriate service shutdown hook if necessary.
-      // await imageCache.clearCache();
-      // log.info('[Cache] 图片缓存已清理');
+      // 清理图片缓存 (通过 ImageService)
+      if (services && services.imageService) {
+          await services.imageService.cleanupCache(); // Call the service method
+      } else {
+          log.warn('[Lifecycle] Services or ImageService not available during window-all-closed.');
+      }
 
-      // TODO: Move cache clearing logic to appropriate service shutdown hook if necessary.
-      // 清理WebDAV下载缓存目录
-      // const webdavCacheDir = path.join(process.cwd(), 'cache', 'webdav_images');
-      // if (fs.existsSync(webdavCacheDir)) {
-      //   const files = await fs.promises.readdir(webdavCacheDir);
-      //   await Promise.all(files.map(file => fs.promises.unlink(path.join(webdavCacheDir, file))));
-      //   log.info(`[Cache] 清理WebDAV下载缓存目录: ${webdavCacheDir}, 删除文件数: ${files.length}`);
-      // }
+      // WebDAV 缓存清理逻辑暂时忽略 (根据指令)
     } catch (e) {
       log.error('[Cache] 清理缓存失败:', e.message, e.stack);
     }
