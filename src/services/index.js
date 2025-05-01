@@ -14,7 +14,7 @@ async function initializeServices() {
   await configService.initialize(); // Wait for config to be loaded
 
   // 2. Initialize DataSourceService, injecting ConfigService
-  const dataSourceService = new DataSourceService(configService);
+  const dataSourceService = new DataSourceService({ configService });
 
   // 3. Initialize ModelService, injecting DataSourceService
   const modelService = new ModelService(dataSourceService);

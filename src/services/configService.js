@@ -192,4 +192,4 @@ class ConfigService {
 }
 
 // Export a single instance (Singleton pattern)
-module.exports = new ConfigService();
+module.exports = ConfigService;
