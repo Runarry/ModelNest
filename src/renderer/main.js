@@ -5,6 +5,7 @@ import { initDetailModel, showDetailModel, hideDetailModel } from './js/componen
 import { initSettingsModel } from './js/components/settings-model.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './js/utils/ui-utils.js';
+import { t, loadLocale, getCurrentLocale, getSupportedLocales } from './js/core/i18n.js';
 
 // 全局错误与未处理 Promise 拒绝上报到主进程日志
 window.onerror = function (message, source, lineno, colno, error) {
@@ -32,8 +33,7 @@ window.addEventListener('unhandledrejection', function (event) {
     });
   }
 });
-// i18n is loaded globally via script tag in index.html, but we can reference it
-const { loadLocale, t, getCurrentLocale, getSupportedLocales } = window.i18n;
+// i18n functions are now imported from the core module
 
 document.addEventListener('DOMContentLoaded', async () => {
   window.api.logMessage('info', "[Renderer] DOMContentLoaded - 开始初始化渲染器模块...");

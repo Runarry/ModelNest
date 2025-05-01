@@ -1,7 +1,6 @@
 import { showFeedback, clearFeedback } from '../utils/ui-utils.js';
-
-// Assume i18n is initialized and 't' is available globally or passed/imported
-const t = window.i18n?.t || ((key) => key); // Fallback
+import { t } from '../core/i18n.js'; // 导入 i18n 函数
+import { logMessage, openFolderDialog } from '../apiBridge.js'; // 导入 API 桥接
 
 // ===== DOM Element References =====
 let sourceEditModel;
@@ -72,7 +71,7 @@ export function initSourceEditModel(config, onSaveCallback) {
         !sourceEditUrlInput || !sourceEditUsernameInput || !sourceEditPasswordInput ||
         !sourceEditCloseBtn || !sourceEditCancelBtn || !sourceEditFeedbackEl) {
         // Task 1: Error Logging
-        api.logMessage('error', "[SourceEditModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
+        logMessage('error', "[SourceEditModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
         return;
     }
 
@@ -82,23 +81,23 @@ export function initSourceEditModel(config, onSaveCallback) {
     sourceEditTypeSelect.addEventListener('change', handleSourceTypeChange); // Logging in handler
     // Task 4: Click Event Logging
     sourceEditBrowseBtn.addEventListener('click', () => {
-        api.logMessage('info', '[UI] 点击了浏览文件夹按钮');
+        logMessage('info', '[UI] 点击了浏览文件夹按钮');
         handleBrowseFolder();
     });
     sourceEditForm.addEventListener('submit', handleSourceEditFormSubmit); // Logging in handler
     // Task 4: Click Event Logging
     sourceEditCloseBtn.addEventListener('click', () => {
-        api.logMessage('info', '[UI] 点击了数据源编辑弹窗的关闭按钮');
+        logMessage('info', '[UI] 点击了数据源编辑弹窗的关闭按钮');
         closeSourceEditModel();
     });
     sourceEditCancelBtn.addEventListener('click', () => {
-        api.logMessage('info', '[UI] 点击了数据源编辑弹窗的取消按钮');
+        logMessage('info', '[UI] 点击了数据源编辑弹窗的取消按钮');
         closeSourceEditModel();
     });
     sourceEditModel.addEventListener('click', (event) => {
         if (event.target === sourceEditModel) {
              // Task 4: Click Event Logging
-            api.logMessage('info', '[UI] 点击了数据源编辑弹窗的背景遮罩');
+            logMessage('info', '[UI] 点击了数据源编辑弹窗的背景遮罩');
             closeSourceEditModel();
         }
     });
@@ -115,18 +114,18 @@ export function initSourceEditModel(config, onSaveCallback) {
  */
 export function openSourceEditModel(sourceToEdit = null) {
     if (!sourceEditModel || !sourceEditForm) {
-        api.logMessage('error', "[SourceEditModel] openSourceEditModel 失败：弹窗或表单元素未初始化");
+        logMessage('error', "[SourceEditModel] openSourceEditModel 失败：弹窗或表单元素未初始化");
         return;
     }
     const mode = sourceToEdit ? '编辑' : '添加';
-    api.logMessage('info', `[SourceEditModel] 开始打开数据源编辑弹窗 (${mode}模式)`);
+    logMessage('info', `[SourceEditModel] 开始打开数据源编辑弹窗 (${mode}模式)`);
     clearFeedback(sourceEditFeedbackEl);
     sourceEditForm.reset(); // Clear form fields
     handleSourceTypeChange(); // Ensure correct fields are shown initially
 
     if (sourceToEdit) {
         // Editing existing source
-        api.logMessage('info', `[SourceEditModel] 填充表单以编辑数据源: ${sourceToEdit.name} (ID: ${sourceToEdit.id})`);
+        logMessage('info', `[SourceEditModel] 填充表单以编辑数据源: ${sourceToEdit.name} (ID: ${sourceToEdit.id})`);
         sourceEditTitle.textContent = t('settings.modelSources.editTitle');
         sourceEditIdInput.value = sourceToEdit.id;
         sourceEditNameInput.value = sourceToEdit.name;
@@ -141,29 +140,29 @@ export function openSourceEditModel(sourceToEdit = null) {
         handleSourceTypeChange(); // Update visible fields based on loaded type
     } else {
         // Adding new source
-        api.logMessage('info', '[SourceEditModel] 准备表单以添加新数据源');
+        logMessage('info', '[SourceEditModel] 准备表单以添加新数据源');
         sourceEditTitle.textContent = t('settings.modelSources.addTitle');
         sourceEditIdInput.value = ''; // Ensure ID is empty for new source
     }
     sourceEditModel.classList.add('active');
-    api.logMessage('info', '[SourceEditModel] 数据源编辑弹窗已打开');
+    logMessage('info', '[SourceEditModel] 数据源编辑弹窗已打开');
     try {
         sourceEditNameInput.focus(); // Focus the name field
-        api.logMessage('debug', '[SourceEditModel] 已聚焦名称输入框');
+        logMessage('debug', '[SourceEditModel] 已聚焦名称输入框');
     } catch (focusError) {
          // Task 1: Error Logging
-        api.logMessage('error', '[SourceEditModel] 聚焦名称输入框时出错:', focusError);
+        logMessage('error', '[SourceEditModel] 聚焦名称输入框时出错:', focusError);
     }
 }
 
 /** Closes the source edit Model. */
 export function closeSourceEditModel() {
-    api.logMessage('info', '[SourceEditModel] 开始关闭数据源编辑弹窗');
+    logMessage('info', '[SourceEditModel] 开始关闭数据源编辑弹窗');
     if (sourceEditModel) {
         sourceEditModel.classList.remove('active');
-         api.logMessage('info', '[SourceEditModel] 数据源编辑弹窗已关闭');
+         logMessage('info', '[SourceEditModel] 数据源编辑弹窗已关闭');
     } else {
-        api.logMessage('warn', '[SourceEditModel] closeSourceEditModel 调用时弹窗元素未初始化');
+        logMessage('warn', '[SourceEditModel] closeSourceEditModel 调用时弹窗元素未初始化');
     }
 }
 
@@ -172,13 +171,13 @@ export function closeSourceEditModel() {
 /** Handles changes in the source type dropdown to show/hide relevant fields. */
 function handleSourceTypeChange() {
     if (!sourceEditTypeSelect || !sourceEditLocalFields || !sourceEditWebdavFields || !sourceEditPathInput || !sourceEditUrlInput) {
-         api.logMessage('error', "[SourceEditModel] handleSourceTypeChange 失败：一个或多个必需的表单字段元素未初始化");
+         logMessage('error', "[SourceEditModel] handleSourceTypeChange 失败：一个或多个必需的表单字段元素未初始化");
         return;
     }
 
     const selectedType = sourceEditTypeSelect.value;
      // Task 4: Click Event Logging (Implicit via change)
-    api.logMessage('info', `[UI] 切换数据源类型: ${selectedType}`);
+    logMessage('info', `[UI] 切换数据源类型: ${selectedType}`);
     if (selectedType === 'local') {
         sourceEditLocalFields.style.display = 'block';
         sourceEditWebdavFields.style.display = 'none';
@@ -192,7 +191,7 @@ function handleSourceTypeChange() {
         // Username/Password are optional for WebDAV usually
     } else {
         // Handle potential unknown type or default state
-        api.logMessage('warn', `[SourceEditModel] 未知的数据源类型被选中: ${selectedType}`);
+        logMessage('warn', `[SourceEditModel] 未知的数据源类型被选中: ${selectedType}`);
         sourceEditLocalFields.style.display = 'none';
         sourceEditWebdavFields.style.display = 'none';
         sourceEditPathInput.required = false;
@@ -203,47 +202,47 @@ function handleSourceTypeChange() {
 /** Handles the click event for the browse folder button (for local sources). */
 async function handleBrowseFolder() {
      // Logging for click is handled by the event listener setup in init
-    if (!sourceEditBrowseBtn || !sourceEditPathInput) {
-         api.logMessage('error', "[SourceEditModel] handleBrowseFolder 失败：浏览按钮或路径输入框未初始化");
-        return;
-    }
-    api.logMessage('info', "[SourceEditModel] 开始处理浏览文件夹操作");
-    sourceEditBrowseBtn.disabled = true; // Disable button during operation
-    clearFeedback(sourceEditFeedbackEl);
+     if (!sourceEditBrowseBtn || !sourceEditPathInput) {
+          logMessage('error', "[SourceEditModel] handleBrowseFolder 失败：浏览按钮或路径输入框未初始化");
+         return;
+     }
+     logMessage('info', "[SourceEditModel] 开始处理浏览文件夹操作");
+     sourceEditBrowseBtn.disabled = true; // Disable button during operation
+     clearFeedback(sourceEditFeedbackEl);
 
-    try {
-        api.logMessage('info', "[SourceEditModel] 调用 API 打开文件夹选择对话框");
-        const selectedPath = await window.api.openFolderDialog();
-        if (selectedPath) {
-            api.logMessage('info', `[SourceEditModel] 用户选择了文件夹: ${selectedPath}`);
-            sourceEditPathInput.value = selectedPath;
-        } else {
-             api.logMessage('info', "[SourceEditModel] 用户取消了文件夹选择");
-        }
-    } catch (error) {
-         // Task 1: Error Logging
-        api.logMessage('error', "[SourceEditModel] 打开文件夹对话框失败:", error.message, error.stack, error);
-        showFeedback(sourceEditFeedbackEl, t('settings.folderDialogError', { message: error.message }), 'error');
-    } finally {
-        sourceEditBrowseBtn.disabled = false; // Re-enable button
-        api.logMessage('info', "[SourceEditModel] 浏览文件夹操作完成");
-    }
+     try {
+         logMessage('info', "[SourceEditModel] 调用 API 打开文件夹选择对话框");
+         const selectedPath = await openFolderDialog(); // 使用导入的函数
+         if (selectedPath) {
+             logMessage('info', `[SourceEditModel] 用户选择了文件夹: ${selectedPath}`);
+             sourceEditPathInput.value = selectedPath;
+         } else {
+              logMessage('info', "[SourceEditModel] 用户取消了文件夹选择");
+         }
+     } catch (error) {
+          // Task 1: Error Logging
+         logMessage('error', "[SourceEditModel] 打开文件夹对话框失败:", error.message, error.stack, error);
+         showFeedback(sourceEditFeedbackEl, t('settings.folderDialogError', { message: error.message }), 'error');
+     } finally {
+         sourceEditBrowseBtn.disabled = false; // Re-enable button
+         logMessage('info', "[SourceEditModel] 浏览文件夹操作完成");
+     }
 }
 
 /** Handles the submission of the source edit form. */
 function handleSourceEditFormSubmit(event) {
     event.preventDefault(); // Prevent default HTML form submission
      // Task 4: Click Event Logging (Implicit via submit)
-    api.logMessage('info', '[UI] 提交了数据源编辑表单');
+    logMessage('info', '[UI] 提交了数据源编辑表单');
     if (!_onSaveCallback) {
          // Task 1: Error Logging
-        api.logMessage('error', "[SourceEditModel] 保存失败：_onSaveCallback 未定义");
+        logMessage('error', "[SourceEditModel] 保存失败：_onSaveCallback 未定义");
         showFeedback(sourceEditFeedbackEl, t('sourceEdit.error.saveCallbackUndefined'), 'error'); // Provide generic user feedback
         return;
     }
 
     clearFeedback(sourceEditFeedbackEl);
-    api.logMessage('info', '[SourceEditModel] 开始处理表单提交和验证');
+    logMessage('info', '[SourceEditModel] 开始处理表单提交和验证');
 
     const sourceId = sourceEditIdInput.value;
     const sourceType = sourceEditTypeSelect.value;
@@ -253,7 +252,7 @@ function handleSourceEditFormSubmit(event) {
     if (!sourceName) {
         // Task 1: Error Logging (Validation)
         const errorMsg = t('settings.validation.sourceNameRequired');
-        api.logMessage('warn', `[SourceEditModel] 验证失败: ${errorMsg}`);
+        logMessage('warn', `[SourceEditModel] 验证失败: ${errorMsg}`);
         showFeedback(sourceEditFeedbackEl, errorMsg, 'error');
         sourceEditNameInput.focus();
         return;
@@ -264,7 +263,7 @@ function handleSourceEditFormSubmit(event) {
         name: sourceName,
         type: sourceType,
     };
-    api.logMessage('debug', `[SourceEditModel] 基本数据: ID=${newSourceData.id}, Name=${newSourceData.name}, Type=${newSourceData.type}`);
+    logMessage('debug', `[SourceEditModel] 基本数据: ID=${newSourceData.id}, Name=${newSourceData.name}, Type=${newSourceData.type}`);
 
     // --- Type-Specific Validation and Data ---
     if (sourceType === 'local') {
@@ -272,19 +271,19 @@ function handleSourceEditFormSubmit(event) {
         if (!pathValue) {
              // Task 1: Error Logging (Validation)
             const errorMsg = t('settings.validation.pathRequired');
-            api.logMessage('warn', `[SourceEditModel] 验证失败 (local): ${errorMsg}`);
+            logMessage('warn', `[SourceEditModel] 验证失败 (local): ${errorMsg}`);
             showFeedback(sourceEditFeedbackEl, errorMsg, 'error');
             sourceEditPathInput.focus();
             return;
         }
         newSourceData.path = pathValue;
-        api.logMessage('debug', `[SourceEditModel] 本地路径: ${pathValue}`);
+        logMessage('debug', `[SourceEditModel] 本地路径: ${pathValue}`);
     } else if (sourceType === 'webdav') {
         const urlValue = sourceEditUrlInput.value.trim();
         if (!urlValue) {
              // Task 1: Error Logging (Validation)
             const errorMsg = t('settings.validation.urlRequired');
-            api.logMessage('warn', `[SourceEditModel] 验证失败 (webdav): ${errorMsg}`);
+            logMessage('warn', `[SourceEditModel] 验证失败 (webdav): ${errorMsg}`);
             showFeedback(sourceEditFeedbackEl, errorMsg, 'error');
             sourceEditUrlInput.focus();
             return;
@@ -295,7 +294,7 @@ function handleSourceEditFormSubmit(event) {
         } catch (_) {
              // Task 1: Error Logging (Validation)
             const errorMsg = t('settings.validation.urlInvalid');
-            api.logMessage('warn', `[SourceEditModel] 验证失败 (webdav): ${errorMsg} - ${urlValue}`);
+            logMessage('warn', `[SourceEditModel] 验证失败 (webdav): ${errorMsg} - ${urlValue}`);
             showFeedback(sourceEditFeedbackEl, errorMsg, 'error');
             sourceEditUrlInput.focus();
             return;
@@ -303,17 +302,17 @@ function handleSourceEditFormSubmit(event) {
         newSourceData.url = urlValue;
         newSourceData.username = sourceEditUsernameInput.value.trim();
         newSourceData.password = sourceEditPasswordInput.value; // Get password value (don't trim)
-        api.logMessage('debug', `[SourceEditModel] WebDAV URL: ${urlValue}, Username: ${newSourceData.username}`);
+        logMessage('debug', `[SourceEditModel] WebDAV URL: ${urlValue}, Username: ${newSourceData.username}`);
     } else {
          // Task 1: Error Logging (Should not happen)
         const errorMsg = t('settings.validation.typeRequired');
-        api.logMessage('error', `[SourceEditModel] 验证失败：无效的数据源类型 "${sourceType}"`);
+        logMessage('error', `[SourceEditModel] 验证失败：无效的数据源类型 "${sourceType}"`);
         showFeedback(sourceEditFeedbackEl, errorMsg, 'error');
         return; // Should not happen if dropdown is set up correctly
     }
 
     // --- Call the Save Callback ---
-    api.logMessage('info', `[SourceEditModel] 验证通过，调用保存回调函数，数据:`, newSourceData);
+    logMessage('info', `[SourceEditModel] 验证通过，调用保存回调函数，数据:`, newSourceData);
     // The callback provided by settings-Model will handle updating the temp list
     _onSaveCallback(newSourceData);
 

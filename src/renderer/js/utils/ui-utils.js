@@ -1,3 +1,5 @@
+import { getModelImage, logMessage } from '../apiBridge.js'; // 导入 API 桥接
+
 // ===== UI Feedback Helper =====
 let feedbackTimeout = null;
 
@@ -64,7 +66,7 @@ export function setLoading(isLoading) {
   const loadingDiv = document.getElementById('loading');
   const mainSection = document.getElementById('mainSection'); // Assuming mainSection exists
   if (!loadingDiv || !mainSection) {
-      api.logMessage('warn', 'Loading div or main section not found for setLoading');
+      logMessage('warn', 'Loading div or main section not found for setLoading');
       return;
   }
   if (isLoading) {
@@ -92,52 +94,52 @@ export async function loadImage(imgElement) {
 
   if (!sourceId || !imagePath) {
       // Task 1: Error Logging
-      api.logMessage('error', `${logPrefix} 加载失败 - <img> 元素缺少 data-source-id 或 data-image-path 属性`, imgElement);
+      logMessage('error', `${logPrefix} 加载失败 - <img> 元素缺少 data-source-id 或 data-image-path 属性`, imgElement);
       // Optionally set a placeholder/error state on the imgElement
       imgElement.alt = 'Error: Missing data attributes'; // Provide feedback
       return;
   }
-  api.logMessage('debug', `${logPrefix} 开始加载图片`);
+  logMessage('debug', `${logPrefix} 开始加载图片`);
   try {
-    const imageData = await window.api.getModelImage({ sourceId, imagePath });
+    const imageData = await getModelImage({ sourceId, imagePath });
 
     if (imageData && imageData.data) {
-       api.logMessage('debug', `${logPrefix} 从 API 收到图片数据, 大小: ${imageData.data?.length} bytes, 类型: ${imageData.mimeType}`);
+       logMessage('debug', `${logPrefix} 从 API 收到图片数据, 大小: ${imageData.data?.length} bytes, 类型: ${imageData.mimeType}`);
       try {
           const blob = new Blob([new Uint8Array(imageData.data)], { type: imageData.mimeType });
           const objectUrl = URL.createObjectURL(blob);
-          api.logMessage('debug', `${logPrefix} 创建 Blob URL: ${objectUrl}`);
+          logMessage('debug', `${logPrefix} 创建 Blob URL: ${objectUrl}`);
           imgElement.src = objectUrl;
           // Optional: Clean up the object URL when the image is no longer needed
           // imgElement.onload = () => URL.revokeObjectURL(objectUrl); // Example cleanup
           imgElement.onerror = () => { // Handle cases where the blob URL itself fails to load
                // Task 1: Error Logging
-              api.logMessage('error', `${logPrefix} 从 Blob URL 加载图片失败: ${objectUrl}`);
+              logMessage('error', `${logPrefix} 从 Blob URL 加载图片失败: ${objectUrl}`);
               URL.revokeObjectURL(objectUrl); // Clean up failed URL
               imgElement.alt = 'Error loading image from blob'; // Provide feedback
           };
            imgElement.onload = () => { // Add onload for successful logging and cleanup
                // Log success including the source from the API result
-               api.logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功: ${objectUrl}, 来源: ${imageData?.source || '未知'}`);
+               logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功: ${objectUrl}, 来源: ${imageData?.source || '未知'}`);
                // Revoke the object URL once the image is loaded to free up memory
                URL.revokeObjectURL(objectUrl);
-               api.logMessage('debug', `${logPrefix} Blob URL 已撤销: ${objectUrl}`);
+               logMessage('debug', `${logPrefix} Blob URL 已撤销: ${objectUrl}`);
            };
       } catch (blobError) {
            // Task 1: Error Logging
-          api.logMessage('error', `${logPrefix} 创建 Blob 或 Object URL 时出错:`, blobError.message, blobError.stack, blobError);
+          logMessage('error', `${logPrefix} 创建 Blob 或 Object URL 时出错:`, blobError.message, blobError.stack, blobError);
           imgElement.alt = 'Error creating image blob'; // Provide feedback
       }
     } else {
         // Handle case where API returns no image data (e.g., image not found on backend)
          // Task 1: Error Logging (Potential failure point)
-        api.logMessage('warn', `${logPrefix} API 未返回图片数据 (可能未找到)`);
+        logMessage('warn', `${logPrefix} API 未返回图片数据 (可能未找到)`);
         // Optionally set a placeholder/error state
         imgElement.alt = 'Image not found'; // Provide feedback
     }
   } catch (apiError) {
      // Task 1: Error Logging
-    api.logMessage('error', `${logPrefix} 调用 API getModelImage 时出错:`, apiError.message, apiError.stack, apiError);
+    logMessage('error', `${logPrefix} 调用 API getModelImage 时出错:`, apiError.message, apiError.stack, apiError);
     // Optionally set a placeholder/error state
      imgElement.alt = 'Error loading image data'; // Provide feedback
   }
