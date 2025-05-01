@@ -165,7 +165,30 @@ class ImageService {
                 }
 
                 // 9. 构造返回结果
-                return { path: compressedPath, data: finalData, mimeType };
+                // 根据实际压缩文件的扩展名确定 MIME 类型
+                const actualExtension = path.extname(compressedPath).toLowerCase();
+                let actualMimeType;
+                switch (actualExtension) {
+                    case '.webp':
+                        actualMimeType = 'image/webp';
+                        break;
+                    case '.jpg':
+                    case '.jpeg':
+                        actualMimeType = 'image/jpeg';
+                        break;
+                    case '.png':
+                        actualMimeType = 'image/png';
+                        break;
+                    case '.gif':
+                        actualMimeType = 'image/gif';
+                        break;
+                    default:
+                        // 尝试从原始 imageDataResult 获取，如果不可靠则回退
+                        actualMimeType = imageDataResult?.mimeType || 'application/octet-stream';
+                        log.warn(`[ImageService] Unknown extension '${actualExtension}' for ${compressedPath}. Falling back to '${actualMimeType}'.`);
+                }
+                log.debug(`[ImageService] Determined mimeType '${actualMimeType}' for ${compressedPath}`);
+                return { path: compressedPath, data: finalData, mimeType: actualMimeType };
 
             } catch (e) {
                 log.error(`[ImageService] Image compression/caching failed for ${sourceImagePathForCache}:`, e.message, e.stack);
