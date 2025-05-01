@@ -249,16 +249,18 @@ app.on('window-all-closed', async function () {
   if (process.platform !== 'darwin') {
     try {
       // 清理图片缓存
-      await imageCache.clearCache();
-      log.info('[Cache] 图片缓存已清理');
+      // TODO: Move cache clearing logic to appropriate service shutdown hook if necessary.
+      // await imageCache.clearCache();
+      // log.info('[Cache] 图片缓存已清理');
 
+      // TODO: Move cache clearing logic to appropriate service shutdown hook if necessary.
       // 清理WebDAV下载缓存目录
-      const webdavCacheDir = path.join(process.cwd(), 'cache', 'webdav_images');
-      if (fs.existsSync(webdavCacheDir)) {
-        const files = await fs.promises.readdir(webdavCacheDir);
-        await Promise.all(files.map(file => fs.promises.unlink(path.join(webdavCacheDir, file))));
-        log.info(`[Cache] 清理WebDAV下载缓存目录: ${webdavCacheDir}, 删除文件数: ${files.length}`);
-      }
+      // const webdavCacheDir = path.join(process.cwd(), 'cache', 'webdav_images');
+      // if (fs.existsSync(webdavCacheDir)) {
+      //   const files = await fs.promises.readdir(webdavCacheDir);
+      //   await Promise.all(files.map(file => fs.promises.unlink(path.join(webdavCacheDir, file))));
+      //   log.info(`[Cache] 清理WebDAV下载缓存目录: ${webdavCacheDir}, 删除文件数: ${files.length}`);
+      // }
     } catch (e) {
       log.error('[Cache] 清理缓存失败:', e.message, e.stack);
     }
