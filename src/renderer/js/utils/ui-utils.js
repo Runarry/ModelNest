@@ -117,7 +117,8 @@ export async function loadImage(imgElement) {
               imgElement.alt = 'Error loading image from blob'; // Provide feedback
           };
            imgElement.onload = () => { // Add onload for successful logging and cleanup
-               api.logMessage('debug', `${logPrefix} 图片从 Blob URL 加载成功: ${objectUrl}`);
+               // Log success including the source from the API result
+               api.logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功: ${objectUrl}, 来源: ${imageData?.source || '未知'}`);
                // Revoke the object URL once the image is loaded to free up memory
                URL.revokeObjectURL(objectUrl);
                api.logMessage('debug', `${logPrefix} Blob URL 已撤销: ${objectUrl}`);

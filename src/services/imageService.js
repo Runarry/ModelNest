@@ -68,7 +68,7 @@ class ImageService {
                     log.debug('[ImageService] Cache hit, reading...');
                     const data = await fs.promises.readFile(cachePath);
                     log.debug('[ImageService] Successfully read cache file');
-                    return { path: cachePath, data, mimeType };
+                    return { path: cachePath, data, mimeType, source: 'cache_hit' };
                 } else {
                     log.debug('[ImageService] Cache miss');
                 }
@@ -188,7 +188,7 @@ class ImageService {
                         log.warn(`[ImageService] Unknown extension '${actualExtension}' for ${compressedPath}. Falling back to '${actualMimeType}'.`);
                 }
                 log.debug(`[ImageService] Determined mimeType '${actualMimeType}' for ${compressedPath}`);
-                return { path: compressedPath, data: finalData, mimeType: actualMimeType };
+                return { path: compressedPath, data: finalData, mimeType: actualMimeType, source: 'cache_miss_compressed' };
 
             } catch (e) {
                 log.error(`[ImageService] Image compression/caching failed for ${sourceImagePathForCache}:`, e.message, e.stack);
