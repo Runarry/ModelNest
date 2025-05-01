@@ -78,7 +78,7 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
       if (!sourceId || !imagePath) throw new Error('缺少 sourceId 或 imagePath');
       // 直接调用 ImageService 获取模型图片
       // ImageService 内部会处理缓存、数据源获取、压缩等逻辑
-      return await services.imageService.getModelImage(sourceId, imagePath);
+      return await services.imageService.getImage(sourceId, imagePath);
     } catch (error) {
       log.error('[IPC] 调用 imageService.getModelImage 失败:', error.message, error.stack, { sourceId, imagePath });
       // 将错误传递给渲染进程
