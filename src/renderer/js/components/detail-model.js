@@ -106,7 +106,7 @@ export async function showDetailModel(model, sourceId) {
          };
          detailImage.onerror = () => {
              // Task 1: Error Logging
-             window.api.logMessage('error', `[DetailModel] 图片加载失败: ${model.image} (Source: ${sourceId})`);
+             window.api.logMessage('warn', `[DetailModel] 图片初始加载尝试失败 (可能稍后成功): ${model.image} (Source: ${sourceId})`);
              detailImage.style.display = 'none';
          };
 
