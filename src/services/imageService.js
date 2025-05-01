@@ -211,6 +211,23 @@ class ImageService {
         }
     }
 /**
+     * Updates the configuration for the underlying image cache.
+     * @param {object} newCacheConfig - The new configuration object for the image cache.
+     * Expected format: { enabled: boolean, maxSizeMb: number, compress: boolean, compressFormat: string, compressQuality: number }
+     */
+    updateCacheConfig(newCacheConfig) {
+        log.info('[ImageService] updateCacheConfig called with new config:', newCacheConfig);
+        try {
+            // Directly call the setConfig method of the imported imageCache module
+            imageCache.setConfig(newCacheConfig || {});
+            log.info('[ImageService] Image cache configuration updated successfully.');
+        } catch (error) {
+            log.error('[ImageService] Failed to update image cache configuration:', error);
+            // Optionally re-throw or handle the error as needed
+            throw error;
+        }
+    }
+/**
      * Cleans up the image cache. Intended to be called on application exit.
      */
     async cleanupCache() {

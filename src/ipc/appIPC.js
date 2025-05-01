@@ -1,7 +1,5 @@
 const { ipcMain, BrowserWindow } = require('electron');
 const log = require('electron-log');
-const imageCache = require('../common/imageCache'); // 需要引入 imageCache 来更新配置
-
 /**
  * 初始化应用级别的 IPC Handlers
  * @param {object} services - 包含所有服务的对象
@@ -36,8 +34,13 @@ function initializeAppIPC(services) {
       log.info('[IPC] 已获取更新后的配置');
 
       // 2. 更新 imageCache 配置
-      imageCache.setConfig(updatedConfig.imageCache || {});
-      log.info('[IPC] ImageCache 配置已更新');
+      // 2. 更新 imageCache 配置 (通过 ImageService)
+      if (services.imageService) {
+        services.imageService.updateCacheConfig(updatedConfig.imageCache || {});
+        log.info('[IPC] ImageCache 配置已通过 imageService 更新');
+      } else {
+        log.warn('[IPC] imageService 未初始化，无法更新 ImageCache 配置');
+      }
 
       // 3. 通知所有窗口配置已更新
       BrowserWindow.getAllWindows().forEach(win => {
