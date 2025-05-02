@@ -79,7 +79,7 @@ class LocalDataSource extends DataSource {
         // Use async readdir
         const files = await fs.promises.readdir(dir, { withFileTypes: true });
         // Assuming parseLocalModels remains synchronous. If it becomes async, add await.
-        const modelObjs = parseLocalModels(dir, currentSupportedExts); // 使用传入的 currentSupportedExts
+        const modelObjs = await parseLocalModels(dir, currentSupportedExts); // 使用传入的 currentSupportedExts
         allModels = allModels.concat(modelObjs);
 
         // Use for...of loop for async iteration

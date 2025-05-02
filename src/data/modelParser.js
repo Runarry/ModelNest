@@ -1,20 +1,27 @@
 const log = require('electron-log');
-const fs = require('fs');
+const fs = require('fs').promises; // 使用 promises API
+const fsSync = require('fs'); // 保留 sync API 用于可能需要的场景，但此任务中尽量避免
 const path = require('path');
 
 // 解析本地模型目录，返回标准模型对象数组
-function parseLocalModels(dir, supportedExtensions) {
+async function parseLocalModels(dir, supportedExtensions) { // 改为 async 函数
   log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}`);
-  if (!fs.existsSync(dir)) {
-    log.warn(`[modelParser] 目录不存在: ${dir}`);
+  try {
+    await fs.stat(dir); // 异步检查目录是否存在和可访问
+  } catch (statError) {
+    if (statError.code === 'ENOENT') {
+      log.warn(`[modelParser] 目录不存在: ${dir}`);
+    } else {
+      log.error(`[modelParser] 访问目录失败: ${dir}`, statError.message, statError.stack);
+    }
     return [];
   }
+
   let files;
   try {
-      files = fs.readdirSync(dir);
+      files = await fs.readdir(dir); // 异步读取目录
       log.debug(`[modelParser] 目录文件:`, files);
   } catch (readError) {
-      // Task 1: Error Logging
       log.error(`[modelParser] 读取目录失败: ${dir}`, readError.message, readError.stack);
       return []; // Return empty array if directory cannot be read
   }
@@ -22,8 +29,8 @@ function parseLocalModels(dir, supportedExtensions) {
 
   // 调试输出当前目录和文件列表
 
-  // 只处理一级目录
-  files.forEach(file => {
+  // 只处理一级目录 - 改用 for...of 循环以支持 await
+  for (const file of files) {
     const ext = path.extname(file).toLowerCase();
     if (supportedExtensions.includes(ext)) {
       const base = path.basename(file, ext);
@@ -35,12 +42,13 @@ function parseLocalModels(dir, supportedExtensions) {
       if (jsonFile) {
         const jsonFullPath = path.join(dir, jsonFile);
         try {
-          const jsonContent = fs.readFileSync(jsonFullPath, 'utf-8');
+          // 异步读取 JSON 文件
+          const jsonContent = await fs.readFile(jsonFullPath, 'utf-8');
           detail = parseModelDetailFromJsonContent(jsonContent, jsonFullPath); // 使用新函数
         } catch (e) {
-          // 读取文件本身的错误（例如权限问题）
-          log.error(`[modelParser] 读取模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
-          detail = {};
+          // 读取文件本身的错误（例如权限问题或解析错误）
+          log.error(`[modelParser] 读取或解析模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
+          detail = {}; // 保持为空对象
         }
       }
       const modelObj = {
@@ -56,7 +64,7 @@ function parseLocalModels(dir, supportedExtensions) {
       };
       models.push(modelObj);
     }
-  });
+  }
   log.debug(`[modelParser] 解析完成，模型数量: ${models.length}`);
   return models;
 }
