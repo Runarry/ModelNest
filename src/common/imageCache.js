@@ -1,13 +1,13 @@
 /**
  * 图片压缩与缓存模块
  * 适用于本地图片与 WebDAV 图片的统一压缩、缓存、清理管理
- * 
+ *
  * 主要功能：
  * 1. 首次加载图片时自动压缩并缓存，后续优先读取缓存
  * 2. 支持最大缓存空间限制，超限时按 LRU 策略清理
  * 3. 支持缓存清理（启动/退出/手动）
  * 4. 支持配置压缩参数、缓存目录等
- * 
+ *
  * 依赖建议：sharp、jimp 等 Node.js 图像处理库
  */
 
@@ -41,7 +41,7 @@ let config = { ...defaultConfig };
 
 /**
  * 设置图片缓存与压缩参数
- * @param {Object} options 
+ * @param {Object} options
  */
 function setConfig(options = {}) {
     config = { ...config, ...options };
@@ -101,25 +101,30 @@ async function getCache(libraryId, imageName) {
     const startTime = Date.now();
     stats.totalRequests++;
     const cacheFilePath = getCacheFilePath(libraryId, imageName);
-    log.debug(`[ImageCache] getCache: 尝试获取缓存 for ${libraryId}_${imageName} at ${cacheFilePath}`);
+    log.debug(`[ImageCache] >>> getCache START for key: ${libraryId}_${imageName}. Calculated cacheFilePath: ${cacheFilePath}`);
 
     try {
         await ensureCacheDirExists(); // 确保目录存在
+        log.debug(`[ImageCache] Attempting fs.promises.readFile for: ${cacheFilePath}`);
         const cacheBuffer = await fs.promises.readFile(cacheFilePath);
+        log.info(`[ImageCache] fs.promises.readFile SUCCESS for: ${cacheFilePath}. Buffer size: ${cacheBuffer.length}`);
         // 更新访问时间 (异步，不阻塞返回)
         fs.promises.utimes(cacheFilePath, new Date(), new Date()).catch(utimeError => {
-            log.warn(`[ImageCache] 更新缓存文件访问时间失败: ${cacheFilePath}`, utimeError.message);
+            log.warn(`[ImageCache] Failed to update access time for cache file: ${cacheFilePath}`, utimeError.message);
         });
         stats.cacheHits++;
         const duration = Date.now() - startTime;
-        log.info(`[ImageCache] 缓存命中: ${libraryId}_${imageName} -> ${path.basename(cacheFilePath)}, 大小: ${(cacheBuffer.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
+        log.info(`[ImageCache] Cache HIT for: ${libraryId}_${imageName}. Path: ${path.basename(cacheFilePath)}, Size: ${(cacheBuffer.length / 1024).toFixed(1)}KB. Duration: ${duration}ms`);
+        log.debug(`[ImageCache] <<< getCache END (Hit) for key: ${libraryId}_${imageName}`);
         return cacheBuffer;
     } catch (error) {
         if (error.code === 'ENOENT') {
-            log.debug(`[ImageCache] 缓存未命中: ${libraryId}_${imageName} (${cacheFilePath})`);
+            log.info(`[ImageCache] Cache MISS (ENOENT): File not found at ${cacheFilePath} for key ${libraryId}_${imageName}`);
         } else {
-            log.warn(`[ImageCache] 读取缓存文件时出错: ${cacheFilePath}`, error.message, error.stack);
+            log.error(`[ImageCache] Error reading cache file: ${cacheFilePath} for key ${libraryId}_${imageName}`, error.message, error.stack);
         }
+        const duration = Date.now() - startTime;
+        log.debug(`[ImageCache] <<< getCache END (Miss or Error) for key: ${libraryId}_${imageName}. Duration: ${duration}ms`);
         return null; // 文件不存在或读取错误，返回 null
     }
 }
@@ -134,56 +139,82 @@ async function getCache(libraryId, imageName) {
 async function setCache(libraryId, imageName, sourceBuffer) {
     const startTime = Date.now();
     const cacheFilePath = getCacheFilePath(libraryId, imageName);
-    log.info(`[ImageCache] setCache: 开始处理并缓存图片 for ${libraryId}_${imageName} to ${cacheFilePath}`);
+    log.info(`[ImageCache] >>> setCache START for key: ${libraryId}_${imageName}. Target path: ${cacheFilePath}. Source buffer size: ${sourceBuffer ? sourceBuffer.length : 'null/undefined'}`);
+    if (!sourceBuffer || sourceBuffer.length === 0) {
+        log.warn(`[ImageCache] setCache called with empty or invalid sourceBuffer for key: ${libraryId}_${imageName}. Aborting.`);
+        return; // Or throw error? For now, just return.
+    }
     stats.originalSize += sourceBuffer.length; // 记录原始大小
 
+    let sharpStartTime, sharpEndTime, writeStartTime, writeEndTime;
     try {
         await ensureCacheDirExists(); // 确保目录存在
 
-        // 使用 sharp 处理图片：调整大小、转换格式、压缩
+        // 使用 sharp 处理图片
+        log.debug(`[ImageCache] Starting sharp processing for ${libraryId}_${imageName}`);
+        sharpStartTime = Date.now();
         const sharpInstance = sharp(sourceBuffer)
             .rotate() // 自动旋转（基于 EXIF）
-            .resize(1024, 1024, { // 调整大小，例如最大 1024x1024
-                fit: 'inside', // 保持比例，完整放入
-                withoutEnlargement: true // 不放大图片
+            .resize(1024, 1024, { // 调整大小
+                fit: 'inside',
+                withoutEnlargement: true
             });
 
         let processedBuffer;
-        if (config.compressFormat === 'webp') {
-            processedBuffer = await sharpInstance
-                .webp({ quality: config.compressQuality })
-                .toBuffer();
-        } else { // 默认 jpeg
-            processedBuffer = await sharpInstance
-                .jpeg({ quality: config.compressQuality, progressive: true }) // 使用 progressive jpeg
-                .toBuffer();
+        let formatUsed = config.compressFormat;
+        try {
+            if (config.compressFormat === 'webp') {
+                processedBuffer = await sharpInstance
+                    .webp({ quality: config.compressQuality })
+                    .toBuffer();
+            } else { // 默认 jpeg
+                formatUsed = 'jpeg'; // Explicitly set default
+                processedBuffer = await sharpInstance
+                    .jpeg({ quality: config.compressQuality, progressive: true })
+                    .toBuffer();
+            }
+            sharpEndTime = Date.now();
+            log.info(`[ImageCache] Sharp processing SUCCESS for ${libraryId}_${imageName}. Format: ${formatUsed}, Quality: ${config.compressQuality}. Duration: ${sharpEndTime - sharpStartTime}ms. Processed size: ${processedBuffer.length}`);
+        } catch (sharpError) {
+            sharpEndTime = Date.now();
+            log.error(`[ImageCache] Sharp processing FAILED for ${libraryId}_${imageName}. Duration: ${sharpEndTime - sharpStartTime}ms`, sharpError.message, sharpError.stack);
+            throw sharpError; // Re-throw to be caught by outer catch
         }
 
+
         // 写入处理后的 Buffer 到缓存文件
+        log.debug(`[ImageCache] Attempting fs.promises.writeFile to: ${cacheFilePath}`);
+        writeStartTime = Date.now();
         await fs.promises.writeFile(cacheFilePath, processedBuffer);
+        writeEndTime = Date.now();
+        log.info(`[ImageCache] fs.promises.writeFile SUCCESS for: ${cacheFilePath}. Duration: ${writeEndTime - writeStartTime}ms`);
         stats.compressedSize += processedBuffer.length; // 记录压缩后大小
 
-        const duration = Date.now() - startTime;
-        log.info(`[ImageCache] 图片处理并缓存成功: ${libraryId}_${imageName} -> ${path.basename(cacheFilePath)}, 大小: ${(sourceBuffer.length / 1024).toFixed(1)}KB -> ${(processedBuffer.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
+        const totalDuration = Date.now() - startTime;
+        log.info(`[ImageCache] Image processed and cached successfully: ${libraryId}_${imageName} -> ${path.basename(cacheFilePath)}. Size: ${(sourceBuffer.length / 1024).toFixed(1)}KB -> ${(processedBuffer.length / 1024).toFixed(1)}KB. Total Duration: ${totalDuration}ms`);
+        log.debug(`[ImageCache] <<< setCache END (Success) for key: ${libraryId}_${imageName}`);
 
         // 检查并清理缓存 (异步，不阻塞)
         checkAndCleanCache().catch(cleanError => {
-            log.error(`[ImageCache] 后台缓存清理失败:`, cleanError.message, cleanError.stack);
+            log.error(`[ImageCache] Background cache cleanup failed:`, cleanError.message, cleanError.stack);
         });
 
     } catch (error) {
-        const duration = Date.now() - startTime;
-        log.error(`[ImageCache] 处理或写入缓存失败 for ${libraryId}_${imageName} to ${cacheFilePath}, 耗时: ${duration}ms`, error.message, error.stack);
+        const totalDuration = Date.now() - startTime;
+        log.error(`[ImageCache] FAILED to process or write cache for key ${libraryId}_${imageName} to ${cacheFilePath}. Total Duration: ${totalDuration}ms`, error.message, error.stack);
         // 尝试删除可能不完整的缓存文件
         try {
+            log.warn(`[ImageCache] Attempting to delete potentially incomplete cache file: ${cacheFilePath}`);
             await fs.promises.unlink(cacheFilePath);
+            log.warn(`[ImageCache] Successfully deleted potentially incomplete cache file: ${cacheFilePath}`);
         } catch (unlinkError) {
-            if (unlinkError.code !== 'ENOENT') {
-                log.warn(`[ImageCache] 删除失败的缓存文件时出错: ${cacheFilePath}`, unlinkError.message);
+            if (unlinkError.code !== 'ENOENT') { // Don't warn if file doesn't exist
+                log.warn(`[ImageCache] Failed to delete potentially incomplete cache file: ${cacheFilePath}`, unlinkError.message);
             }
         }
-        // 可以选择重新抛出错误，让调用者知道缓存失败
-        // throw error;
+        log.debug(`[ImageCache] <<< setCache END (Failure) for key: ${libraryId}_${imageName}`);
+        // 重新抛出错误，让 imageService 知道缓存失败
+        throw error;
     }
 }
 
@@ -272,7 +303,7 @@ async function checkAndCleanCache() {
     stats.lastCleanTime = new Date();
     const logMsg = `[ImageCache] 缓存清理完成: 原大小 ${totalSizeMB.toFixed(2)}MB, 清理了 ${removedSize.toFixed(2)}MB`;
     if (config.debug) console.log(logMsg);
-    
+
     // 添加统计方法
     module.exports.getStats = () => ({
         ...stats,
