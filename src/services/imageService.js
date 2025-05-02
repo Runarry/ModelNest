@@ -24,189 +24,96 @@ class ImageService {
     }
 
     /**
-     * 获取模型图片，处理缓存和压缩。
-     * Migrated core logic from src/ipc/modelLibraryIPC.js handle('getModelImage', ...)
-     * @param {string} sourceId 数据源 ID
-     * @param {string} imagePath 图片在数据源中的相对路径
-     * @returns {Promise<{path: string, data: Buffer, mimeType: string} | null>} 包含缓存路径、Buffer 数据和 mimeType 的对象，或在失败时返回 null
+     * 获取模型图片（封面、预览图等），优先使用缓存，否则从数据源获取、处理并缓存。
+     * @param {string} libraryId 数据源 ID (原 sourceId)
+     * @param {string} imagePath 图片在数据源中的相对路径 (作为 imageName 使用)
+     * @returns {Promise<{data: Buffer, mimeType: string} | null>} 包含 Buffer 数据和 mimeType 的对象，或在失败时返回 null
      */
-    async getImage(sourceId, imagePath) {
-        log.debug(`[ImageService] getImage called for sourceId: ${sourceId}, imagePath: ${imagePath}`);
-        let sourceConfig = null; // Define here for potential use in final catch block
-        let tempFilePath = null; // Path for temporary WebDAV file, define for cleanup
+    async getImage(libraryId, imagePath) {
+        const startTime = Date.now();
+        // 使用 imagePath 作为 imageName，因为它在 libraryId 内是唯一的
+        // 确保 imagePath 规范化，例如去除前导/后导斜杠，统一分隔符
+        const imageName = imagePath.replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
+        log.info(`[ImageService] getImage called for libraryId: ${libraryId}, imageName: ${imageName}`);
 
         try {
-            // 1. 获取 SourceConfig (通过注入的 DataSourceService)
-            sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
+            // 1. 尝试从缓存获取
+            const cachedBuffer = await imageCache.getCache(libraryId, imageName);
+            if (cachedBuffer) {
+                // 缓存命中，确定 mimeType 并返回
+                // 注意：缓存本身不存储 mimeType，需要根据配置或推断
+                const mimeType = imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg';
+                log.debug(`[ImageService] Cache hit for ${libraryId}/${imageName}. Returning cached buffer.`);
+                const duration = Date.now() - startTime;
+                 log.info(`[ImageService] getImage completed (cache hit) for ${libraryId}/${imageName}, 耗时: ${duration}ms`);
+                return { data: cachedBuffer, mimeType: mimeType };
+            }
+
+            log.debug(`[ImageService] Cache miss for ${libraryId}/${imageName}. Fetching from data source.`);
+
+            // 2. 缓存未命中，从数据源获取原始图片 Buffer
+            const sourceConfig = await this.dataSourceService.getSourceConfig(libraryId);
             if (!sourceConfig) {
-                log.error(`[ImageService] 未找到数据源配置: ${sourceId}`);
+                log.error(`[ImageService] 未找到数据源配置: ${libraryId}`);
                 return null;
             }
-            log.debug(`[ImageService] Found source config for ${sourceId}: type=${sourceConfig.type}`);
 
-            // 2. 生成缓存 Key 和路径 (逻辑来自 modelLibraryIPC)
-            // Use posix path for WebDAV consistency, absolute for local (matching IPC logic)
-            const hashKey = sourceConfig.type === 'local'
-                ? path.resolve(imagePath) // Keep local paths absolute
-                : imagePath.replace(/\\/g, '/').toLowerCase(); // Normalize WebDAV paths
-
-            log.debug(`[ImageService] Generated hash key for ${sourceConfig.type} source: ${hashKey}`);
-
-            // TODO: Consider making cache path configurable via ConfigService? For now, keep it hardcoded.
-            const cacheDir = path.join(process.cwd(), 'cache', 'images');
-            const cacheFilename = crypto.createHash('md5').update(hashKey).digest('hex') +
-                                  (imageCache.config.compressFormat === 'webp' ? '.webp' : '.jpg');
-            const cachePath = path.join(cacheDir, cacheFilename);
-            const mimeType = imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg';
-
-            log.debug(`[ImageService] Calculated cache path: ${cachePath}`);
-
-            // 3. 检查缓存 (逻辑来自 modelLibraryIPC)
-            log.debug('[ImageService] Checking cache at:', cachePath);
-            try {
-                if (fs.existsSync(cachePath)) {
-                    log.debug('[ImageService] Cache hit, reading...');
-                    const data = await fs.promises.readFile(cachePath);
-                    log.debug('[ImageService] Successfully read cache file');
-                    return { path: cachePath, data, mimeType, source: 'cache_hit' };
-                } else {
-                    log.debug('[ImageService] Cache miss');
-                }
-            } catch (e) {
-                log.error('[ImageService] Cache check/read error:', e.message);
-                // Proceed to fetch if cache read fails
-            }
-
-            // 4. 调用 dataSourceInterface 获取数据 (逻辑来自 modelLibraryIPC)
-            log.debug(`[ImageService] Calling dataSourceInterface.getImageData for source ${sourceId}, path: ${imagePath}`);
+            log.debug(`[ImageService] Calling dataSourceInterface.getImageData for source ${libraryId}, path: ${imagePath}`);
+            // 确保 dataSourceInterface.getImageData 返回的是 { data: Buffer | null, mimeType?: string }
+            // 特别是对于 local 类型，它可能需要读取文件内容到 Buffer
             const imageDataResult = await dataSourceInterface.getImageData(sourceConfig, imagePath);
 
-            if (!imageDataResult) {
-                log.warn(`[ImageService] dataSourceInterface.getImageData returned null for ${imagePath}`);
-                return null; // Image not found or error in interface
+            if (!imageDataResult || !imageDataResult.data) {
+                log.warn(`[ImageService] dataSourceInterface.getImageData returned null or no data for ${libraryId}/${imagePath}`);
+                return null; // 图片未找到或读取错误
             }
-            log.debug(`[ImageService] dataSourceInterface.getImageData returned result for ${imagePath}`);
 
-            // 5. 处理源文件路径和 WebDAV 临时文件 (逻辑来自 modelLibraryIPC)
-            let sourceImagePathForCache; // Path to the file to be compressed
-
-            if (sourceConfig.type === 'local') {
-                 // Interface should return an existing path for local sources
-                if (!imageDataResult.path || !fs.existsSync(imageDataResult.path)) {
-                     log.error(`[ImageService] Local image path missing or invalid from interface result for: ${imagePath} (path: ${imageDataResult.path})`);
-                     return null;
-                }
-                sourceImagePathForCache = imageDataResult.path;
-                log.debug(`[ImageService] Using local image path for caching: ${sourceImagePathForCache}`);
-            } else if (sourceConfig.type === 'webdav') {
-                if (!imageDataResult.data) {
-                     log.error(`[ImageService] WebDAV image data missing from interface result for: ${imagePath}`);
-                     return null;
-                }
-                // Save WebDAV data to a temporary file for imageCache
-                const tempDir = path.join(process.cwd(), 'cache', 'temp_images'); // TODO: Configurable?
-                if (!fs.existsSync(tempDir)) {
-                    try {
-                        await fs.promises.mkdir(tempDir, { recursive: true });
-                        log.debug(`[ImageService] Created temp directory: ${tempDir}`);
-                    } catch (mkdirError) {
-                        log.error(`[ImageService] Failed to create temp directory ${tempDir}:`, mkdirError);
-                        return null;
-                    }
-                }
-                // Use a hash of the imagePath for the temp filename base
-                const tempFilenameBase = crypto.createHash('md5').update(imagePath).digest('hex');
-                // Try to preserve original extension, default to .png
-                const tempFilenameExt = path.extname(imagePath || '.png') || '.png';
-                const tempFilename = tempFilenameBase + tempFilenameExt;
-                tempFilePath = path.join(tempDir, tempFilename); // Assign to outer scope variable
-
-                log.debug(`[ImageService] Writing WebDAV image data to temporary file: ${tempFilePath}`);
-                try {
-                    await fs.promises.writeFile(tempFilePath, imageDataResult.data);
-                    sourceImagePathForCache = tempFilePath;
-                } catch (writeError) {
-                     log.error(`[ImageService] Failed to write WebDAV temp file ${tempFilePath}:`, writeError);
-                     return null; // Cannot proceed without temp file
-                }
-            } else {
-                 log.error(`[ImageService] Unsupported source type after interface call: ${sourceConfig.type}`);
+            // 确认 imageDataResult.data 是 Buffer
+            if (!Buffer.isBuffer(imageDataResult.data)) {
+                 log.error(`[ImageService] dataSourceInterface.getImageData did not return a Buffer for ${libraryId}/${imagePath}`);
                  return null;
             }
 
-            // 6. 调用 imageCache 压缩和缓存 (逻辑来自 modelLibraryIPC)
-            log.debug(`[ImageService] Calling imageCache.getCompressedImage with source path: ${sourceImagePathForCache}, hashKey: ${hashKey}`);
-            let compressedPath;
-            try {
-                // imageCache uses hashKey internally to determine the output path (which should match cachePath)
-                compressedPath = await imageCache.getCompressedImage(sourceImagePathForCache, hashKey);
-                log.debug(`[ImageService] Compressed image path returned: ${compressedPath}`);
+            const sourceBuffer = imageDataResult.data;
+            const originalMimeType = imageDataResult.mimeType; // 保留原始 mimeType 信息（虽然可能不准确）
+            log.debug(`[ImageService] Successfully fetched source image buffer for ${libraryId}/${imageName}, size: ${(sourceBuffer.length / 1024).toFixed(1)}KB, original mime: ${originalMimeType}`);
 
-                // Verify the compressed path matches the expected cache path (as per original logic)
-                if (path.resolve(compressedPath) !== path.resolve(cachePath)) {
-                     log.warn(`[ImageService] Compressed path (${compressedPath}) differs from expected cache path (${cachePath}). Reading from returned path.`);
-                     // Trust the path returned by imageCache
-                }
 
-                // 7. 读取最终缓存文件 (逻辑来自 modelLibraryIPC)
-                log.debug(`[ImageService] Reading final cached/compressed file from: ${compressedPath}`);
-                const finalData = await fs.promises.readFile(compressedPath);
-                log.debug(`[ImageService] Successfully read final cached file: ${compressedPath}`);
+            // 3. 将原始 Buffer 存入缓存（imageCache.setCache 会进行处理）
+            // 注意：setCache 是异步的，但不一定需要 await 它完成才能继续，
+            // 因为我们接下来会再次调用 getCache 来获取 *处理后* 的结果。
+            // 但为了确保缓存写入操作已启动或完成（并处理可能的写入错误），使用 await 更稳妥。
+            log.debug(`[ImageService] Calling imageCache.setCache for ${libraryId}/${imageName}`);
+            // imageCache.setCache 现在内部处理 sharp 压缩和写入
+            await imageCache.setCache(libraryId, imageName, sourceBuffer);
+            log.debug(`[ImageService] imageCache.setCache call completed for ${libraryId}/${imageName}`);
 
-                // 8. 清理临时文件 (放在成功读取之后)
-                if (tempFilePath && fs.existsSync(tempFilePath)) {
-                    // Only delete if it's different from the final compressed path
-                    if (path.resolve(tempFilePath) !== path.resolve(compressedPath)) {
-                        log.debug(`[ImageService] Cleaning up temporary WebDAV file: ${tempFilePath}`);
-                        await fs.promises.unlink(tempFilePath).catch(e => log.error(`[ImageService] Temp file cleanup failed: ${tempFilePath}`, e.message));
-                    } else {
-                        log.debug(`[ImageService] Temporary file is the same as cache file, not deleting: ${tempFilePath}`);
-                    }
-                }
 
-                // 9. 构造返回结果
-                // 根据实际压缩文件的扩展名确定 MIME 类型
-                const actualExtension = path.extname(compressedPath).toLowerCase();
-                let actualMimeType;
-                switch (actualExtension) {
-                    case '.webp':
-                        actualMimeType = 'image/webp';
-                        break;
-                    case '.jpg':
-                    case '.jpeg':
-                        actualMimeType = 'image/jpeg';
-                        break;
-                    case '.png':
-                        actualMimeType = 'image/png';
-                        break;
-                    case '.gif':
-                        actualMimeType = 'image/gif';
-                        break;
-                    default:
-                        // 尝试从原始 imageDataResult 获取，如果不可靠则回退
-                        actualMimeType = imageDataResult?.mimeType || 'application/octet-stream';
-                        log.warn(`[ImageService] Unknown extension '${actualExtension}' for ${compressedPath}. Falling back to '${actualMimeType}'.`);
-                }
-                log.debug(`[ImageService] Determined mimeType '${actualMimeType}' for ${compressedPath}`);
-                return { path: compressedPath, data: finalData, mimeType: actualMimeType, source: 'cache_miss_compressed' };
+            // 4. 再次从缓存获取处理后的图片 Buffer
+            // 这确保我们返回的是经过 sharp 处理（压缩、格式转换）的最终版本
+            log.debug(`[ImageService] Calling imageCache.getCache again to retrieve processed buffer for ${libraryId}/${imageName}`);
+            const finalBuffer = await imageCache.getCache(libraryId, imageName);
 
-            } catch (e) {
-                log.error(`[ImageService] Image compression/caching failed for ${sourceImagePathForCache}:`, e.message, e.stack);
-                 // Clean up temp file if compression failed
-                 if (tempFilePath && fs.existsSync(tempFilePath)) {
-                    log.debug(`[ImageService] Cleaning up temporary WebDAV file after compression error: ${tempFilePath}`);
-                    await fs.promises.unlink(tempFilePath).catch(unlinkErr => log.error(`[ImageService] Temp file cleanup failed after compression error: ${tempFilePath}`, unlinkErr.message));
-                 }
-                return null; // Return null on compression/caching failure
+            if (finalBuffer) {
+                // 确定最终的 mimeType，基于缓存配置
+                const finalMimeType = imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg';
+                log.info(`[ImageService] Successfully processed and retrieved final buffer for ${libraryId}/${imageName}`);
+                 const duration = Date.now() - startTime;
+                 log.info(`[ImageService] getImage completed (cache miss, processed) for ${libraryId}/${imageName}, 耗时: ${duration}ms`);
+                return { data: finalBuffer, mimeType: finalMimeType };
+            } else {
+                // 如果 setCache 成功后 getCache 仍然失败，说明缓存写入或读取存在严重问题
+                log.error(`[ImageService] CRITICAL: Failed to retrieve image from cache immediately after setCache for ${libraryId}/${imageName}.`);
+                // 降级：可以考虑返回原始 buffer，但这可能不是期望的行为
+                // return { data: sourceBuffer, mimeType: originalMimeType || 'application/octet-stream' };
+                return null; // 或者直接返回 null 表示失败
             }
 
         } catch (error) {
-            log.error(`[ImageService] Unexpected error during getImage for ${sourceId}/${imagePath}:`, error);
-            // Ensure temp file cleanup on any unexpected error after its potential creation
-            if (tempFilePath && fs.existsSync(tempFilePath)) {
-                 log.debug(`[ImageService] Cleaning up temporary WebDAV file after unexpected error: ${tempFilePath}`);
-                 await fs.promises.unlink(tempFilePath).catch(unlinkErr => log.error(`[ImageService] Temp file cleanup failed after unexpected error: ${tempFilePath}`, unlinkErr.message));
-            }
+            // 捕获所有可能的错误，包括 getSourceConfig, getImageData, setCache, getCache 等
+            log.error(`[ImageService] Error during getImage for ${libraryId}/${imageName}:`, error.message, error.stack);
+            const duration = Date.now() - startTime;
+            log.error(`[ImageService] getImage failed for ${libraryId}/${imageName}, 耗时: ${duration}ms`);
             return null;
         }
     }

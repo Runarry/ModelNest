@@ -47,22 +47,32 @@ function setConfig(options = {}) {
     config = { ...config, ...options };
 }
 
+// --- 新的缓存接口 ---
+
 /**
- * 获取压缩后图片（如有缓存则直接返回缓存路径，否则压缩原图并缓存）
- * @param {string} srcPath 原始图片路径（本地或 WebDAV 下载到本地的临时路径）
- * @returns {Promise<string>} 压缩后图片的本地缓存路径
+ * 生成缓存文件的完整路径
+ * @param {string} libraryId 库 ID
+ * @param {string} imageName 图片名称 (通常是模型基础名 + 后缀，或特定标识符)
+ * @returns {string} 缓存文件的绝对路径
  */
+function getCacheFilePath(libraryId, imageName) {
+    const cacheKey = `${libraryId}_${imageName}`;
+    // 使用 SHA256 更安全，避免潜在的路径遍历或特殊字符问题
+    const hash = crypto.createHash('sha256').update(cacheKey).digest('hex');
+    // 可以考虑根据 hash 创建子目录分散文件，例如 hash 的前两位
+    // const subDir = hash.substring(0, 2);
+    // const cacheDirWithSub = path.join(config.cacheDir, subDir);
+    // return path.join(cacheDirWithSub, hash); // 暂时不加后缀，直接存 Buffer
+    return path.join(config.cacheDir, hash); // 直接存储 hash 命名的文件
+}
 
-async function getCompressedImage(srcPath, hashKey) {
-    const startTime = Date.now();
-    log.info(`[ImageCache] 开始处理图片: ${srcPath}, hashKey: ${hashKey || '无'}`);
-    if (hashKey && config.debug) log.debug(`[ImageCache] 使用外部hashKey: ${hashKey}`);
-    stats.totalRequests++;
-
-    // 1. 确保缓存目录存在
+/**
+ * 确保缓存目录存在
+ * @returns {Promise<void>}
+ */
+async function ensureCacheDirExists() {
     try {
         await fs.promises.access(config.cacheDir);
-        log.debug(`[ImageCache] 缓存目录存在: ${config.cacheDir}`);
     } catch (error) {
         if (error.code === 'ENOENT') {
             log.info(`[ImageCache] 缓存目录不存在，尝试创建: ${config.cacheDir}`);
@@ -74,111 +84,109 @@ async function getCompressedImage(srcPath, hashKey) {
                 throw mkdirError; // Re-throw if mkdir fails
             }
         } else {
-            // Handle other access errors (e.g., permissions)
             log.error(`[ImageCache] 访问缓存目录失败: ${config.cacheDir}`, error.message, error.stack);
             throw error;
         }
     }
-    // 2. 生成唯一缓存文件名
-    const hash = hashKey
-        ? crypto.createHash('md5').update(hashKey).digest('hex')
-        : crypto.createHash('md5').update(srcPath + JSON.stringify(config)).digest('hex');
-    const ext = config.compressFormat === 'webp' ? '.webp' : '.jpg';
-    const cachePath = path.join(config.cacheDir, hash + ext);
+}
 
-    // 3. 检查缓存是否存在并更新访问时间
-    log.debug(`[ImageCache] 检查缓存文件: ${cachePath}`);
+
+/**
+ * 从缓存中获取图片 Buffer
+ * @param {string} libraryId 库 ID
+ * @param {string} imageName 图片名称
+ * @returns {Promise<Buffer | null>} 缓存的 Buffer 或 null
+ */
+async function getCache(libraryId, imageName) {
+    const startTime = Date.now();
+    stats.totalRequests++;
+    const cacheFilePath = getCacheFilePath(libraryId, imageName);
+    log.debug(`[ImageCache] getCache: 尝试获取缓存 for ${libraryId}_${imageName} at ${cacheFilePath}`);
+
     try {
-        await fs.promises.access(cachePath); // Check if file exists and is accessible
-        log.debug(`[ImageCache] 缓存文件存在，更新访问时间: ${cachePath}`);
-        // Update access time asynchronously
-        await fs.promises.utimes(cachePath, new Date(), new Date());
+        await ensureCacheDirExists(); // 确保目录存在
+        const cacheBuffer = await fs.promises.readFile(cacheFilePath);
+        // 更新访问时间 (异步，不阻塞返回)
+        fs.promises.utimes(cacheFilePath, new Date(), new Date()).catch(utimeError => {
+            log.warn(`[ImageCache] 更新缓存文件访问时间失败: ${cacheFilePath}`, utimeError.message);
+        });
         stats.cacheHits++;
         const duration = Date.now() - startTime;
-        log.info(`[ImageCache] 缓存命中: ${path.basename(srcPath)} -> ${path.basename(cachePath)}, 耗时: ${duration}ms`);
-        return cachePath; // Return cached path
+        log.info(`[ImageCache] 缓存命中: ${libraryId}_${imageName} -> ${path.basename(cacheFilePath)}, 大小: ${(cacheBuffer.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
+        return cacheBuffer;
     } catch (error) {
         if (error.code === 'ENOENT') {
-            log.debug(`[ImageCache] 缓存未命中: ${cachePath}`);
+            log.debug(`[ImageCache] 缓存未命中: ${libraryId}_${imageName} (${cacheFilePath})`);
         } else {
-            // Log errors other than 'file not found'
-            log.warn(`[ImageCache] 缓存检查或更新时间时出错: ${cachePath}`, error.message, error.stack);
-            // Decide if we should proceed or re-throw. For now, proceed to compression.
+            log.warn(`[ImageCache] 读取缓存文件时出错: ${cacheFilePath}`, error.message, error.stack);
         }
-        // If file doesn't exist (ENOENT) or other error occurred, proceed to compression.
-    }
-
-    // 4. 压缩图片并写入缓存
-
-    log.info(`[ImageCache] 开始压缩图片: ${srcPath} -> ${cachePath}`);
-    try {
-        // Get source file stats asynchronously
-        const srcStats = await fs.promises.stat(srcPath);
-        stats.originalSize += srcStats.size;
-        log.debug(`[ImageCache] 源文件大小: ${(srcStats.size / 1024).toFixed(1)} KB`);
-
-        const sharpInstance = sharp(srcPath)
-            .rotate()
-            .resize(1024, 1024, {
-                fit: 'inside',
-                withoutEnlargement: true
-            });
-
-        if (config.compressFormat === 'webp') {
-            await sharpInstance
-                .webp({ quality: config.compressQuality })
-                .toFile(cachePath);
-        } else {
-            await sharpInstance
-                .jpeg({ quality: config.compressQuality })
-                .toFile(cachePath);
-        }
-// 使用更可靠的文件存在检查
-const MAX_RETRY = 3;
-let retryCount = 0;
-        // Asynchronously check if file exists after writing
-        let writeSuccess = false;
-        while (retryCount++ < MAX_RETRY) {
-            try {
-                await fs.promises.access(cachePath); // Check existence
-                writeSuccess = true;
-                log.debug(`[ImageCache] 缓存文件写入成功确认: ${cachePath}`);
-                break;
-            } catch (accessError) {
-                if (accessError.code !== 'ENOENT') {
-                    log.warn(`[ImageCache] 检查缓存文件时出错 (重试 ${retryCount}): ${cachePath}`, accessError.message);
-                } else {
-                    log.warn(`[ImageCache] 缓存文件写入后未找到 (重试 ${retryCount}): ${cachePath}`);
-                }
-                // Wait before retrying
-                await new Promise(resolve => setTimeout(resolve, 100));
-            }
-        }
-
-        if (!writeSuccess) {
-            log.error(`[ImageCache] 缓存文件写入失败或无法访问: ${cachePath}`);
-            // Attempt to remove potentially corrupted file
-            try { await fs.promises.unlink(cachePath); } catch (unlinkErr) { /* Ignore */ }
-            throw new Error(`CACHE_WRITE_FAILED: ${cachePath}`);
-        }
-
-        // Get destination file stats asynchronously
-        const destStats = await fs.promises.stat(cachePath);
-        stats.compressedSize += destStats.size;
-        const duration = Date.now() - startTime;
-        log.info(`[ImageCache] 图片压缩完成: ${path.basename(srcPath)} -> ${path.basename(cachePath)}, 大小: ${(srcStats.size / 1024).toFixed(1)}KB -> ${(destStats.size / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
-
-
-        // 5. 检查缓存空间
-        await checkAndCleanCache();
-
-        return cachePath;
-    } catch (e) {
-        const duration = Date.now() - startTime;
-        log.error(`[ImageCache] 图片压缩失败: ${srcPath}, 耗时: ${duration}ms`, e.message, e.stack);
-        return srcPath; // 降级为原图
+        return null; // 文件不存在或读取错误，返回 null
     }
 }
+
+/**
+ * 将图片 Buffer 处理后存入缓存
+ * @param {string} libraryId 库 ID
+ * @param {string} imageName 图片名称
+ * @param {Buffer} sourceBuffer 原始图片 Buffer
+ * @returns {Promise<void>}
+ */
+async function setCache(libraryId, imageName, sourceBuffer) {
+    const startTime = Date.now();
+    const cacheFilePath = getCacheFilePath(libraryId, imageName);
+    log.info(`[ImageCache] setCache: 开始处理并缓存图片 for ${libraryId}_${imageName} to ${cacheFilePath}`);
+    stats.originalSize += sourceBuffer.length; // 记录原始大小
+
+    try {
+        await ensureCacheDirExists(); // 确保目录存在
+
+        // 使用 sharp 处理图片：调整大小、转换格式、压缩
+        const sharpInstance = sharp(sourceBuffer)
+            .rotate() // 自动旋转（基于 EXIF）
+            .resize(1024, 1024, { // 调整大小，例如最大 1024x1024
+                fit: 'inside', // 保持比例，完整放入
+                withoutEnlargement: true // 不放大图片
+            });
+
+        let processedBuffer;
+        if (config.compressFormat === 'webp') {
+            processedBuffer = await sharpInstance
+                .webp({ quality: config.compressQuality })
+                .toBuffer();
+        } else { // 默认 jpeg
+            processedBuffer = await sharpInstance
+                .jpeg({ quality: config.compressQuality, progressive: true }) // 使用 progressive jpeg
+                .toBuffer();
+        }
+
+        // 写入处理后的 Buffer 到缓存文件
+        await fs.promises.writeFile(cacheFilePath, processedBuffer);
+        stats.compressedSize += processedBuffer.length; // 记录压缩后大小
+
+        const duration = Date.now() - startTime;
+        log.info(`[ImageCache] 图片处理并缓存成功: ${libraryId}_${imageName} -> ${path.basename(cacheFilePath)}, 大小: ${(sourceBuffer.length / 1024).toFixed(1)}KB -> ${(processedBuffer.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
+
+        // 检查并清理缓存 (异步，不阻塞)
+        checkAndCleanCache().catch(cleanError => {
+            log.error(`[ImageCache] 后台缓存清理失败:`, cleanError.message, cleanError.stack);
+        });
+
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        log.error(`[ImageCache] 处理或写入缓存失败 for ${libraryId}_${imageName} to ${cacheFilePath}, 耗时: ${duration}ms`, error.message, error.stack);
+        // 尝试删除可能不完整的缓存文件
+        try {
+            await fs.promises.unlink(cacheFilePath);
+        } catch (unlinkError) {
+            if (unlinkError.code !== 'ENOENT') {
+                log.warn(`[ImageCache] 删除失败的缓存文件时出错: ${cacheFilePath}`, unlinkError.message);
+            }
+        }
+        // 可以选择重新抛出错误，让调用者知道缓存失败
+        // throw error;
+    }
+}
+
 
 /**
  * 清理全部图片缓存
@@ -275,8 +283,41 @@ async function checkAndCleanCache() {
 
 module.exports = {
     setConfig,
-    getCompressedImage,
+    getCache, // 新增
+    setCache, // 新增
     clearCache,
     checkAndCleanCache,
     config,
+    getStats: () => ({ // 确保 getStats 导出
+        ...stats,
+        cacheHitRate: stats.totalRequests > 0 ? (stats.cacheHits / stats.totalRequests * 100).toFixed(1) + '%' : '0%',
+        spaceSaved: stats.originalSize > 0 && stats.compressedSize > 0 ? ((1 - stats.compressedSize / stats.originalSize) * 100).toFixed(1) + '%' : '0%',
+        currentCacheSizeMB: getCurrentCacheSizeMB() // 添加获取当前缓存大小的函数（如果需要）
+    })
 };
+
+// 辅助函数：获取当前缓存目录大小 (可选)
+// 注意：这个函数可能比较耗时，谨慎使用
+async function getCurrentCacheSizeMB() {
+    try {
+        await fs.promises.access(config.cacheDir);
+        const fileNames = await fs.promises.readdir(config.cacheDir);
+        let totalSize = 0;
+        for (const fileName of fileNames) {
+            const filePath = path.join(config.cacheDir, fileName);
+            try {
+                const fileStats = await fs.promises.stat(filePath);
+                totalSize += fileStats.size;
+            } catch (statError) {
+                 if (statError.code !== 'ENOENT') {
+                    log.warn(`[ImageCache] 获取文件状态失败 (getCurrentCacheSizeMB): ${filePath}`, statError.message);
+                 }
+            }
+        }
+        return (totalSize / (1024 * 1024)).toFixed(2);
+    } catch (error) {
+        if (error.code === 'ENOENT') return '0.00';
+        log.error(`[ImageCache] 获取当前缓存大小时出错:`, error.message);
+        return 'Error';
+    }
+}

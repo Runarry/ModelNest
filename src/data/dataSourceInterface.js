@@ -289,23 +289,23 @@ async function getImageData(sourceConfig, imagePath) {
             // The actual reading happens in the imageCache logic.
             // We return the path so the cache logic knows where to find it.
             // We need to simulate the structure returned by WebDAV's getImageData for consistency.
-             try {
-                await fs.promises.access(imagePath); // Check if file exists and is accessible
+            try {
+                // 读取本地文件内容到 Buffer
+                const fileData = await fs.promises.readFile(imagePath);
                 imageData = {
-                    path: imagePath, // The original path
-                    data: null, // Data will be read by cache logic if needed
-                    mimeType: `image/${path.extname(imagePath).slice(1).toLowerCase()}` // Basic mime type from extension
+                    path: imagePath, // 保留原始路径信息（虽然 imageService 可能不再直接使用）
+                    data: fileData, // 返回 Buffer 数据
+                    mimeType: `image/${path.extname(imagePath).slice(1).toLowerCase()}` // 基于扩展名的 MIME 类型
                 };
-                 log.debug(`[DataSourceInterface] Local image path confirmed: ${imagePath}`);
-            } catch (accessError) {
-                if (accessError.code === 'ENOENT') {
-                    log.warn(`[DataSourceInterface] Local image file not found: ${imagePath}`);
+                log.debug(`[DataSourceInterface] Local image file read successfully: ${imagePath}, size: ${(fileData.length / 1024).toFixed(1)}KB`);
+            } catch (readError) {
+                if (readError.code === 'ENOENT') {
+                    log.warn(`[DataSourceInterface] Local image file not found during read: ${imagePath}`);
                 } else {
-                    log.error(`[DataSourceInterface] Error accessing local image file ${imagePath}:`, accessError);
+                    log.error(`[DataSourceInterface] Error reading local image file ${imagePath}:`, readError);
                 }
-                imageData = null; // Indicate failure
+                imageData = null; // 指示失败
             }
-
         } else if (sourceType === 'webdav') {
             // --> 修改：复用或创建 WebDAV 实例
             let ds = dataSourceInstances[sourceId];
