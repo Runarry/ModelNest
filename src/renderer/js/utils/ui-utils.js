@@ -180,3 +180,148 @@ export function loadVisibleImages() {
       }
     });
 }
+// ===== Confirmation Dialog =====
+
+/**
+ * Displays a non-blocking confirmation dialog.
+ * Requires i18n 't' function to be available (globally or imported).
+ * @param {string} message - The message to display in the dialog.
+ * @param {function} onConfirm - Callback function to execute if the user confirms.
+ * @param {function} [onCancel] - Optional callback function to execute if the user cancels.
+ */
+export function showConfirmationDialog(message, onConfirm, onCancel) {
+    // Ensure i18n function 't' is available or provide fallbacks
+    let translate;
+    if (typeof t === 'function') {
+        translate = t;
+    } else if (window.t === 'function') {
+        translate = window.t;
+    }
+    else {
+        translate = (key, fallback) => fallback || key; // Simple fallback
+        console.warn('[UI Utils] i18n function "t" not found, using fallback for confirmation dialog.');
+        // Attempt to import dynamically if needed, though less reliable
+        // import('../core/i18n.js').then(i18n => translate = i18n.t).catch(() => {});
+    }
+
+
+    // Remove existing dialog if any
+    const existingDialog = document.getElementById('confirmation-dialog-overlay');
+    if (existingDialog) {
+        existingDialog.remove();
+    }
+
+    // Create dialog elements
+    const dialogOverlay = document.createElement('div');
+    dialogOverlay.id = 'confirmation-dialog-overlay';
+    // Use existing backdrop style if available, otherwise provide basic fallback
+    dialogOverlay.style.position = 'fixed';
+    dialogOverlay.style.top = '0';
+    dialogOverlay.style.left = '0';
+    dialogOverlay.style.width = '100%';
+    dialogOverlay.style.height = '100%';
+    dialogOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+    dialogOverlay.style.display = 'flex';
+    dialogOverlay.style.justifyContent = 'center';
+    dialogOverlay.style.alignItems = 'center';
+    dialogOverlay.style.zIndex = '1050'; // Ensure it's above most content
+    dialogOverlay.style.opacity = '0';
+    dialogOverlay.style.transition = 'opacity 0.3s ease';
+
+
+    const dialogBox = document.createElement('div');
+    dialogBox.id = 'confirmation-dialog';
+    // Use existing Model content style if available, otherwise provide basic fallback
+    dialogBox.style.padding = '25px';
+    dialogBox.style.backgroundColor = 'var(--background-color-secondary, #fff)'; // Use theme variable or fallback
+    dialogBox.style.borderRadius = '8px';
+    dialogBox.style.boxShadow = '0 5px 15px rgba(0,0,0,0.2)';
+    dialogBox.style.textAlign = 'center';
+    dialogBox.style.maxWidth = '400px';
+    dialogBox.style.color = 'var(--text-color-primary, #333)'; // Use theme variable or fallback
+
+
+    const messageElement = document.createElement('p');
+    messageElement.textContent = message;
+    messageElement.style.marginBottom = '20px';
+    messageElement.style.fontSize = '1rem'; // Adjust as needed
+
+
+    const buttonGroup = document.createElement('div');
+    buttonGroup.style.display = 'flex';
+    buttonGroup.style.justifyContent = 'center';
+    buttonGroup.style.gap = '15px';
+
+
+    const confirmButton = document.createElement('button');
+    confirmButton.textContent = translate('dialog.confirm', 'Confirm');
+    // Basic button styling, ideally use project's button classes
+    confirmButton.style.padding = '8px 16px';
+    confirmButton.style.border = 'none';
+    confirmButton.style.borderRadius = '4px';
+    confirmButton.style.cursor = 'pointer';
+    confirmButton.style.backgroundColor = 'var(--color-danger, #dc3545)'; // Use theme variable or fallback
+    confirmButton.style.color = '#fff';
+    confirmButton.className = 'btn btn-danger'; // Add project's class if available
+
+
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = translate('dialog.cancel', 'Cancel');
+     // Basic button styling, ideally use project's button classes
+    cancelButton.style.padding = '8px 16px';
+    cancelButton.style.border = 'none';
+    cancelButton.style.borderRadius = '4px';
+    cancelButton.style.cursor = 'pointer';
+    cancelButton.style.backgroundColor = 'var(--color-secondary, #6c757d)'; // Use theme variable or fallback
+    cancelButton.style.color = '#fff';
+    cancelButton.className = 'btn btn-secondary'; // Add project's class if available
+
+
+    // Append elements
+    buttonGroup.appendChild(cancelButton); // Cancel first visually often
+    buttonGroup.appendChild(confirmButton);
+    dialogBox.appendChild(messageElement);
+    dialogBox.appendChild(buttonGroup);
+    dialogOverlay.appendChild(dialogBox);
+    document.body.appendChild(dialogOverlay);
+
+    // Add event listeners
+    const closeDialog = () => {
+         dialogOverlay.style.opacity = '0';
+         setTimeout(() => {
+            if (dialogOverlay.parentNode) {
+                 dialogOverlay.remove();
+            }
+         }, 300); // Match transition duration
+    };
+
+    confirmButton.addEventListener('click', () => {
+        closeDialog();
+        if (typeof onConfirm === 'function') {
+            onConfirm();
+        }
+    });
+
+    cancelButton.addEventListener('click', () => {
+        closeDialog();
+        if (typeof onCancel === 'function') {
+            onCancel();
+        }
+    });
+
+     // Also close if clicking the overlay itself
+     dialogOverlay.addEventListener('click', (event) => {
+        if (event.target === dialogOverlay) {
+            closeDialog();
+             if (typeof onCancel === 'function') {
+                onCancel(); // Treat overlay click as cancel
+            }
+        }
+    });
+
+
+    // Make overlay active (fade in)
+    requestAnimationFrame(() => {
+        dialogOverlay.style.opacity = '1';
+    });
+}

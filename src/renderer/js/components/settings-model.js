@@ -1,4 +1,4 @@
-import { showFeedback, clearFeedback, clearChildren } from '../utils/ui-utils.js';
+import { showFeedback, clearFeedback, clearChildren, showConfirmationDialog } from '../utils/ui-utils.js';
 import { openSourceEditModel, initSourceEditModel } from './source-edit-model.js'; // Import functions for the sub-Model
 import { t } from '../core/i18n.js'; // 导入 i18n 函数
 import {
@@ -322,20 +322,27 @@ function renderSourceListForSettings() {
 /** Handles the deletion of a model source from the temporary list. */
 function handleDeleteSource(sourceId) {
     logMessage('info', `[SettingsModel] 尝试删除临时列表中的数据源: ${sourceId}`);
-    // TODO: Replace confirm with a custom confirmation UI later
-    if (!confirm(t('settings.modelSources.deleteConfirm', { name: tempModelSources.find(s => s.id === sourceId)?.name || sourceId }))) {
-         logMessage('info', `[SettingsModel] 用户取消删除数据源: ${sourceId}`);
-        return;
-    }
-    const index = tempModelSources.findIndex(s => s.id === sourceId);
-    if (index !== -1) {
-        tempModelSources.splice(index, 1);
-        logMessage('info', `[SettingsModel] 已从临时列表中删除数据源: ${sourceId}`);
-        renderSourceListForSettings(); // Re-render the list
-    } else {
-        // Task 1: Error Logging
-        logMessage('error', `[SettingsModel] 删除失败：在临时列表中未找到数据源 ID: ${sourceId}`);
-    }
+    const sourceToDelete = tempModelSources.find(s => s.id === sourceId);
+    const sourceName = sourceToDelete?.name || sourceId;
+
+    showConfirmationDialog(
+        t('settings.modelSources.deleteConfirm', { name: sourceName }),
+        () => { // onConfirm callback
+            logMessage('info', `[SettingsModel] 用户确认删除数据源: ${sourceId} (${sourceName})`);
+            const index = tempModelSources.findIndex(s => s.id === sourceId);
+            if (index !== -1) {
+                tempModelSources.splice(index, 1);
+                logMessage('info', `[SettingsModel] 已从临时列表中删除数据源: ${sourceId}`);
+                renderSourceListForSettings(); // Re-render the list
+            } else {
+                // This case should ideally not happen if sourceToDelete was found, but keep for safety
+                logMessage('error', `[SettingsModel] 删除失败：在临时列表中未找到数据源 ID: ${sourceId} (确认后)`);
+            }
+        },
+        () => { // onCancel callback
+            logMessage('info', `[SettingsModel] 用户取消删除数据源: ${sourceId} (${sourceName})`);
+        }
+    );
 }
 
 /**
