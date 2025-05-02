@@ -1,6 +1,7 @@
-import { showFeedback, clearFeedback, clearChildren, showConfirmationDialog } from '../utils/ui-utils.js';
+import { showFeedback, clearFeedback, clearChildren, showConfirmationDialog, setLoading } from '../utils/ui-utils.js'; // Added setLoading
 import { openSourceEditModel, initSourceEditModel } from './source-edit-model.js'; // Import functions for the sub-Model
-import { t } from '../core/i18n.js'; // 导入 i18n 函数
+// Import necessary i18n functions
+import { t, loadLocale, getCurrentLocale, getSupportedLocales, updateUIWithTranslations } from '../core/i18n.js';
 import {
     logMessage,
     getConfig,
@@ -248,6 +249,42 @@ async function loadConfigForSettings() {
             unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus); // 使用导入的函数
             logMessage('info', "[SettingsModel] 已订阅更新状态事件");
         }
+        // --- Render Language Settings ---
+        const languageSection = document.createElement('div');
+        languageSection.className = 'settings-section';
+        languageSection.innerHTML = `<h3>${t('settings.language.title')}</h3>`; // Assuming 'settings.language.title' key exists
+
+        const langFormGroup = document.createElement('div');
+        langFormGroup.className = 'form-group';
+
+        const langLabel = document.createElement('label');
+        langLabel.setAttribute('for', 'settingsLanguageSelect');
+        langLabel.textContent = t('settings.language.label'); // Assuming 'settings.language.label' key exists
+        langFormGroup.appendChild(langLabel);
+
+        const langSelect = document.createElement('select');
+        langSelect.id = 'settingsLanguageSelect';
+        langSelect.name = 'language'; // Name attribute for potential future form handling
+
+        const locales = getSupportedLocales();
+        locales.forEach(l => {
+            const opt = document.createElement('option');
+            opt.value = l.code;
+            opt.textContent = l.name;
+            langSelect.appendChild(opt);
+        });
+
+        // Set initial value
+        langSelect.value = getCurrentLocale();
+
+        // Add event listener for changes
+        langSelect.addEventListener('change', handleLanguageChange); // Logging inside handler
+
+        langFormGroup.appendChild(langSelect);
+        languageSection.appendChild(langFormGroup);
+        settingsForm.appendChild(languageSection); // Add language section to the form
+
+
         const duration = Date.now() - startTime;
         logMessage('info', `[SettingsModel] 配置加载和表单渲染完成, 耗时: ${duration}ms`);
 
@@ -457,6 +494,37 @@ async function handleSaveSettings() {
          }
     }
 }
+
+/** Handles the change event for the language select dropdown. */
+async function handleLanguageChange(event) {
+    const newLocale = event.target.value;
+    const currentLocale = getCurrentLocale();
+    logMessage('info', `[UI] 切换语言设置: 从 ${currentLocale} 到 ${newLocale}`);
+
+    if (newLocale !== currentLocale) {
+        setLoading(true); // Show loading indicator
+        try {
+            logMessage('info', `[SettingsModel] 调用 loadLocale 加载新语言: ${newLocale}`);
+            await loadLocale(newLocale); // This now handles saving the preference
+            logMessage('info', `[SettingsModel] loadLocale 完成，调用 updateUIWithTranslations 更新 UI`);
+            updateUIWithTranslations(); // Update the entire UI
+            logMessage('info', `[SettingsModel] 语言切换和 UI 更新成功: ${newLocale}`);
+            // Optionally show brief success feedback, though UI update is the main feedback
+            // showFeedback(settingsFeedbackEl, t('settings.language.changeSuccess', { lang: newLocale }), 'info', 1500);
+        } catch (error) {
+            // Task 1: Error Logging
+            logMessage('error', `[SettingsModel] 切换语言失败: ${newLocale}`, error.message, error.stack);
+            showFeedback(settingsFeedbackEl, t('settings.language.changeError', { message: error.message }), 'error');
+            // Revert dropdown selection if loading failed?
+            event.target.value = currentLocale;
+        } finally {
+            setLoading(false); // Hide loading indicator
+        }
+    } else {
+        logMessage('debug', '[SettingsModel] 选择的语言与当前语言相同，无需操作');
+    }
+}
+
 // ===== Update Handling Functions =====
 
 /**

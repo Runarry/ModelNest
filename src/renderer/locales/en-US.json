@@ -99,6 +99,11 @@
       "downloading": "Downloading... ({progress}%)",
       "install": "Download complete, click to install",
       "hint": "The application will automatically check for updates in the background."
+    },
+    "language": {
+      "title": "Language Settings",
+      "label": "Interface Language:",
+      "changeError": "Failed to change language: {message}"
     }
   },
   "sourceEdit": {

@@ -5,7 +5,8 @@ import { initDetailModel, showDetailModel, hideDetailModel } from './js/componen
 import { initSettingsModel } from './js/components/settings-model.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './js/utils/ui-utils.js';
-import { t, loadLocale, getCurrentLocale, getSupportedLocales } from './js/core/i18n.js';
+// Import initializeI18n, t, and updateUIWithTranslations.
+import { initializeI18n, t, updateUIWithTranslations } from './js/core/i18n.js';
 
 // 全局错误与未处理 Promise 拒绝上报到主进程日志
 window.onerror = function (message, source, lineno, colno, error) {
@@ -41,119 +42,24 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // ===== 1. Initialize i18n =====
   window.api.logMessage('info', "[Renderer] 初始化 i18n...");
-  const languageSelect = document.getElementById('languageSelect');
-  if (!languageSelect) {
-      // Task 1: Error Logging
-      window.api.logMessage('error', "[Renderer] 初始化失败：找不到语言选择元素 #languageSelect");
-      // Optionally display a user-facing error message here
-      document.body.innerHTML = '<p style="color: red; padding: 20px;">Initialization Error: UI components missing. Please check the console.</p>';
-      return; // Stop initialization if critical elements are missing
-  }
 
-  // Render language dropdown options
-  function renderLanguageOptions() {
-    const locales = getSupportedLocales();
-    languageSelect.innerHTML = ''; // Use clearChildren if preferred
-    locales.forEach(l => {
-      const opt = document.createElement('option');
-      opt.value = l.code;
-      opt.textContent = l.name;
-      languageSelect.appendChild(opt);
-    });
-    languageSelect.value = getCurrentLocale();
-  }
-
-  // Update UI elements with data-i18n attributes (Optimized Version)
-  function updateUIWithTranslations() {
-    window.api.logMessage('debug', '[Renderer] 开始更新 UI 翻译 (优化版)...');
-    // Use a combined selector to fetch all relevant elements at once
-    const elements = document.querySelectorAll('[data-i18n-key], [data-i18n-title-key], [data-i18n-placeholder-key]');
-    const startTime = performance.now(); // Optional: for performance measurement
-
-    elements.forEach(el => {
-      // Check for data-i18n-key and apply translation to textContent or value
-      if (el.hasAttribute('data-i18n-key')) {
-        const key = el.getAttribute('data-i18n-key');
-        const translation = t(key);
-        if (translation !== key) {
-          // Prioritize 'value' attribute for inputs/buttons if present
-          if (el.hasAttribute('value') && (el.tagName === 'INPUT' || el.tagName === 'BUTTON')) {
-              el.value = translation;
-          // Otherwise, update textContent for most elements
-          } else if (el.textContent !== undefined && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') { // Avoid overwriting input/textarea content unless intended
-              el.textContent = translation;
-          }
-          // Note: This logic assumes 'data-i18n-key' primarily targets text content or button values.
-          // Placeholders and titles are handled by their specific attributes below.
-        } else {
-          window.api.logMessage('warn', `[i18n] 翻译 key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
-        }
-      }
-
-      // Check for data-i18n-title-key and apply translation to title
-      if (el.hasAttribute('data-i18n-title-key')) {
-        const key = el.getAttribute('data-i18n-title-key');
-        const translation = t(key);
-        if (translation !== key) {
-          el.title = translation;
-        } else {
-          window.api.logMessage('warn', `[i18n] 翻译 title key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
-        }
-      }
-
-      // Check for data-i18n-placeholder-key and apply translation to placeholder
-      if (el.hasAttribute('data-i18n-placeholder-key')) {
-        const key = el.getAttribute('data-i18n-placeholder-key');
-        const translation = t(key);
-        if (translation !== key) {
-          el.placeholder = translation;
-        } else {
-          window.api.logMessage('warn', `[i18n] 翻译 placeholder key 未找到: ${key} (元素: ${el.tagName}#${el.id})`);
-        }
-      }
-    });
-
-    const endTime = performance.now(); // Optional
-    window.api.logMessage('debug', `[Renderer] UI 翻译更新完成 (优化版), 耗时: ${(endTime - startTime).toFixed(2)}ms, 处理了 ${elements.length} 个元素`);
-  }
+  // Removed definition of updateUIWithTranslations() from here, it's now imported from i18n.js
 
 
-  // Load initial locale and set up listener
+  // Call the new initialization function
   try {
-      window.api.logMessage('debug', `[Renderer] 加载初始区域设置: ${getCurrentLocale()}`);
-      await loadLocale(getCurrentLocale());
-      renderLanguageOptions();
-      updateUIWithTranslations(); // Apply translations using the new function
+      await initializeI18n(); // This handles loading the correct locale based on config/defaults
+      updateUIWithTranslations(); // Apply translations after successful initialization
       window.api.logMessage('info', "[Renderer] i18n 初始化完成");
   } catch (error) {
-       // Task 1: Error Logging
-      window.api.logMessage('error', "[Renderer] 加载初始区域设置失败:", error.message, error.stack, error);
-      // Handle error appropriately, maybe default to a known locale or show error message
-      showInitializationError("Failed to load language settings.");
+      // Error logging is handled within initializeI18n and loadLocale
+      window.api.logMessage('error', "[Renderer] i18n 初始化过程中发生未捕获错误:", error.message, error.stack);
+      showInitializationError("Failed to initialize language settings.");
+      // Stop further initialization if i18n fails critically
+      return;
   }
 
-  languageSelect.addEventListener('change', async () => {
-    const newLocale = languageSelect.value;
-    window.api.logMessage('info', `[UI] 切换语言到: ${newLocale}`);
-    setLoading(true);
-    try {
-        await loadLocale(newLocale);
-        // Re-render necessary parts or reload data
-        updateUIWithTranslations(); // Update UI with new translations
-        // Reloading data might still be necessary if dynamic content relies on locale-specific data fetching/formatting
-        // but for pure text translation, updateUIWithTranslations should handle most cases.
-        // Let's keep loadInitialData for now as it might re-render components using t() internally.
-        await loadInitialData();
-        window.api.logMessage('info', `[Renderer] 语言切换成功: ${newLocale}`);
-    } catch (error) {
-         // Task 1: Error Logging
-        window.api.logMessage('error', `[Renderer] 切换区域设置失败: ${newLocale}`, error.message, error.stack, error);
-        // Optionally show feedback to the user
-    } finally {
-        setLoading(false);
-    }
-  });
-
+  // Removed languageSelect related code (renderLanguageOptions, event listener) as it's moved to settings
 
   // ===== 2. Initialize UI Modules =====
   window.api.logMessage('info', "[Renderer] 初始化 UI 模块...");

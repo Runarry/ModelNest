@@ -99,6 +99,11 @@
       "downloading": "下载中... ({progress}%)",
       "install": "下载完成，点击安装",
       "hint": "应用将在后台自动检查更新。"
+    },
+    "language": {
+      "title": "语言设置",
+      "label": "界面语言:",
+      "changeError": "切换语言失败: {message}"
     }
   },
   "sourceEdit": {

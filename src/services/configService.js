@@ -10,6 +10,7 @@ const DEFAULT_CONFIG = {
   supportedExtensions: [],
   imageCache: {}, // 添加默认的 imageCache 配置
   logLevel: 'info', // 添加默认的 logLevel
+  locale: null, // 添加默认的 locale 配置项
 };
 
 class ConfigService {

@@ -1,51 +1,108 @@
-const LOCALE_KEY = 'app_locale';
+// 移除 LOCALE_KEY 常量
+
+import { logMessage, getConfig, saveConfig } from '../apiBridge.js'; // 导入 API 桥接和配置函数
 
 const SUPPORTED_LOCALES = [
   { code: 'zh-CN', name: '简体中文' },
   { code: 'en-US', name: 'English' }
 ];
 
-let currentLocale = localStorage.getItem(LOCALE_KEY) || getDefaultLocale();
+let currentLocale = null; // 初始化为 null，将在 initializeI18n 中设置
 let messages = {};
 
 function getDefaultLocale() {
   // 优先取浏览器语言
   const lang = navigator.language || navigator.userLanguage;
+  // 检查是否是支持的完整区域代码 (e.g., 'en-US')
   if (SUPPORTED_LOCALES.some(l => l.code === lang)) return lang;
+  // 检查是否是支持的语言代码部分 (e.g., 'en' from 'en-GB')
+  const langPart = lang.split('-')[0];
+  const supportedLang = SUPPORTED_LOCALES.find(l => l.code.startsWith(langPart + '-'));
+  if (supportedLang) return supportedLang.code;
+  // 默认回退
   return 'zh-CN';
 }
 
-import { logMessage } from '../apiBridge.js'; // 导入 API 桥接
+/**
+ * 初始化 i18n 服务，加载初始语言设置
+ */
+export async function initializeI18n() {
+  logMessage('info', '[i18n] Initializing...');
+  let initialLocale = getDefaultLocale(); // 先获取默认语言
+  try {
+    const config = await getConfig();
+    if (config && config.locale && SUPPORTED_LOCALES.some(l => l.code === config.locale)) {
+      initialLocale = config.locale; // 优先使用配置中保存的语言
+      logMessage('info', `[i18n] Found saved locale in config: ${initialLocale}`);
+    } else {
+      logMessage('info', `[i18n] No valid saved locale found in config, using default: ${initialLocale}`);
+    }
+  } catch (error) {
+    logMessage('error', '[i18n] Failed to get config for initial locale, using default.', error.message, error.stack);
+  }
 
-export async function loadLocale(locale) {
+  try {
+    await loadLocale(initialLocale, false); // 初始加载时不保存配置，因为它已经是配置或默认值
+    logMessage('info', `[i18n] Initialization complete with locale: ${currentLocale}`);
+  } catch (error) {
+    logMessage('error', `[i18n] Failed to load initial locale '${initialLocale}'. Trying fallback 'zh-CN'.`, error.message, error.stack);
+    try {
+        // 如果初始加载失败，尝试加载中文作为最终回退
+        await loadLocale('zh-CN', false);
+        logMessage('info', `[i18n] Fallback locale 'zh-CN' loaded successfully.`);
+    } catch (fallbackError) {
+        logMessage('error', `[i18n] Failed to load fallback locale 'zh-CN'. i18n may not function correctly.`, fallbackError.message, fallbackError.stack);
+        // 此时 i18n 可能无法正常工作，messages 可能为空
+        messages = {};
+        currentLocale = 'zh-CN'; // 至少设置一个 currentLocale
+    }
+  }
+}
+
+
+/**
+ * 加载指定的区域设置文件，并可选择是否保存偏好。
+ * @param {string} locale - 要加载的区域设置代码 (e.g., 'en-US').
+ * @param {boolean} [savePreference=true] - 是否将此区域设置保存为用户偏好。
+ */
+export async function loadLocale(locale, savePreference = true) {
   const originalLocale = locale;
   if (!SUPPORTED_LOCALES.some(l => l.code === locale)) {
-      logMessage('warn', `[i18n] 不支持的区域设置 "${locale}"，回退到默认值 'zh-CN'`);
+      logMessage('warn', `[i18n] Unsupported locale "${locale}", falling back to 'zh-CN'.`);
       locale = 'zh-CN';
   }
-  logMessage('info', `[i18n] 开始加载区域设置文件: ${locale}.json`);
+  logMessage('info', `[i18n] Attempting to load locale file: ${locale}.json (Save preference: ${savePreference})`);
   try {
       const res = await fetch(`./locales/${locale}.json`);
       if (!res.ok) {
-          // Task 1: Error Logging (Fetch failed)
-          logMessage('error', `[i18n] 获取区域设置文件失败: ${locale}.json, 状态: ${res.status} ${res.statusText}`);
+          logMessage('error', `[i18n] Failed to fetch locale file: ${locale}.json, Status: ${res.status} ${res.statusText}`);
           throw new Error(`HTTP error ${res.status}`);
       }
       messages = await res.json();
-      currentLocale = locale;
-      try {
-          localStorage.setItem(LOCALE_KEY, locale);
-          logMessage('debug', `[i18n] 区域设置偏好已保存到 localStorage: ${locale}`);
-      } catch (storageError) {
-           // Task 1: Error Logging (LocalStorage failed)
-           logMessage('error', `[i18n] 保存区域设置偏好到 localStorage 失败: ${locale}`, storageError.message, storageError.stack);
+      const previousLocale = currentLocale; // Store previous locale for comparison
+      currentLocale = locale; // Update current locale *after* successful load
+      logMessage('info', `[i18n] Locale file loaded successfully: ${locale}.json`);
+
+      // 只有在语言实际发生变化且需要保存偏好时才保存配置
+      if (savePreference && previousLocale !== currentLocale) {
+          try {
+              logMessage('info', `[i18n] Saving locale preference: ${locale}`);
+              const currentConfig = await getConfig();
+              // 创建一个新的配置对象，以避免直接修改缓存的配置
+              const newConfig = { ...currentConfig, locale: currentLocale };
+              await saveConfig(newConfig);
+              logMessage('debug', `[i18n] Locale preference saved via configService: ${locale}`);
+          } catch (saveError) {
+              logMessage('error', `[i18n] Failed to save locale preference via configService: ${locale}`, saveError.message, saveError.stack);
+              // 保存失败不应阻止语言切换，但需要记录错误
+          }
+      } else if (savePreference && previousLocale === currentLocale) {
+          logMessage('debug', `[i18n] Locale preference (${locale}) already matches current locale. Skipping save.`);
       }
-      logMessage('info', `[i18n] 区域设置文件加载成功: ${locale}.json`);
+
   } catch (error) {
-       // Task 1: Error Logging (Fetch or JSON parse failed)
-      logMessage('error', `[i18n] 加载或解析区域设置文件时出错: ${locale}.json (请求的: ${originalLocale})`, error.message, error.stack, error);
-      // Optionally load a fallback locale or clear messages
-      // messages = {}; // Clear messages on error?
+      logMessage('error', `[i18n] Error loading or parsing locale file: ${locale}.json (Requested: ${originalLocale})`, error.message, error.stack);
+      // 不清除 messages 或更改 currentLocale，除非是初始化失败
       throw error; // Re-throw so the caller knows loading failed
   }
 }
@@ -58,8 +115,16 @@ export function t(key) {
     if (value && typeof value === 'object' && k in value) {
       value = value[k];
     } else {
+      // Task 2: Missing Key Logging
+      logMessage('warn', `[i18n] Missing translation key: ${key} for locale: ${currentLocale}`);
       return key; // 未找到时返回 key
     }
+  }
+  // Task 3: Type Checking (Optional but good practice)
+  if (typeof value !== 'string') {
+      logMessage('warn', `[i18n] Translation for key '${key}' is not a string:`, value);
+      // Decide how to handle non-string values (e.g., return key, return empty string, stringify)
+      return String(value); // Example: Convert to string
   }
   return value;
 }
@@ -72,4 +137,60 @@ export function getSupportedLocales() {
   return SUPPORTED_LOCALES;
 }
 
-// 全局挂载已移除，请使用 import { t, loadLocale, ... } from './i18n.js';
+/**
+ * Updates UI elements with data-i18n attributes based on the current locale.
+ * Moved from main.js to be reusable.
+ */
+export function updateUIWithTranslations() {
+  logMessage('debug', '[i18n] Starting UI translation update...');
+  // Use a combined selector to fetch all relevant elements at once
+  const elements = document.querySelectorAll('[data-i18n-key], [data-i18n-title-key], [data-i18n-placeholder-key]');
+  const startTime = performance.now(); // Optional: for performance measurement
+
+  elements.forEach(el => {
+    // Check for data-i18n-key and apply translation to textContent or value
+    if (el.hasAttribute('data-i18n-key')) {
+      const key = el.getAttribute('data-i18n-key');
+      const translation = t(key); // t() already handles missing keys
+      if (translation !== key) { // Apply only if translation exists
+        // Prioritize 'value' attribute for inputs/buttons if present
+        if (el.hasAttribute('value') && (el.tagName === 'INPUT' || el.tagName === 'BUTTON')) {
+            el.value = translation;
+        // Otherwise, update textContent for most elements
+        } else if (el.textContent !== undefined && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') { // Avoid overwriting input/textarea content unless intended
+            el.textContent = translation;
+        }
+      }
+    }
+
+    // Check for data-i18n-title-key and apply translation to title
+    if (el.hasAttribute('data-i18n-title-key')) {
+      const key = el.getAttribute('data-i18n-title-key');
+      const translation = t(key);
+      if (translation !== key) {
+        el.title = translation;
+      }
+    }
+
+    // Check for data-i18n-placeholder-key and apply translation to placeholder
+    if (el.hasAttribute('data-i18n-placeholder-key')) {
+      const key = el.getAttribute('data-i18n-placeholder-key');
+      const translation = t(key);
+      if (translation !== key) {
+        el.placeholder = translation;
+      }
+    }
+  });
+
+  const endTime = performance.now(); // Optional
+  logMessage('debug', `[i18n] UI translation update complete, took: ${(endTime - startTime).toFixed(2)}ms, processed ${elements.length} elements`);
+}
+
+
+// 添加一个新的初始化函数调用点，应用启动时需要调用 initializeI18n()
+// 例如在 src/renderer/main.js 中
+// import { initializeI18n } from './js/core/i18n.js';
+// document.addEventListener('DOMContentLoaded', async () => {
+//   await initializeI18n();
+//   // ... rest of the initialization code
+// });
