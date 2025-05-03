@@ -78,33 +78,13 @@
       "inlineSaveSuccess": "Data source updated.",
       "addSuccess": "Data source '{name}' added successfully."
     },
-    "modelSources": {
-      "none": "No model sources configured yet.",
-      "deleteConfirm": "Are you sure you want to delete the model source '{name}'?",
-      "inlineSaveSuccess": "Model source updated.",
-      "addSuccess": "Model source '{name}' added successfully.",
-      "addTitle": "Add Model Source",
-      "editing": "Editing",
-      "nameLabel": "Name",
-      "typeLabel": "Type",
-      "typeLocal": "Local",
-      "typeWebdav": "WebDAV",
-      "pathLabel": "Path",
-      "browse": "Browse",
-      "urlLabel": "URL",
-      "urlPlaceholder": "Please enter the WebDAV URL",
-      "usernameLabel": "Username",
-      "passwordLabel": "Password",
-      "passwordPlaceholder": "Enter new password to change",
-      "addSource": "Add Source",
-      "saveSource": "Save Source"
-    },
     "general": {
       "title": "General",
       "languageLabel": "Language",
       "language": {
         "enUS": "English",
         "zhCN": "简体中文"
+
       },
       "changeSuccess": "Language changed to {lang}.",
       "changeError": "Failed to change language: {message}"
@@ -154,6 +134,7 @@
       "authorLabel": "Author:",
       "licenseLabel": "License:",
       "updates": "Updates",
+      "version": "版本:",
       "developer": "Developer:",
       "linksTitle": "Links:",
       "githubLink": "GitHub Repository",
@@ -168,6 +149,26 @@
       "sizeError": "Cache size limit must be a non-negative number.",
       "failed": "Validation failed"
     },
-    "language.changeSuccess": "Language changed successfully. Restart the application to apply changes."
+    "modelSources": {
+      "none": "No model sources configured yet.",
+      "deleteConfirm": "Are you sure you want to delete the model source '{name}'?",
+      "inlineSaveSuccess": "Model source updated.",
+      "addSuccess": "Model source '{name}' added successfully.",
+      "addTitle": "Add Model Source",
+      "editing": "Editing",
+      "nameLabel": "Name",
+      "typeLabel": "Type",
+      "typeLocal": "Local",
+      "typeWebdav": "WebDAV",
+      "pathLabel": "Path",
+      "browse": "Browse",
+      "urlLabel": "URL",
+      "urlPlaceholder": "https://example.com/webdav/",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter new password to change",
+      "addSource": "Add Source",
+      "saveSource": "Save Source"
+    }
   }
 }
