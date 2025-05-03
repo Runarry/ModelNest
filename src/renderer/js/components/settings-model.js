@@ -953,8 +953,15 @@ async function handleSaveSection(category, paneElement) {
                 logMessage('debug', `[SettingsModel] 保存数据源:`, configUpdate.modelSources);
                 break;
             case 'general':
-                logMessage('debug', `[SettingsModel] 保存常规设置 (目前仅语言，已自动保存)`);
-                // Return early if nothing else to save in this section? Or let saveConfig handle empty update.
+                const langSelect = paneElement.querySelector('#languageSelector');
+                if (langSelect) {
+                    configUpdate.locale = langSelect.value;
+                    logMessage('debug', `[SettingsModel] 保存常规设置 - 语言: ${configUpdate.language}`);
+                } else {
+                    logMessage('warn', `[SettingsModel] 保存常规设置失败：未找到 #languageSelector`);
+                    // Decide if this should be a validation failure
+                }
+                // Add logic here if other general settings are added in the future
                 break;
             case 'file-recognition':
                 const extensionsText = paneElement.querySelector('#supportedFileExtensions')?.value || ''; // Corrected ID
