@@ -9,7 +9,8 @@ import {
     checkForUpdate,
     quitAndInstall,
     getAppVersion, // <-- 添加获取应用版本
-    clearImageCache // <-- 添加清除图片缓存 (假设存在)
+    clearImageCache, // <-- 添加清除图片缓存 (假设存在)
+    getPackageInfo // <-- 添加 getPackageInfo 导入
 } from '../apiBridge.js';
 
 // ===== DOM Element References =====
@@ -388,19 +389,34 @@ function populateAboutPane() {
     const pane = settingsContent.querySelector('#settingsAbout');
     if (!pane) return;
 
-    // 获取并显示package.json信息
-    const getPackageInfo = async () => {
-        try {
-            const info = await window.apiBridge.getPackageInfo();
-            document.getElementById('package-name').textContent = info.name;
-            document.getElementById('package-version').textContent = info.version;
-            document.getElementById('package-description').textContent = info.description;
-            document.getElementById('package-author').textContent = info.author;
-            document.getElementById('package-license').textContent = info.license;
-        } catch (error) {
-            logMessage('error', "[SettingsModel] 获取package.json信息失败:", error);
-        }
-    };
+    // 获取并显示 package.json 信息 (直接调用导入的函数)
+    getPackageInfo() // 使用从 apiBridge 导入的函数
+        .then(info => {
+            if (info) { // 确保 info 对象存在
+                const nameEl = document.getElementById('package-name');
+                const versionEl = document.getElementById('package-version');
+                const descEl = document.getElementById('package-description');
+                const authorEl = document.getElementById('package-author');
+                const licenseEl = document.getElementById('package-license');
+
+                if (nameEl) nameEl.textContent = info.name || t('settings.about.valueMissing'); // 添加回退文本
+                if (versionEl) versionEl.textContent = info.version || t('settings.about.valueMissing');
+                if (descEl) descEl.textContent = info.description || t('settings.about.valueMissing');
+                if (authorEl) authorEl.textContent = info.author || t('settings.about.valueMissing');
+                if (licenseEl) licenseEl.textContent = info.license || t('settings.about.valueMissing');
+                logMessage('info', "[SettingsModel] package.json 信息已成功显示");
+            } else {
+                 logMessage('warn', "[SettingsModel] getPackageInfo 返回了 null 或 undefined");
+                 // Optionally display an error message in the UI for missing info
+            }
+        })
+        .catch(error => {
+            logMessage('error', "[SettingsModel] 调用 getPackageInfo 失败:", error);
+            // Optionally display an error message in the UI
+            const nameEl = document.getElementById('package-name'); // Example: Show error in one field
+            if (nameEl) nameEl.textContent = t('settings.about.loadError');
+        });
+
 
     // 显示应用版本信息
     const versionDisplay = pane.querySelector('#appVersionDisplay');
@@ -426,8 +442,7 @@ function populateAboutPane() {
     }
     unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus);
 
-    // 获取package信息
-    getPackageInfo();
+    // getPackageInfo() 调用已移到上面处理
 }
 
 // Removed populateLanguageSetting function as its logic is merged into populateGeneralPane
