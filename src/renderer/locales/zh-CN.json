@@ -4,6 +4,9 @@
   "loadingModels": "加载模型数据中...",
   "viewCard": "卡片视图",
   "viewList": "列表视图",
+  "all": "全部",
+  "showMore":"更多",
+  "showLess":"更少",
   "filterAll": "全部",
   "uncategorized": "未分类",
   "tooltip": {

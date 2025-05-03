@@ -4,6 +4,9 @@
   "loadingModels": "Loading model data...",
   "viewCard": "Card View",
   "viewList": "List View",
+  "all": "All",
+  "showMore": "More",
+  "showLess": "Less",
   "filterAll": "All",
   "uncategorized": "Uncategorized",
   "tooltip": {
