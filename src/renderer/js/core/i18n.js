@@ -204,12 +204,3 @@ export function updateUIWithTranslations() {
   logMessage('debug', `[i18n] UI translation update complete, took: ${(endTime - startTime).toFixed(2)}ms, processed ${elements.length} elements`);
   logMessage('debug', `[i18n] After updateUI loop, #settingsGeneral innerHTML: ${settingsGeneralPane?.innerHTML?.substring(0, 100)}...`); // Log final content
 }
-
-
-// 添加一个新的初始化函数调用点，应用启动时需要调用 initializeI18n()
-// 例如在 src/renderer/main.js 中
-// import { initializeI18n } from './js/core/i18n.js';
-// document.addEventListener('DOMContentLoaded', async () => {
-//   await initializeI18n();
-//   // ... rest of the initialization code
-// });

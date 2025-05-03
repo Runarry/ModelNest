@@ -55,8 +55,6 @@ class LocalDataSource extends DataSource {
     const startTime = Date.now();
     const root = this.config.path;
     const startPath = directory ? path.join(root, directory) : root; // 确定起始路径
-    // 不再从 config 读取，直接使用传入的 supportedExts
-    // const supportedExtensions = this.config.supportedExtensions || [];
     log.info(`[LocalDataSource] 开始列出模型. Root: ${root}, Directory: ${directory}, Calculated startPath: ${startPath}, SupportedExts: ${supportedExts}`); // 修改日志，添加 supportedExts
 
     try {

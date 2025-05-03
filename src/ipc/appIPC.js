@@ -34,7 +34,6 @@ function initializeAppIPC(services) {
       const updatedConfig = await services.configService.getConfig();
       log.info('[IPC] 已获取更新后的配置');
 
-      // 2. 更新 imageCache 配置
       // 2. 更新 imageCache 配置 (通过 ImageService)
       if (services.imageService) {
         services.imageService.updateCacheConfig(updatedConfig.imageCache || {});
