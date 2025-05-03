@@ -169,9 +169,11 @@
                 <input type="number" id="imageCacheSizeLimit" min="0" data-i18n-placeholder-key="settings.imageCache.sizeLimitPlaceholder" placeholder="e.g., 500">
               </div>
               <div class="form-group">
-                 <label data-i18n-key="settings.imageCache.clearCacheLabel"></label>
-                 <button type="button" id="clearImageCacheBtn" class="btn btn-secondary" data-i18n-key="settings.imageCache.clearButton"></button>
-                 <span id="clearCacheStatus" class="status-message"></span>
+                <label data-i18n-key="settings.imageCache.clearCacheLabel"></label>
+                <div class="control-group"> <!-- New wrapper div -->
+                  <button type="button" id="clearImageCacheBtn" class="btn btn-secondary" data-i18n-key="settings.imageCache.clearButton"></button>
+                  <span id="clearCacheStatus" class="status-message"></span>
+                </div>
               </div>
               <div class="feedback-area" id="imageCacheFeedbackArea"></div> <!-- Added feedback area -->
               <div class="settings-actions">

@@ -405,38 +405,57 @@
 
 /* --- Styles for Image Cache Pane --- */
 #settingsImageCache .form-group {
-  margin-bottom: 15px;
-  display: flex; /* Align label and control/button */
+  margin-bottom: 20px;
+  display: grid;
+  grid-template-columns: 180px 1fr;
   align-items: center;
-  gap: 10px; /* Space between label and control */
+  gap: 15px;
 }
 #settingsImageCache label {
-  flex-basis: 150px; /* Fixed width for labels */
-  flex-shrink: 0;
   font-weight: 500;
-  text-align: right; /* Align label text to the right */
-  margin-bottom: 0; /* Reset margin */
+  text-align: right;
+  padding-right: 10px;
 }
 #imageCacheSizeLimit {
-  width: 100px; /* Fixed width for number input */
-  padding: 8px;
+  width: 150px;
+  padding: 10px;
   border: 1px solid var(--border-color);
-  border-radius: 4px;
+  border-radius: 6px;
   background-color: var(--input-bg);
   color: var(--text-color);
   box-sizing: border-box;
+  font-size: 1em;
+}
+#settingsImageCache .control-group {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 #clearImageCacheBtn {
-  /* Uses existing .btn styles */
-  margin-left: 0; /* Reset margin if needed */
+  padding: 10px 20px;
+  border-radius: 6px;
+  font-weight: 500;
+  transition: all 0.2s ease;
 }
 #clearCacheStatus {
   font-size: 0.9em;
-  margin-left: 10px;
+  min-width: 120px;
+  padding: 5px 10px;
+  border-radius: 4px;
+  background-color: var(--content-bg);
 }
-#clearCacheStatus.success { color: var(--success-color); }
-#clearCacheStatus.error { color: var(--danger-color); }
-#clearCacheStatus.info { color: var(--info-color); }
+#clearCacheStatus.success {
+  color: var(--success-color);
+  background-color: var(--success-bg);
+}
+#clearCacheStatus.error {
+  color: var(--danger-color);
+  background-color: var(--danger-bg);
+}
+#clearCacheStatus.info {
+  color: var(--info-color);
+  background-color: var(--info-bg);
+}
 
 
 /* --- Styles for Updates Pane --- */
