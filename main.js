@@ -69,20 +69,45 @@ app.whenReady().then(async () => { // 改为 async 回调
   services = await initializeServices(); // Assign to the global services variable
   log.info('[Main] 所有服务已初始化');
 
-  // 使用 services.configService 获取配置来设置日志级别
+  // --- 日志级别设置 ---
   const appConfig = await services.configService.getConfig();
-  let level = 'warn'; // Default level
-  if (process.env.LOG_LEVEL){
-    level = process.env.LOG_LEVEL;
-     log.warn(`LOG_LEVEL from env: ${process.env.LOG_LEVEL}` )
+  let finalLogLevel = 'warn'; // 默认级别
+
+  // 1. 优先从 configService 获取有效的 logLevel
+  //    检查是否为非空字符串
+  if (appConfig && typeof appConfig.logLevel === 'string' && appConfig.logLevel.trim() !== '') {
+      finalLogLevel = appConfig.logLevel.trim();
+      // 使用 info 级别记录来源，这条日志本身也会受最终级别限制
+      log.info(`[Log] 使用来自 configService 的日志级别: ${finalLogLevel}`);
   }
-  if (appConfig && typeof appConfig.logLevel === 'string') {
-    level = appConfig.logLevel;
+  // 2. 如果 configService 没有提供有效级别，则检查环境变量 LOG_LEVEL
+  else if (process.env.LOG_LEVEL && process.env.LOG_LEVEL.trim() !== '') {
+      finalLogLevel = process.env.LOG_LEVEL.trim();
+      // 使用 warn 级别记录回退，因为这通常表示配置缺失
+      log.warn(`[Log] configService 未提供有效日志级别，回退到环境变量 LOG_LEVEL: ${finalLogLevel}`);
+  }
+  // 3. 如果都没有提供有效级别，则使用默认值
+  else {
+      // 使用 warn 级别记录回退
+      log.warn(`[Log] configService 和环境变量均未提供有效日志级别，使用默认级别: ${finalLogLevel}`);
+  }
 
-  } 
+  // 应用日志级别
+  // 设置主级别
+  log.level = finalLogLevel;
+  // 显式设置 transports 的级别以确保生效
+  // (根据 electron-log 的行为，有时单独设置 transport 级别更可靠)
+  if (log.transports.console) {
+    log.transports.console.level = finalLogLevel;
+  }
+  // 确保文件 transport 也遵循级别设置
+  // 注意：文件 transport 的其他配置（如路径、格式）在前面已设置
+  if (log.transports.file) {
+    log.transports.file.level = finalLogLevel;
+  }
 
-  log.level = level; // 设置主日志级别，影响所有 transports
-  log.info(`[Log] 日志级别已根据服务配置设置为: ${level}`);
+  // 这条日志现在会根据 finalLogLevel 是否 >= info 来决定是否输出
+  log.info(`[Log] 最终日志级别已设置为: ${finalLogLevel}`);
 
   // 使用 services.configService 获取配置来设置 imageCache
   imageCache.setConfig(appConfig.imageCache || {});
