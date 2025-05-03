@@ -86,6 +86,20 @@ function initializeAppIPC(services) {
     }
   });
 
+  // 获取package.json信息
+  ipcMain.handle('get-package-info', () => {
+    log.info('[IPC] get-package-info 请求');
+    try {
+      const packageInfo = require('../../package.json');
+      const { name, version, description, author, license } = packageInfo;
+      log.info('[IPC] 获取package.json信息成功');
+      return { name, version, description, author, license };
+    } catch (error) {
+      log.error('[IPC] 获取package.json信息失败:', error);
+      throw error;
+    }
+  });
+
   log.info('[IPC] App IPC Handlers 初始化完成');
 }
 

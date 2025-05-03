@@ -93,7 +93,6 @@
               <li><a href="#" class="nav-item" data-category="general"><span data-i18n-key="settings.nav.general"></span></a></li>
               <li><a href="#" class="nav-item" data-category="file-recognition"><span data-i18n-key="settings.nav.fileRecognition"></span></a></li>
               <li><a href="#" class="nav-item" data-category="image-cache"><span data-i18n-key="settings.nav.imageCache"></span></a></li>
-              <li><a href="#" class="nav-item" data-category="updates"><span data-i18n-key="settings.nav.updates"></span></a></li>
               <li><a href="#" class="nav-item" data-category="about"><span data-i18n-key="settings.nav.about"></span></a></li>
             </ul>
           </nav>
@@ -181,32 +180,29 @@
               </div>
             </div>
             <!-- Updates Content Pane -->
-            <div class="settings-pane" data-category="updates" id="settingsUpdates" style="display: none;">
-              <h3 data-i18n-key="settings.updates.title"></h3>
-              <div class="form-group">
-                <p id="currentVersionInfo"><span data-i18n-key="settings.updates.currentVersion"></span> <span id="appVersionDisplay" data-i18n-key="settings.updates.loading">Loading...</span></p> <!-- Split key and dynamic part -->
-              </div>
-              <div class="form-group">
-                <button type="button" id="checkUpdatesBtn" class="btn btn-secondary" data-i18n-key="settings.updates.checkButton"></button>
-                <p id="updateStatusInfo" class="status-message"></p>
-              </div>
-               <!-- No save button needed typically -->
-            </div>
-            <!-- About Content Pane -->
             <div class="settings-pane" data-category="about" id="settingsAbout" style="display: none;">
               <h3 data-i18n-key="settings.about.title"></h3>
-              <p id="aboutAppName"><strong data-i18n-key="appName">ModelNest</strong></p> <!-- Added key for app name -->
-              <p id="aboutAppVersion"><span data-i18n-key="settings.about.version"></span> <span id="aboutVersionDisplay" data-i18n-key="settings.updates.loading">Loading...</span></p> <!-- Split key and dynamic part, reused loading key -->
-              <p id="aboutDeveloper"><span data-i18n-key="settings.about.developer"></span> <span id="developerName">Your Name/Company</span></p> <!-- Split key, added span for dynamic name -->
-              <div id="aboutLinks">
-                <p data-i18n-key="settings.about.linksTitle"></p>
-                <ul>
-                  <li><a href="#" id="aboutGithubLink" target="_blank" data-i18n-key="settings.about.githubLink">GitHub Repository</a></li>
-                  <li><a href="#" id="aboutWebsiteLink" target="_blank" data-i18n-key="settings.about.websiteLink">Official Website</a></li>
-                  <!-- Add more links as needed -->
-                </ul>
+              <div class="package-info">
+                <h4 data-i18n-key="settings.about.packageInfo">Package Information</h4>
+                <div class="package-details">
+                  <p><span data-i18n-key="settings.about.nameLabel"></span> <span id="package-name"></span></p>
+                  <p><span data-i18n-key="settings.about.versionLabel"></span> <span id="package-version"></span></p>
+                  <p><span data-i18n-key="settings.about.descriptionLabel"></span> <span id="package-description"></span></p>
+                  <p><span data-i18n-key="settings.about.authorLabel"></span> <span id="package-author"></span></p>
+                  <p><span data-i18n-key="settings.about.licenseLabel"></span> <span id="package-license"></span></p>
+                </div>
               </div>
-               <!-- No save button needed -->
+              <div class="update-section">
+                <h4 data-i18n-key="settings.about.updates">Updates</h4>
+                <div class="form-group">
+                  <p id="currentVersionInfo"><span data-i18n-key="settings.updates.currentVersion"></span> <span id="appVersionDisplay" data-i18n-key="settings.updates.loading">Loading...</span></p>
+                </div>
+                <div class="form-group">
+                  <button type="button" id="checkUpdatesBtn" class="btn btn-secondary" data-i18n-key="settings.updates.checkButton"></button>
+                  <p id="updateStatusInfo" class="status-message"></p>
+                </div>
+              </div>
+            </div>
             </div>
           </div>
         </div>

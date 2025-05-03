@@ -37,6 +37,7 @@ contextBridge.exposeInMainWorld('api', {
   },
 
 clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片缓存清理接口
+  getPackageInfo: () => ipcRenderer.invoke('get-package-info'), // 添加获取 package.json 信息的接口
   sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo)
 });
 console.log('[Preload] API exposed successfully.');

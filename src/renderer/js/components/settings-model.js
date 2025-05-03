@@ -387,37 +387,47 @@ function populateAboutPane() {
     logMessage('debug', "[SettingsModel] 填充关于面板");
     const pane = settingsContent.querySelector('#settingsAbout');
     if (!pane) return;
-    const versionDisplay = pane.querySelector('#aboutVersionDisplay');
-    const appNameEl = pane.querySelector('#aboutAppName strong'); // Get the strong tag inside
-    const developerEl = pane.querySelector('#aboutDeveloper');
-    const githubLink = pane.querySelector('#aboutGithubLink');
-    const websiteLink = pane.querySelector('#aboutWebsiteLink');
 
-    // App Name (Hardcoded or from config/constants)
-    if (appNameEl) appNameEl.textContent = t('appName'); // Use translation key
+    // 获取并显示package.json信息
+    const getPackageInfo = async () => {
+        try {
+            const info = await window.apiBridge.getPackageInfo();
+            document.getElementById('package-name').textContent = info.name;
+            document.getElementById('package-version').textContent = info.version;
+            document.getElementById('package-description').textContent = info.description;
+            document.getElementById('package-author').textContent = info.author;
+            document.getElementById('package-license').textContent = info.license;
+        } catch (error) {
+            logMessage('error', "[SettingsModel] 获取package.json信息失败:", error);
+        }
+    };
 
-    // Version
+    // 显示应用版本信息
+    const versionDisplay = pane.querySelector('#appVersionDisplay');
     if (versionDisplay) {
         getAppVersion().then(version => {
-            versionDisplay.textContent = version || t('settings.about.versionUnknown');
+            versionDisplay.textContent = version || t('settings.updates.versionUnknown');
         }).catch(err => {
-            logMessage('error', "[SettingsModel] 获取应用版本失败 (关于面板):", err);
-            versionDisplay.textContent = t('settings.about.versionError');
+            logMessage('error', "[SettingsModel] 获取应用版本失败:", err);
+            versionDisplay.textContent = t('settings.updates.versionError');
         });
-    } else {
-         logMessage('warn', "[SettingsModel] 未找到关于面板中的 #aboutVersionDisplay 元素");
     }
 
-    // Developer Info (Hardcoded or from config/constants)
-    if (developerEl) {
-        // The label part is handled by data-i18n-key in HTML
-        const developerNameSpan = developerEl.querySelector('#developerName');
-        if (developerNameSpan) developerNameSpan.textContent = "Your Name/Company"; // Set the dynamic part (replace with actual name if available)
+    // 设置更新按钮事件监听
+    const checkUpdatesBtn = pane.querySelector('#checkUpdatesBtn');
+    if (checkUpdatesBtn) {
+        checkUpdatesBtn.removeEventListener('click', handleUpdateButtonClick);
+        checkUpdatesBtn.addEventListener('click', handleUpdateButtonClick);
     }
 
-    // Links (Hardcoded or from config/constants)
-    if (githubLink) githubLink.href = "https://github.com/your-repo/modelnest"; // Replace with actual link
-    if (websiteLink) websiteLink.href = "https://your-website.com/modelnest"; // Replace with actual link
+    // 注册更新状态监听
+    if (unsubscribeUpdateStatus) {
+        unsubscribeUpdateStatus();
+    }
+    unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus);
+
+    // 获取package信息
+    getPackageInfo();
 }
 
 // Removed populateLanguageSetting function as its logic is merged into populateGeneralPane

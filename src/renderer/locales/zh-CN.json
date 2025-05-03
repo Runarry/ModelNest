@@ -126,6 +126,13 @@
     },
     "about": {
       "title": "关于",
+      "packageInfo": "包信息",
+      "nameLabel": "名称:",
+      "versionLabel": "版本:",
+      "descriptionLabel": "描述:",
+      "authorLabel": "作者:",
+      "licenseLabel": "许可证:",
+      "updates": "更新",
       "version": "版本:",
       "developer": "开发者:",
       "linksTitle": "链接:",
