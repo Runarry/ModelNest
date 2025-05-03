@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
 // 导入具体的数据源实现
-const { LocalDataSource } = require('./dataSource');
+const { LocalDataSource } = require('./localDataSource');
 const { WebDavDataSource } = require('./webdavDataSource');
 
 // 缓存数据源实例，键为 sourceId，值为 DataSource 实例
