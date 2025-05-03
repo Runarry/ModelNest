@@ -419,14 +419,33 @@ function populateAboutPane() {
 
 
     // 显示应用版本信息
-    const versionDisplay = pane.querySelector('#appVersionDisplay');
-    if (versionDisplay) {
+    // Initial query to check if the element structure exists
+    const initialVersionDisplay = pane.querySelector('#appVersionDisplay');
+    if (initialVersionDisplay) {
+        // Set initial text to loading or keep existing if needed
+        // initialVersionDisplay.textContent = t('settings.updates.statusLoading'); // Optional: Set loading text here
+
         getAppVersion().then(version => {
-            versionDisplay.textContent = version || t('settings.updates.versionUnknown');
+            // Re-query the element *inside* the callback to ensure it's available
+            const currentVersionDisplay = pane.querySelector('#appVersionDisplay');
+            if (currentVersionDisplay) {
+                currentVersionDisplay.textContent = version || t('settings.updates.versionUnknown');
+                logMessage('debug', `[SettingsModel] 应用版本已更新为: ${currentVersionDisplay.textContent}`);
+            } else {
+                logMessage('warn', "[SettingsModel] 在 getAppVersion 回调中未找到 #appVersionDisplay 元素");
+            }
         }).catch(err => {
             logMessage('error', "[SettingsModel] 获取应用版本失败:", err);
-            versionDisplay.textContent = t('settings.updates.versionError');
+            // Re-query the element *inside* the callback before showing error
+            const currentVersionDisplay = pane.querySelector('#appVersionDisplay');
+            if (currentVersionDisplay) {
+                currentVersionDisplay.textContent = t('settings.updates.versionError');
+            } else {
+                 logMessage('warn', "[SettingsModel] 在 getAppVersion 错误回调中未找到 #appVersionDisplay 元素");
+            }
         });
+    } else {
+         logMessage('warn', "[SettingsModel] 未找到 #appVersionDisplay 元素用于显示版本");
     }
 
     // 设置更新按钮事件监听
@@ -1163,26 +1182,30 @@ function setupUpdateSection() {
  * Handles clicks on the "Check for Updates" / "Restart & Install" button.
  */
 function handleUpdateButtonClick() {
-    // References (updateStatusInfoEl, checkUpdatesBtn) are now set by setupUpdateSection
-    if (!checkUpdatesBtn || !updateStatusInfoEl) {
-        logMessage('error', "[SettingsModel] handleUpdateButtonClick 失败：更新按钮 (#checkUpdatesBtn) 或状态元素 (#updateStatusInfo) 未初始化 (可能面板未正确设置)");
+    // Query for elements *inside* the handler to ensure fresh references
+    const aboutPane = settingsContent?.querySelector('#settingsAbout');
+    const currentCheckUpdatesBtn = aboutPane?.querySelector('#checkUpdatesBtn');
+    const currentUpdateStatusInfoEl = aboutPane?.querySelector('#updateStatusInfo');
+
+    if (!currentCheckUpdatesBtn || !currentUpdateStatusInfoEl) {
+        logMessage('error', "[SettingsModel] handleUpdateButtonClick 失败：无法在 #settingsAbout 面板中找到更新按钮 (#checkUpdatesBtn) 或状态元素 (#updateStatusInfo)。");
         return;
     }
 
-    const currentActionText = checkUpdatesBtn.textContent;
+    const currentActionText = currentCheckUpdatesBtn.textContent;
 
     // Compare against the specific text for install action
     if (currentActionText === t('settings.updates.installButton')) { // Use correct key
         logMessage('info', "[UI] 点击了更新按钮：执行退出并安装");
         quitAndInstall().catch(err => { // Add error handling for quitAndInstall
              logMessage('error', "[SettingsModel] 调用 quitAndInstall 失败:", err);
-             updateStatusInfoEl.textContent = t('settings.updates.installError', { message: err.message }); // Show error
+             currentUpdateStatusInfoEl.textContent = t('settings.updates.installError', { message: err.message }); // Show error using current reference
         });
     } else {
         logMessage('info', "[UI] 点击了更新按钮：执行检查更新");
         checkForUpdate().catch(err => { // Add error handling for checkForUpdate
              logMessage('error', "[SettingsModel] 调用 checkForUpdate 失败:", err);
-             updateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message }); // Show error
+             currentUpdateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message }); // Show error using current reference
         });
     }
 }
