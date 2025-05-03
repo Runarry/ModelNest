@@ -870,10 +870,13 @@ async function handleSaveSection(category, paneElement) {
     logMessage('info', `[SettingsModel] 开始保存分区: ${category}`);
     const saveButton = paneElement.querySelector('.settings-save-section');
     // Find the dedicated feedback area within the pane
-    const feedbackArea = paneElement.querySelector('.feedback-area');
+    // Use specific ID for data-sources, class for others
+    const feedbackArea = category === 'data-sources'
+        ? paneElement.querySelector('#dataSourceFeedbackArea')
+        : paneElement.querySelector('.feedback-area');
     const startTime = Date.now();
 
-    // Check if feedback area exists
+    // Check if feedback area exists (now more robust for data-sources)
     if (!feedbackArea) {
         logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：未找到 .feedback-area 元素。`);
         // Optionally show an alert or log, but don't proceed with saving if feedback area is crucial
