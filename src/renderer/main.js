@@ -102,10 +102,8 @@ document.addEventListener('DOMContentLoaded', async () => {
        ModelId: 'settingsModel',
        openBtnId: 'settingsBtn',
        closeBtnId: 'settingsClose',
-       saveBtnId: 'settingsSaveBtn',
-       cancelBtnId: 'settingsCancelBtn',
-       formId: 'settingsForm', // Make sure index.html has form with this ID
-       feedbackElementId: 'settingsFeedback'
+       // Removed: saveBtnId, cancelBtnId, formId, feedbackElementId as they are no longer used globally
+       // The new structure handles actions within specific panes or via the close button.
    };
    const sourceEditModelConfig = { // Config for the sub-Model
        ModelId: 'sourceEditModel',

@@ -1,0 +1,504 @@
+/* Settings Model Specific Styles */
+.settings-Model-content {
+  width: 80vw; /* Wider Model for settings */
+  max-width: 900px;
+  height: 70vh; /* Taller Model */
+  max-height: 600px;
+  display: flex; /* Use flexbox for internal layout */
+  flex-direction: column;
+  padding: 0; /* Remove padding to allow full control */
+}
+
+.settings-Model-content .Model-title {
+  padding: 15px 20px; /* Add padding back to title */
+  border-bottom: 1px solid var(--border-color); /* Separator */
+  margin-bottom: 0; /* Remove default margin */
+}
+
+.settings-container {
+  display: flex;
+  flex-grow: 1; /* Allow container to fill available space */
+  overflow: hidden; /* Prevent container overflow */
+  border-top: 1px solid var(--border-color); /* Separator from title */
+}
+
+/* Left Navigation */
+.settings-nav {
+  width: 200px;
+  flex-shrink: 0; /* Prevent shrinking */
+  background-color: var(--sidebar-bg);
+  padding: 15px 0;
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto; /* Allow scrolling if needed */
+}
+
+.settings-nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.settings-nav li a.nav-item {
+  display: block;
+  padding: 10px 20px;
+  color: var(--text-color);
+  text-decoration: none;
+  border-radius: 4px;
+  margin: 2px 10px;
+  transition: background-color 0.2s ease, color 0.2s ease;
+  white-space: nowrap; /* Prevent wrapping */
+}
+
+.settings-nav li a.nav-item:hover {
+  background-color: var(--hover-bg);
+}
+
+.settings-nav li a.nav-item.active {
+  background-color: var(--primary-color);
+  color: var(--button-text-color);
+  font-weight: 600;
+}
+
+/* Special styling for Data Sources nav item */
+.settings-nav li a.nav-item[data-category="data-sources"].active {
+  /* Example: Keep the primary color or add an icon later */
+   position: relative; /* For potential icon positioning */
+}
+/* Consider adding an icon using ::before */
+/*
+.settings-nav li a.nav-item[data-category="data-sources"]::before {
+  content: '📊'; // Example icon
+  margin-right: 8px;
+}
+*/
+
+
+/* Right Content Area */
+.settings-content {
+  flex-grow: 1;
+  padding: 20px;
+  overflow-y: auto; /* Allow content scrolling */
+  background-color: var(--content-bg);
+}
+
+.settings-pane {
+  /* Styles for individual setting panes */
+  border-bottom: 1px solid var(--border-color); /* Separate sections */
+  padding-bottom: 20px;
+  margin-bottom: 20px;
+}
+
+.settings-pane:last-child {
+  border-bottom: none;
+  margin-bottom: 0;
+}
+
+.settings-pane h3 {
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: var(--text-color-strong);
+}
+
+/* Data Source List Specifics */
+.data-source-list-container {
+  margin-bottom: 15px;
+}
+
+#dataSourceList {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.data-source-item {
+  display: flex;
+  align-items: center;
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  margin-bottom: 10px;
+  background-color: var(--card-bg);
+  flex-wrap: wrap; /* Allow wrapping for edit form */
+}
+
+.data-source-item .source-name {
+  font-weight: 600;
+  margin-right: 10px;
+  flex-grow: 1; /* Take available space */
+}
+
+.data-source-item .source-type {
+  font-size: 0.9em;
+  color: var(--text-color-muted);
+  margin-right: 15px;
+}
+
+.data-source-item .actions {
+  margin-left: auto; /* Push actions to the right */
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+.data-source-item .actions button {
+  margin-left: 5px;
+}
+
+.data-source-item .edit-form {
+  width: 100%; /* Take full width when shown */
+  margin-top: 10px;
+  padding: 15px;
+  border-top: 1px dashed var(--border-color);
+  background-color: var(--content-bg); /* Slightly different background */
+}
+
+/* Settings Actions (Save buttons) */
+.settings-actions {
+  margin-top: 20px;
+  text-align: right; /* Align button to the right */
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color); /* Separator */
+}
+
+/* Hide original Model actions if needed, or repurpose */
+/* #settingsModel .Model-actions { display: none; } */
+
+/* Ensure buttons have consistent styling */
+/* 按钮样式全部继承 main.css，避免冲突，仅保留 btn-sm 微调 */
+.btn-sm {
+  padding: 5px 10px;
+  font-size: 0.8em;
+}
+
+/* Adjust close button position */
+.settings-Model-content .Model-close {
+    position: absolute;
+    top: 10px;
+    right: 15px;
+    z-index: 10; /* Ensure it's above title */
+    background: none;
+    border: none;
+    font-size: 1.8rem;
+    color: var(--text-color-muted);
+    cursor: pointer;
+}
+.settings-Model-content .Model-close:hover {
+    color: var(--text-color);
+}
+/* --- Data Source Specific Enhancements --- */
+
+.data-source-item {
+  /* Existing styles */
+  position: relative; /* For potential absolute positioning inside */
+}
+
+/* Wrapper for the main display part of the list item */
+.source-details-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap; /* Allow wrapping on smaller screens if needed */
+    width: 100%; /* Take full width */
+    gap: 10px; /* Add some gap between elements */
+}
+
+.data-source-item .source-name {
+  /* Existing styles */
+  flex-grow: 0; /* Don't grow excessively */
+  flex-shrink: 0;
+  white-space: nowrap; /* Prevent name wrapping */
+}
+
+.data-source-item .source-type {
+  /* Existing styles */
+   flex-shrink: 0;
+}
+
+.data-source-item .source-path {
+    flex-grow: 1; /* Allow path to take remaining space */
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.85em;
+    color: var(--text-color-muted);
+    margin-right: 10px; /* Space before actions */
+    min-width: 100px; /* Ensure it has some minimum width */
+    cursor: default; /* Indicate it's not interactive (title provides full path) */
+}
+
+
+.data-source-item .actions {
+  /* Existing styles */
+  margin-left: 0; /* Reset margin-left as flexbox handles spacing now */
+}
+
+/* Inline Edit Form Styling */
+.data-source-item .edit-form {
+  /* Existing styles */
+  border-top: 1px solid var(--border-color); /* Use solid instead of dashed */
+  margin-top: 15px; /* More space */
+  padding-top: 15px;
+}
+
+.edit-form .form-group,
+#addSourceForm .form-group {
+    margin-bottom: 12px;
+    display: flex;
+    flex-direction: column; /* Stack label and input */
+}
+
+.edit-form label,
+#addSourceForm label {
+    margin-bottom: 4px;
+    font-weight: 500;
+    font-size: 0.9em;
+}
+
+.edit-form input[type="text"],
+.edit-form input[type="url"],
+.edit-form input[type="password"],
+.edit-form select,
+#addSourceForm input[type="text"],
+#addSourceForm input[type="url"],
+#addSourceForm input[type="password"],
+#addSourceForm select {
+    padding: 8px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    background-color: var(--input-bg);
+    color: var(--text-color);
+    width: 100%; /* Make inputs take full width */
+    box-sizing: border-box; /* Include padding and border in width */
+}
+
+.edit-form .input-group,
+#addSourceForm .input-group {
+    display: flex;
+}
+
+.edit-form .input-group input,
+#addSourceForm .input-group input {
+    flex-grow: 1;
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+    border-right: none; /* Avoid double border */
+}
+
+.edit-form .input-group button,
+#addSourceForm .input-group button {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    flex-shrink: 0;
+}
+
+
+.edit-form .inline-actions,
+#addSourceForm .form-actions {
+    margin-top: 15px;
+    display: flex;
+    justify-content: flex-end; /* Align buttons to the right */
+    gap: 10px; /* Space between buttons */
+    align-items: center; /* Align items vertically */
+}
+
+#addSourceForm .form-actions {
+     border-top: 1px solid var(--border-color);
+     padding-top: 15px;
+}
+
+/* Feedback message styling */
+.feedback {
+    font-size: 0.9em;
+    padding: 8px 10px;
+    border-radius: 4px;
+    margin-bottom: 10px; /* Space below feedback */
+    display: none; /* Hidden by default */
+}
+
+.feedback.success {
+    background-color: var(--success-bg);
+    color: var(--success-color);
+    border: 1px solid var(--success-border);
+    display: block;
+}
+
+.feedback.error {
+    background-color: var(--danger-bg);
+    color: var(--danger-color);
+    border: 1px solid var(--danger-border);
+    display: block;
+}
+
+.feedback.info {
+    background-color: var(--info-bg);
+    color: var(--info-color);
+    border: 1px solid var(--info-border);
+    display: block;
+}
+
+/* Add Form Container */
+#addDataSourceFormContainer {
+    background-color: var(--card-bg); /* Match list item background */
+    padding: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    margin-top: 20px; /* Space above the add form */
+}
+
+#addDataSourceFormContainer h4 {
+    margin-top: 0;
+    margin-bottom: 15px;
+    color: var(--text-color-strong);
+}
+
+/* No sources message */
+.no-sources-message {
+    padding: 15px;
+    text-align: center;
+    color: var(--text-color-muted);
+    font-style: italic;
+    background-color: var(--content-bg);
+    border: 1px dashed var(--border-color);
+    border-radius: 4px;
+}
+
+/* Ensure save section button has enough space */
+#settingsDataSources .settings-actions {
+    margin-top: 25px;
+}
+/* --- Styles for General Pane --- */
+#settingsGeneral .form-group {
+  margin-bottom: 15px;
+}
+#settingsGeneral label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+#languageSelector {
+  width: 100%; /* Make dropdown full width */
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  box-sizing: border-box;
+}
+
+/* --- Styles for File Recognition Pane --- */
+#settingsFileRecognition .form-group {
+  margin-bottom: 15px;
+}
+#settingsFileRecognition label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: 500;
+}
+#supportedFileExtensions {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  box-sizing: border-box;
+  resize: vertical; /* Allow vertical resize */
+  min-height: 60px;
+}
+
+/* --- Styles for Image Cache Pane --- */
+#settingsImageCache .form-group {
+  margin-bottom: 15px;
+  display: flex; /* Align label and control/button */
+  align-items: center;
+  gap: 10px; /* Space between label and control */
+}
+#settingsImageCache label {
+  flex-basis: 150px; /* Fixed width for labels */
+  flex-shrink: 0;
+  font-weight: 500;
+  text-align: right; /* Align label text to the right */
+  margin-bottom: 0; /* Reset margin */
+}
+#imageCacheSizeLimit {
+  width: 100px; /* Fixed width for number input */
+  padding: 8px;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  box-sizing: border-box;
+}
+#clearImageCacheBtn {
+  /* Uses existing .btn styles */
+  margin-left: 0; /* Reset margin if needed */
+}
+#clearCacheStatus {
+  font-size: 0.9em;
+  margin-left: 10px;
+}
+#clearCacheStatus.success { color: var(--success-color); }
+#clearCacheStatus.error { color: var(--danger-color); }
+#clearCacheStatus.info { color: var(--info-color); }
+
+
+/* --- Styles for Updates Pane --- */
+#settingsUpdates .form-group {
+  margin-bottom: 15px;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+}
+#currentVersionInfo {
+  margin: 0;
+  font-weight: 500;
+}
+#appVersionDisplay {
+  font-weight: normal;
+  color: var(--text-color-muted);
+}
+
+#updateStatusInfo {
+  margin: 0;
+  font-size: 0.9em;
+  color: var(--text-color-muted);
+}
+#updateStatusInfo.info { color: var(--info-color); }
+#updateStatusInfo.success { color: var(--success-color); }
+#updateStatusInfo.error { color: var(--danger-color); }
+
+
+/* --- Styles for About Pane --- */
+#settingsAbout p {
+  margin-bottom: 10px;
+  line-height: 1.5;
+}
+#settingsAbout strong {
+  color: var(--text-color-strong);
+}
+#aboutVersionDisplay {
+   color: var(--text-color-muted);
+   font-size: 0.9em;
+}
+#aboutLinks ul {
+  list-style: disc;
+  padding-left: 20px;
+  margin-top: 5px;
+}
+#aboutLinks li {
+  margin-bottom: 5px;
+}
+#aboutLinks a {
+  color: var(--primary-color);
+  text-decoration: none;
+}
+#aboutLinks a:hover {
+  text-decoration: underline;
+}
+
+/* General Status Message Styling (if not covered by .feedback) */
+.status-message {
+    font-size: 0.9em;
+    margin-left: 10px;
+    color: var(--text-color-muted);
+}
+.status-message.success { color: var(--success-color); font-weight: 500; }
+.status-message.error { color: var(--danger-color); font-weight: 500; }
+.status-message.info { color: var(--info-color); font-weight: 500; }

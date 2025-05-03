@@ -107,7 +107,7 @@ export async function loadLocale(locale, savePreference = true) {
   }
 }
 
-export function t(key) {
+export function t(key, params) {
   // 支持嵌套 key，如 detail.save
   const keys = key.split('.');
   let value = messages;
@@ -115,16 +115,17 @@ export function t(key) {
     if (value && typeof value === 'object' && k in value) {
       value = value[k];
     } else {
-      // Task 2: Missing Key Logging
       logMessage('warn', `[i18n] Missing translation key: ${key} for locale: ${currentLocale}`);
-      return key; // 未找到时返回 key
+      return key;
     }
   }
-  // Task 3: Type Checking (Optional but good practice)
   if (typeof value !== 'string') {
       logMessage('warn', `[i18n] Translation for key '${key}' is not a string:`, value);
-      // Decide how to handle non-string values (e.g., return key, return empty string, stringify)
-      return String(value); // Example: Convert to string
+      return String(value);
+  }
+  // 简单参数替换：{param}
+  if (params && typeof params === 'object') {
+    value = value.replace(/\{(\w+)\}/g, (match, p1) => (p1 in params ? params[p1] : match));
   }
   return value;
 }
@@ -143,47 +144,65 @@ export function getSupportedLocales() {
  */
 export function updateUIWithTranslations() {
   logMessage('debug', '[i18n] Starting UI translation update...');
+  const settingsGeneralPane = document.getElementById('settingsGeneral');
+  logMessage('debug', `[i18n] Before updateUI loop, #settingsGeneral innerHTML: ${settingsGeneralPane?.innerHTML?.substring(0, 100)}...`); // Log initial content
+
   // Use a combined selector to fetch all relevant elements at once
   const elements = document.querySelectorAll('[data-i18n-key], [data-i18n-title-key], [data-i18n-placeholder-key]');
   const startTime = performance.now(); // Optional: for performance measurement
 
   elements.forEach(el => {
-    // Check for data-i18n-key and apply translation to textContent or value
-    if (el.hasAttribute('data-i18n-key')) {
-      const key = el.getAttribute('data-i18n-key');
-      const translation = t(key); // t() already handles missing keys
-      if (translation !== key) { // Apply only if translation exists
-        // Prioritize 'value' attribute for inputs/buttons if present
-        if (el.hasAttribute('value') && (el.tagName === 'INPUT' || el.tagName === 'BUTTON')) {
-            el.value = translation;
-        // Otherwise, update textContent for most elements
-        } else if (el.textContent !== undefined && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') { // Avoid overwriting input/textarea content unless intended
-            el.textContent = translation;
+    const isGeneralPaneChild = settingsGeneralPane?.contains(el); // Check if element is inside the general pane
+    try { // Add try...catch around element processing
+        // Check for data-i18n-key and apply translation to textContent or value
+        if (el.hasAttribute('data-i18n-key')) {
+          const key = el.getAttribute('data-i18n-key');
+          if (isGeneralPaneChild) {
+              logMessage('debug', `[i18n] Processing general pane child (key: ${key}):`, el.outerHTML.substring(0, 100));
+          }
+          const translation = t(key); // t() already handles missing keys
+          if (translation !== key) { // Apply only if translation exists
+            // Prioritize 'value' attribute for inputs/buttons if present
+            if (el.hasAttribute('value') && (el.tagName === 'INPUT' || el.tagName === 'BUTTON')) {
+                if (isGeneralPaneChild) logMessage('debug', `[i18n] Setting value for ${key} to: ${translation}`);
+                el.value = translation;
+            // Otherwise, update textContent for most elements
+            } else if (el.textContent !== undefined && el.tagName !== 'INPUT' && el.tagName !== 'TEXTAREA') { // Avoid overwriting input/textarea content unless intended
+                if (isGeneralPaneChild) logMessage('debug', `[i18n] Setting textContent for ${key} to: ${translation}`);
+                el.textContent = translation;
+            }
+          }
         }
-      }
-    }
 
-    // Check for data-i18n-title-key and apply translation to title
-    if (el.hasAttribute('data-i18n-title-key')) {
-      const key = el.getAttribute('data-i18n-title-key');
-      const translation = t(key);
-      if (translation !== key) {
-        el.title = translation;
-      }
-    }
+        // Check for data-i18n-title-key and apply translation to title
+        if (el.hasAttribute('data-i18n-title-key')) {
+          const key = el.getAttribute('data-i18n-title-key');
+          const translation = t(key);
+          if (translation !== key) {
+            if (isGeneralPaneChild) logMessage('debug', `[i18n] Setting title for ${key} to: ${translation}`);
+            el.title = translation;
+          }
+        }
 
-    // Check for data-i18n-placeholder-key and apply translation to placeholder
-    if (el.hasAttribute('data-i18n-placeholder-key')) {
-      const key = el.getAttribute('data-i18n-placeholder-key');
-      const translation = t(key);
-      if (translation !== key) {
-        el.placeholder = translation;
-      }
+        // Check for data-i18n-placeholder-key and apply translation to placeholder
+        if (el.hasAttribute('data-i18n-placeholder-key')) {
+          const key = el.getAttribute('data-i18n-placeholder-key');
+          const translation = t(key);
+          if (translation !== key) {
+            if (isGeneralPaneChild) logMessage('debug', `[i18n] Setting placeholder for ${key} to: ${translation}`);
+            el.placeholder = translation;
+          }
+        }
+    } catch (error) {
+        logMessage('error', `[i18n] Error processing element during UI update:`, el.outerHTML.substring(0, 200), error.message, error.stack);
+        // Optionally continue to the next element instead of stopping the whole update
+        // continue;
     }
   });
 
   const endTime = performance.now(); // Optional
   logMessage('debug', `[i18n] UI translation update complete, took: ${(endTime - startTime).toFixed(2)}ms, processed ${elements.length} elements`);
+  logMessage('debug', `[i18n] After updateUI loop, #settingsGeneral innerHTML: ${settingsGeneralPane?.innerHTML?.substring(0, 100)}...`); // Log final content
 }
 
 

@@ -17,7 +17,16 @@ const api = window.api || {};
 
 export const getModelImage = api.getModelImage;
 export const logMessage = api.logMessage;
-export const openFolderDialog = api.openFolderDialog;
+/**
+ * 包装 openFolderDialog，添加日志，便于调试路径返回问题
+ * @param  {...any} args
+ * @returns {Promise<any>}
+ */
+export const openFolderDialog = async (...args) => {
+  const result = await api.openFolderDialog(...args);
+  logMessage('debug', '[Settings] browseLocalFolder result:', result);
+  return result;
+};
 export const getConfig = api.getConfig;
 export const saveConfig = api.saveConfig;
 export const onUpdateStatus = api.onUpdateStatus; // Likely an event listener registration
@@ -27,6 +36,8 @@ export const listModels = api.listModels;
 export const listSubdirectories = api.listSubdirectories;
 export const saveModel = api.saveModel;
 
+export const clearImageCache = api.clearImageCache;
+export const getAppVersion = api.getAppVersion;
 // You might also export the entire api object if needed,
 // but exporting individual functions is generally preferred for clarity.
 // export default api;

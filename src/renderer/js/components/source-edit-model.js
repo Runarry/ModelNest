@@ -1,5 +1,5 @@
 import { showFeedback, clearFeedback } from '../utils/ui-utils.js';
-import { t } from '../core/i18n.js'; // 导入 i18n 函数
+import { t, updateUIWithTranslations } from '../core/i18n.js'; // 导入 i18n 函数和批量翻译函数
 import { logMessage, openFolderDialog } from '../apiBridge.js'; // 导入 API 桥接
 
 // ===== DOM Element References =====
@@ -146,6 +146,8 @@ export function openSourceEditModel(sourceToEdit = null) {
     }
     sourceEditModel.classList.add('active');
     logMessage('info', '[SourceEditModel] 数据源编辑弹窗已打开');
+    // 修复：弹窗显示后再刷新 i18n
+    updateUIWithTranslations();
     try {
         sourceEditNameInput.focus(); // Focus the name field
         logMessage('debug', '[SourceEditModel] 已聚焦名称输入框');

@@ -1,110 +1,177 @@
-import { showFeedback, clearFeedback, clearChildren, showConfirmationDialog, setLoading } from '../utils/ui-utils.js'; // Added setLoading
-import { openSourceEditModel, initSourceEditModel } from './source-edit-model.js'; // Import functions for the sub-Model
-// Import necessary i18n functions
+import { showFeedback, clearFeedback, clearChildren, showConfirmationDialog, setLoading } from '../utils/ui-utils.js';
 import { t, loadLocale, getCurrentLocale, getSupportedLocales, updateUIWithTranslations } from '../core/i18n.js';
 import {
     logMessage,
+    openFolderDialog,
     getConfig,
     saveConfig,
     onUpdateStatus,
     checkForUpdate,
-    quitAndInstall
-} from '../apiBridge.js'; // 导入 API 桥接
+    quitAndInstall,
+    getAppVersion, // <-- 添加获取应用版本
+    clearImageCache // <-- 添加清除图片缓存 (假设存在)
+} from '../apiBridge.js';
 
 // ===== DOM Element References =====
 let settingsModel;
 let settingsBtn; // The button that opens the settings Model
 let settingsCloseBtn;
-let settingsSaveBtn;
-let settingsCancelBtn;
-let settingsForm;
-let settingsFeedbackEl; // Feedback element specific to this Model
-let sourceListContainer; // Element within the form to hold the list of sources
-let updateSection; // Container for the update UI
-let updateStatusEl; // Span to display update status messages
-let checkUpdateButton; // Button to check for updates / quit and install
+let settingsNav; // Left navigation container
+let settingsContent; // Right content container
+let dataSourceListEl; // UL element for data sources
+let addDataSourceBtn; // Button to add a new data source
+let addDataSourceFormContainer; // Container for the add form
+// References to individual panes (optional, can query when needed)
+// let settingsDataSourcesPane;
+// let settingsGeneralPane; ... etc.
+let updateStatusEl; // Span to display update status messages (within its pane)
+let checkUpdatesBtn; // Button to check for updates (within its pane) - Renamed from checkUpdateButton
+let updateStatusInfoEl; // Element to display update status messages (within its pane) - Renamed from updateStatusEl
+let clearImageCacheBtn; // Button to clear image cache
+let clearCacheStatusEl; // Span to show cache clearing status
 
 // ===== Module State =====
 let tempModelSources = []; // Temporary state for editing sources
 let unsubscribeUpdateStatus = null; // Function to unsubscribe from update status events
+let currentConfigData = null; // Store loaded config temporarily
 
 // ===== Initialization =====
 
 /**
- * Initializes the settings Model module.
+ * Initializes the settings Model module for the new two-column layout.
  * @param {object} config - Configuration object containing element IDs.
  * @param {string} config.ModelId
  * @param {string} config.openBtnId - ID of the button that opens this Model.
  * @param {string} config.closeBtnId
- * @param {string} config.saveBtnId
- * @param {string} config.cancelBtnId
- * @param {string} config.formId
- * @param {string} config.feedbackElementId
- * @param {object} sourceEditModelConfig - Config object to pass to initSourceEditModel.
  */
-export function initSettingsModel(config, sourceEditModelConfig) {
+export function initSettingsModel(config) { // 移除 sourceEditModelConfig
     settingsModel = document.getElementById(config.ModelId);
     settingsBtn = document.getElementById(config.openBtnId);
     settingsCloseBtn = document.getElementById(config.closeBtnId);
-    settingsSaveBtn = document.getElementById(config.saveBtnId);
-    settingsCancelBtn = document.getElementById(config.cancelBtnId);
-    settingsForm = document.getElementById(config.formId);
-    settingsFeedbackEl = document.getElementById(config.feedbackElementId);
 
-    if (!settingsModel || !settingsBtn || !settingsCloseBtn || !settingsSaveBtn ||
-        !settingsCancelBtn || !settingsForm || !settingsFeedbackEl) {
-        // Task 1: Error Logging
-        logMessage('error', "[SettingsModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
+    if (!settingsModel || !settingsBtn || !settingsCloseBtn) {
+        logMessage('error', "[SettingsModel] 初始化失败：弹窗、打开或关闭按钮未找到。请检查配置中的 ID:", config);
         return;
     }
 
+    // Get references to the new layout elements within the Model
+    settingsNav = settingsModel.querySelector('.settings-nav ul');
+    settingsContent = settingsModel.querySelector('.settings-content');
+    dataSourceListEl = settingsModel.querySelector('#dataSourceList'); // 数据源列表 UL
+    addDataSourceBtn = settingsModel.querySelector('#addDataSourceBtn'); // 添加按钮
+    addDataSourceFormContainer = settingsModel.querySelector('#addDataSourceFormContainer'); // 添加表单的容器
 
-    // Initialize the source edit Model (it's controlled from here)
-    initSourceEditModel(sourceEditModelConfig, handleSourceSaved); // Pass the callback
+    if (!settingsNav || !settingsContent || !dataSourceListEl || !addDataSourceBtn || !addDataSourceFormContainer) {
+        logMessage('error', "[SettingsModel] 初始化失败：导航、内容区域、数据源列表、添加按钮或添加表单容器未找到。请检查 index.html 结构。");
+        return;
+    }
 
-    // Attach event listeners
-    // Task 4: Click Event Logging
+    // 移除 initSourceEditModel 调用
+
+    // --- Attach Event Listeners ---
+
+    // Open Model Button
     settingsBtn.addEventListener('click', () => {
         logMessage('info', '[UI] 点击了设置按钮');
         openSettingsModel();
     });
+
+    // Close Model Button
     settingsCloseBtn.addEventListener('click', () => {
         logMessage('info', '[UI] 点击了设置弹窗的关闭按钮');
         closeSettingsModel();
     });
-    settingsCancelBtn.addEventListener('click', () => {
-        logMessage('info', '[UI] 点击了设置弹窗的取消按钮');
-        closeSettingsModel();
-    });
-    settingsSaveBtn.addEventListener('click', () => {
-        logMessage('info', '[UI] 点击了设置弹窗的保存按钮');
-        handleSaveSettings();
-    });
 
-
-    // Close Model if clicking on the backdrop
+    // Close Model on backdrop click
     settingsModel.addEventListener('click', (event) => {
         if (event.target === settingsModel) {
-            // Task 4: Click Event Logging
             logMessage('info', '[UI] 点击了设置弹窗的背景遮罩');
             closeSettingsModel();
         }
     });
+
+    // Navigation Item Clicks (Event Delegation)
+    settingsNav.addEventListener('click', (event) => {
+        const navLink = event.target.closest('a.nav-item');
+        if (navLink && !navLink.classList.contains('active')) {
+            event.preventDefault();
+            const category = navLink.dataset.category;
+            logMessage('info', `[UI] 点击了设置导航项: ${category}`);
+            switchSettingsTab(category);
+        }
+    });
+
+    // Add Data Source Button Click
+    addDataSourceBtn.addEventListener('click', () => {
+        logMessage('info', '[UI] 点击了添加数据源按钮');
+        // 不再打开子弹窗，改为显示行内添加表单
+        showAddDataSourceForm();
+    });
+
+    // Data Source List Actions (Event Delegation for Edit/Delete/Inline Save/Cancel/Browse)
+    dataSourceListEl.addEventListener('click', (event) => {
+        const target = event.target;
+        const listItem = target.closest('.data-source-item');
+        if (!listItem) return;
+        const sourceId = listItem.dataset.id;
+
+        if (target.classList.contains('edit-btn')) {
+            logMessage('info', `[UI] 点击了数据源编辑按钮 (行内): ${sourceId}`);
+            handleEditSourceInline(listItem);
+        } else if (target.classList.contains('delete-btn')) {
+            logMessage('info', `[UI] 点击了数据源删除按钮: ${sourceId}`);
+            handleDeleteSource(sourceId);
+        } else if (target.classList.contains('save-inline-btn')) {
+             logMessage('info', `[UI] 点击了数据源行内保存按钮: ${sourceId}`);
+             handleSaveSourceInline(listItem);
+        } else if (target.classList.contains('cancel-inline-btn')) {
+             logMessage('info', `[UI] 点击了数据源行内取消按钮: ${sourceId}`);
+             handleCancelSourceInline(listItem);
+        } else if (target.classList.contains('browse-inline-btn')) {
+            logMessage('info', `[UI] 点击了数据源行内浏览按钮: ${sourceId}`);
+            handleBrowseInline(listItem);
+        }
+   });
+
+    // Section Save Buttons (Event Delegation on Content Area)
+    settingsContent.addEventListener('click', (event) => {
+        if (event.target.classList.contains('settings-save-section')) {
+            const pane = event.target.closest('.settings-pane');
+            const category = pane?.dataset.category;
+            if (category) {
+                logMessage('info', `[UI] 点击了保存按钮，分区: ${category}`);
+                handleSaveSection(category, pane);
+            }
+        }
+    });
+
+     // Clear Image Cache Button Click (Specific to Image Cache Pane)
+     // Listener attached dynamically in populateImageCachePane
+
+     // Check Updates Button Click (Specific to Update Pane)
+     // Listener attached dynamically in setupUpdateSection
+
+    logMessage('info', "[SettingsModel] 新设置界面初始化完成");
 }
 
 // ===== Core Functions =====
 
 /** Opens the settings Model and loads the current configuration. */
-function openSettingsModel() {
+async function openSettingsModel() {
     if (!settingsModel) {
         logMessage('error', "[SettingsModel] openSettingsModel 失败：弹窗元素未初始化");
         return;
     }
     logMessage('info', "[SettingsModel] 开始打开设置弹窗");
-    clearFeedback(settingsFeedbackEl);
+    // Clear any previous feedback? (No global feedback area anymore)
     settingsModel.classList.add('active');
-    loadConfigForSettings(); // Load config when opening
-    logMessage('info', "[SettingsModel] 设置弹窗已打开");
+
+    document.title = t('settings.title'); // Set page title
+    // Set default tab and load data
+    switchSettingsTab('data-sources'); // Default to data sources
+    await loadAndDisplaySettings();
+
+    logMessage('info', "[SettingsModel] 设置弹窗已打开并加载数据");
 }
 
 /** Closes the settings Model. */
@@ -112,249 +179,404 @@ function closeSettingsModel() {
     logMessage('info', "[SettingsModel] 开始关闭设置弹窗");
     if (settingsModel) {
         settingsModel.classList.remove('active');
-        // Clear temporary state when closing without saving
+        // Clear temporary state
         tempModelSources = [];
-        // Clean up IPC listener when closing Model
+        currentConfigData = null;
+        // Clean up IPC listener
         if (unsubscribeUpdateStatus) {
             logMessage('info', "[SettingsModel] 取消订阅更新状态事件");
             unsubscribeUpdateStatus();
             unsubscribeUpdateStatus = null;
         }
-         logMessage('info', "[SettingsModel] 设置弹窗已关闭");
+        // Reset UI state (e.g., close any open inline forms)
+        dataSourceListEl.querySelectorAll('.edit-form').forEach(form => form.style.display = 'none');
+        dataSourceListEl.querySelectorAll('.data-source-item > *:not(.edit-form)').forEach(el => el.style.display = ''); // Show original content
+
+        logMessage('info', "[SettingsModel] 设置弹窗已关闭");
+        document.title = t('appTitle'); // Restore original page title on close
     } else {
-         logMessage('warn', "[SettingsModel] closeSettingsModel 调用时弹窗元素未初始化");
+        logMessage('warn', "[SettingsModel] closeSettingsModel 调用时弹窗元素未初始化");
     }
 }
 
 // ===== Internal Logic =====
 
-/** Loads the current config from the main process and populates the settings form. */
-async function loadConfigForSettings() {
-    if (!settingsForm) {
-        logMessage('error', "[SettingsModel] loadConfigForSettings 失败：表单元素未初始化");
-        return;
-    }
-    logMessage('info', "[SettingsModel] 开始加载配置到设置表单");
-    settingsForm.innerHTML = `<p>${t('settings.loading')}</p>`; // Placeholder while loading
-    const startTime = Date.now();
+/** Switches the active tab and content pane in the settings Model. */
+function switchSettingsTab(category) {
+    if (!settingsNav || !settingsContent) return;
+    logMessage('debug', `[SettingsModel] 切换到设置标签页: ${category}`);
 
-    try {
-        const currentConfig = await getConfig(); // 使用导入的函数
-        logMessage('info', "[SettingsModel] 从主进程获取的配置:", currentConfig);
+    // Update navigation active state
+    settingsNav.querySelectorAll('a.nav-item').forEach(link => {
+        link.classList.toggle('active', link.dataset.category === category);
+    });
 
-        // Deep clone sources into temporary state for editing
-        // Ensure it's always an array
-        tempModelSources = currentConfig.modelSources ? JSON.parse(JSON.stringify(currentConfig.modelSources)) : [];
+    // Show/Hide content panes
+    settingsContent.querySelectorAll('.settings-pane').forEach(pane => {
+        pane.style.display = pane.dataset.category === category ? '' : 'none';
+    });
 
-
-        settingsForm.innerHTML = ''; // Clear loading message
-
-        // --- Render Model Sources Section ---
-        const sourcesSection = document.createElement('div');
-        sourcesSection.className = 'settings-section source-settings'; // Added class for specific styling
-        sourcesSection.innerHTML = `<h3>${t('settings.modelSources.title')}</h3>`;
-        settingsForm.appendChild(sourcesSection);
-
-        // Create container for the list
-        sourceListContainer = document.createElement('ul');
-        sourceListContainer.className = 'source-list';
-        sourcesSection.appendChild(sourceListContainer);
-
-        renderSourceListForSettings(); // Render the list using temp state
-
-        const addSourceBtn = document.createElement('button');
-        addSourceBtn.textContent = t('settings.modelSources.add');
-        addSourceBtn.className = 'btn btn-secondary add-source-btn';
-        addSourceBtn.type = 'button'; // Prevent form submission
-        // Task 4: Click Event Logging
-        addSourceBtn.addEventListener('click', () => {
-            logMessage('info', '[UI] 点击了添加数据源按钮');
-            openSourceEditModel(null); // Open sub-Model for adding
-        });
-        sourcesSection.appendChild(addSourceBtn);
-
-        // --- Render Supported Extensions ---
-        const extensionsSection = document.createElement('div');
-        extensionsSection.className = 'settings-section';
-        extensionsSection.innerHTML = `
-          <h3>${t('settings.extensions.title')}</h3>
-          <div class="form-group">
-            <label for="supportedExtensions">${t('settings.extensions.label')}</label>
-            <textarea id="supportedExtensions" name="supportedExtensions" rows="3">${(currentConfig.supportedExtensions && currentConfig.supportedExtensions.length > 0) ? currentConfig.supportedExtensions.join(', ') : '.checkpoint, .ckpt, .safetensors, .pt, .pth, .bin'}</textarea>
-            <small>${t('settings.extensions.hint')}</small>
-          </div>
-        `;
-        settingsForm.appendChild(extensionsSection);
-
-        // --- Render Image Cache Settings ---
-        const cacheSection = document.createElement('div');
-        cacheSection.className = 'settings-section';
-        const cacheConfig = currentConfig.imageCache || {};
-        cacheSection.innerHTML = `
-          <h3>${t('settings.imageCache.title')}</h3>
-          <div class="form-group form-group-checkbox">
-            <label>
-              <input type="checkbox" id="imageCacheDebug" name="imageCacheDebug" ${cacheConfig.debug ? 'checked' : ''}>
-              ${t('settings.imageCache.debug')}
-            </label>
-          </div>
-          <div class="form-group">
-            <label for="imageCacheQuality">${t('settings.imageCache.quality')} ${t('settings.imageCache.qualityHint')}</label>
-            <input type="number" id="imageCacheQuality" name="imageCacheQuality" min="0" max="100" value="${cacheConfig.compressQuality ?? 80}">
-          </div>
-          <div class="form-group">
-            <label for="imageCacheFormat">${t('settings.imageCache.format')}</label>
-            <select id="imageCacheFormat" name="imageCacheFormat">
-              <option value="jpeg" ${cacheConfig.compressFormat === 'jpeg' ? 'selected' : ''}>${t('settings.imageCache.formatJpeg')}</option>
-              <option value="webp" ${cacheConfig.compressFormat === 'webp' ? 'selected' : ''}>${t('settings.imageCache.formatWebp')}</option>
-              <option value="png" ${cacheConfig.compressFormat === 'png' ? 'selected' : ''}>${t('settings.imageCache.formatPng')}</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label for="imageCacheSize">${t('settings.imageCache.maxSize')} ${t('settings.imageCache.maxSizeHint')}</label>
-            <input type="number" id="imageCacheSize" name="imageCacheSize" min="0" value="${cacheConfig.maxCacheSizeMB ?? 500}">
-          </div>
-        `;
-        settingsForm.appendChild(cacheSection);
-
-        // --- Render Update Section ---
-        updateSection = document.createElement('div');
-        updateSection.className = 'settings-section update-section';
-        updateSection.innerHTML = `
-          <h3>${t('settings.update.title')}</h3>
-          <div class="update-controls">
-            <span id="update-status">${t('settings.update.statusIdle')}</span>
-            <button id="check-update-button" type="button" class="btn btn-secondary">${t('settings.update.check')}</button>
-          </div>
-          <small>${t('settings.update.hint')}</small>
-        `;
-        settingsForm.appendChild(updateSection);
-
-        // Get references to update elements
-        updateStatusEl = updateSection.querySelector('#update-status');
-        checkUpdateButton = updateSection.querySelector('#check-update-button');
-
-        if (!updateStatusEl || !checkUpdateButton) {
-            // Task 1: Error Logging
-            logMessage('error', "[SettingsModel] 初始化更新 UI 失败：状态或按钮元素未找到");
-        } else {
-             // Add event listener for the update button
-            checkUpdateButton.addEventListener('click', handleUpdateButtonClick); // Logging is inside the handler
-
-            // Register listener for update status changes from main process
-            // Ensure previous listener is removed if Model is reopened
-            if (unsubscribeUpdateStatus) {
-                unsubscribeUpdateStatus();
-            }
-            unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus); // 使用导入的函数
-            logMessage('info', "[SettingsModel] 已订阅更新状态事件");
-        }
-        // --- Render Language Settings ---
-        const languageSection = document.createElement('div');
-        languageSection.className = 'settings-section';
-        languageSection.innerHTML = `<h3>${t('settings.language.title')}</h3>`; // Assuming 'settings.language.title' key exists
-
-        const langFormGroup = document.createElement('div');
-        langFormGroup.className = 'form-group';
-
-        const langLabel = document.createElement('label');
-        langLabel.setAttribute('for', 'settingsLanguageSelect');
-        langLabel.textContent = t('settings.language.label'); // Assuming 'settings.language.label' key exists
-        langFormGroup.appendChild(langLabel);
-
-        const langSelect = document.createElement('select');
-        langSelect.id = 'settingsLanguageSelect';
-        langSelect.name = 'language'; // Name attribute for potential future form handling
-
-        const locales = getSupportedLocales();
-        locales.forEach(l => {
-            const opt = document.createElement('option');
-            opt.value = l.code;
-            opt.textContent = l.name;
-            langSelect.appendChild(opt);
-        });
-
-        // Set initial value
-        langSelect.value = getCurrentLocale();
-
-        // Add event listener for changes
-        langSelect.addEventListener('change', handleLanguageChange); // Logging inside handler
-
-        langFormGroup.appendChild(langSelect);
-        languageSection.appendChild(langFormGroup);
-        settingsForm.appendChild(languageSection); // Add language section to the form
-
-
-        const duration = Date.now() - startTime;
-        logMessage('info', `[SettingsModel] 配置加载和表单渲染完成, 耗时: ${duration}ms`);
-
-    } catch (error) {
-        const duration = Date.now() - startTime;
-        // Task 1: Error Logging
-        logMessage('error', `[SettingsModel] 加载配置到设置表单失败, 耗时: ${duration}ms`, error.message, error.stack, error);
-        settingsForm.innerHTML = `<p class="error-message">${t('settings.loadError', { message: error.message })}</p>`;
+    // Special handling for sections needing dynamic setup (like Updates)
+    // Populate the specific pane when switching (or ensure it's populated on load)
+    // We already populate everything on load, but could optimize later if needed.
+    switch (category) {
+        case 'updates':
+            setupUpdateSection(); // Ensure listeners are attached when pane becomes visible
+            break;
+        case 'image-cache':
+            // Ensure the clear cache button listener is attached if not already
+            setupImageCacheSection();
+            break;
+        // Add other cases if specific setup is needed on tab switch
     }
 }
 
-/** Renders the list of model sources based on the `tempModelSources` state. */
-function renderSourceListForSettings() {
-    if (!sourceListContainer) return;
+/** Loads config and populates all setting panes. */
+async function loadAndDisplaySettings() {
+    logMessage('info', "[SettingsModel] 开始加载并显示所有设置");
+    setLoading(true); // Consider a loading indicator for the content area
+    const startTime = Date.now();
 
-    clearChildren(sourceListContainer); // Clear existing list items
+    try {
+        currentConfigData = await getConfig();
+        logMessage('info', "[SettingsModel] 从主进程获取的配置:", currentConfigData);
+
+        // Deep clone sources into temporary state for editing
+        tempModelSources = currentConfigData.modelSources ? JSON.parse(JSON.stringify(currentConfigData.modelSources)) : [];
+
+        // --- Populate Panes ---
+        populateDataSourcesPane();
+        populateGeneralPane();
+        populateFileRecognitionPane();
+        populateImageCachePane();
+        populateUpdatesPane(); // This might just set initial text
+        populateAboutPane();
+        // populateLanguageSetting(); // Language dropdown is part of populateGeneralPane now
+
+        const duration = Date.now() - startTime;
+        logMessage('info', `[SettingsModel] 所有设置面板填充完成, 耗时: ${duration}ms`);
+
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        logMessage('error', `[SettingsModel] 加载或显示设置失败, 耗时: ${duration}ms`, error.message, error.stack, error);
+        // Display error in a relevant pane or a general error message area if added
+        const dataSourcesPane = settingsContent.querySelector('#settingsDataSources');
+        if (dataSourcesPane) {
+            dataSourcesPane.innerHTML = `<p class="error-message">${t('settings.loadError', { message: error.message })}</p>`;
+        }
+    } finally {
+        setLoading(false);
+    }
+}
+
+// --- Pane Population Functions ---
+
+function populateDataSourcesPane() {
+    logMessage('debug', "[SettingsModel] 填充数据源面板");
+    renderSourceListForSettings(); // Render the list using temp state
+}
+
+function populateGeneralPane() {
+    logMessage('debug', "[SettingsModel] 填充常规设置面板");
+    const pane = settingsContent.querySelector('#settingsGeneral');
+    if (!pane || !currentConfigData) return;
+    const langSelect = pane.querySelector('#languageSelector');
+    if (langSelect) {
+        // Populate options first (if not already done)
+        if (langSelect.options.length === 0) {
+            const locales = getSupportedLocales();
+            locales.forEach(l => {
+                const opt = document.createElement('option');
+                opt.value = l.code;
+                opt.textContent = l.name;
+                langSelect.appendChild(opt);
+            });
+        }
+        // Set value and listener
+        langSelect.value = currentConfigData.language || getCurrentLocale(); // Use current locale as fallback
+        langSelect.removeEventListener('change', handleLanguageChange); // Ensure no duplicate listeners
+        langSelect.addEventListener('change', handleLanguageChange);
+    } else {
+        logMessage('warn', "[SettingsModel] 未找到常规设置面板中的 #languageSelector");
+    }
+}
+
+function populateFileRecognitionPane() {
+    logMessage('debug', "[SettingsModel] 填充文件识别面板");
+    const pane = settingsContent.querySelector('#settingsFileRecognition');
+    if (!pane || !currentConfigData) return;
+    const textarea = pane.querySelector('#supportedFileExtensions'); // Corrected ID from HTML
+    if (textarea) {
+        // Use default from configService if available, otherwise a hardcoded default
+        const defaultExtensions = currentConfigData.defaults?.supportedExtensions || ['.json', '.yaml', '.txt']; // Example default
+        const currentExtensions = currentConfigData.supportedExtensions || defaultExtensions;
+        textarea.value = currentExtensions.join(', ');
+    } else {
+         logMessage('warn', "[SettingsModel] 未找到文件识别面板中的 #supportedFileExtensions 文本区域");
+    }
+}
+
+function populateImageCachePane() {
+    logMessage('debug', "[SettingsModel] 填充图片缓存面板");
+    const pane = settingsContent.querySelector('#settingsImageCache');
+    if (!pane || !currentConfigData) return;
+    const cacheConfig = currentConfigData.imageCache || currentConfigData.defaults?.imageCache || {}; // Use defaults if available
+
+    // Assuming IDs from HTML: imageCacheSizeLimit, clearImageCacheBtn, clearCacheStatus
+    const sizeInput = pane.querySelector('#imageCacheSizeLimit');
+    clearImageCacheBtn = pane.querySelector('#clearImageCacheBtn'); // Assign to module variable
+    clearCacheStatusEl = pane.querySelector('#clearCacheStatus'); // Assign to module variable
+
+    if (sizeInput) {
+        sizeInput.value = cacheConfig.maxCacheSizeMB ?? 500; // Default to 500MB if not set
+    } else {
+        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheSizeLimit 输入框");
+    }
+
+    // Clear status message initially
+    if (clearCacheStatusEl) {
+        clearCacheStatusEl.textContent = '';
+        clearCacheStatusEl.className = 'status-message'; // Reset class
+    }
+
+    // Attach listener (will be re-attached if pane re-populated, handled in setupImageCacheSection)
+    setupImageCacheSection();
+}
+
+/** Sets up event listeners for the Image Cache pane. */
+function setupImageCacheSection() {
+    if (clearImageCacheBtn) {
+        clearImageCacheBtn.removeEventListener('click', handleClearImageCache); // Prevent duplicates
+        clearImageCacheBtn.addEventListener('click', handleClearImageCache);
+        logMessage('debug', "[SettingsModel] 已附加清除缓存按钮的事件监听器");
+    } else {
+        // Try to find it again if it wasn't found during initial populate
+        const pane = settingsContent?.querySelector('#settingsImageCache');
+        clearImageCacheBtn = pane?.querySelector('#clearImageCacheBtn');
+        if (clearImageCacheBtn) {
+             clearImageCacheBtn.removeEventListener('click', handleClearImageCache);
+             clearImageCacheBtn.addEventListener('click', handleClearImageCache);
+             logMessage('debug', "[SettingsModel] 重新查找并附加了清除缓存按钮的事件监听器");
+        } else {
+            logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：清除按钮未找到");
+        }
+} // Closing brace for setupImageCacheSection
+
+     // The check for clearCacheStatusEl will be moved inside setupImageCacheSection
+}
+
+function populateUpdatesPane() {
+    logMessage('debug', "[SettingsModel] 填充更新面板");
+    const pane = settingsContent.querySelector('#settingsUpdates');
+    if (!pane) return;
+    const versionDisplay = pane.querySelector('#appVersionDisplay');
+    if (versionDisplay) {
+        getAppVersion().then(version => {
+            versionDisplay.textContent = version || t('settings.updates.versionUnknown');
+        }).catch(err => {
+            logMessage('error', "[SettingsModel] 获取应用版本失败 (更新面板):", err);
+            versionDisplay.textContent = t('settings.updates.versionError');
+        });
+    } else {
+        logMessage('warn', "[SettingsModel] 未找到更新面板中的 #appVersionDisplay 元素");
+    }
+    // Button listener and status element are handled by setupUpdateSection
+}
+
+function populateAboutPane() {
+    logMessage('debug', "[SettingsModel] 填充关于面板");
+    const pane = settingsContent.querySelector('#settingsAbout');
+    if (!pane) return;
+    const versionDisplay = pane.querySelector('#aboutVersionDisplay');
+    const appNameEl = pane.querySelector('#aboutAppName strong'); // Get the strong tag inside
+    const developerEl = pane.querySelector('#aboutDeveloper');
+    const githubLink = pane.querySelector('#aboutGithubLink');
+    const websiteLink = pane.querySelector('#aboutWebsiteLink');
+
+    // App Name (Hardcoded or from config/constants)
+    if (appNameEl) appNameEl.textContent = t('appName'); // Use translation key
+
+    // Version
+    if (versionDisplay) {
+        getAppVersion().then(version => {
+            versionDisplay.textContent = version || t('settings.about.versionUnknown');
+        }).catch(err => {
+            logMessage('error', "[SettingsModel] 获取应用版本失败 (关于面板):", err);
+            versionDisplay.textContent = t('settings.about.versionError');
+        });
+    } else {
+         logMessage('warn', "[SettingsModel] 未找到关于面板中的 #aboutVersionDisplay 元素");
+    }
+
+    // Developer Info (Hardcoded or from config/constants)
+    if (developerEl) {
+        // The label part is handled by data-i18n-key in HTML
+        const developerNameSpan = developerEl.querySelector('#developerName');
+        if (developerNameSpan) developerNameSpan.textContent = "Your Name/Company"; // Set the dynamic part (replace with actual name if available)
+    }
+
+    // Links (Hardcoded or from config/constants)
+    if (githubLink) githubLink.href = "https://github.com/your-repo/modelnest"; // Replace with actual link
+    if (websiteLink) websiteLink.href = "https://your-website.com/modelnest"; // Replace with actual link
+}
+
+// Removed populateLanguageSetting function as its logic is merged into populateGeneralPane
+// --- Data Source Specific Functions ---
+
+/** Renders the list of model sources based on the `tempModelSources` state into #dataSourceList. */
+function renderSourceListForSettings() {
+    if (!dataSourceListEl) {
+        logMessage('error', "[SettingsModel] renderSourceListForSettings 失败：数据源列表元素 (#dataSourceList) 未初始化");
+        return;
+    }
+    logMessage('debug', "[SettingsModel] 开始渲染数据源列表");
+
+    clearChildren(dataSourceListEl); // Clear existing list items
 
     if (tempModelSources.length === 0) {
-        sourceListContainer.innerHTML = `<li class="no-sources-message">${t('settings.modelSources.none')}</li>`;
+        dataSourceListEl.innerHTML = `<li class="no-sources-message">${t('settings.modelSources.none')}</li>`;
         return;
     }
 
     tempModelSources.forEach(source => {
         const item = document.createElement('li');
-        item.className = 'source-item';
-        item.dataset.sourceId = source.id; // Store ID for edit/delete
+        item.className = 'data-source-item';
+        item.dataset.id = source.id; // Store ID for actions
 
-        const typeText = source.type === 'local' ? t('settings.modelSources.typeLocal') : t('settings.modelSources.typeWebdav');
+        const typeText = source.type === 'local' ? t('settings.dataSources.typeLocal') : t('settings.dataSources.typeWebdav'); // Use correct key path
         const pathOrUrl = source.type === 'local' ? source.path : source.url;
 
-        item.innerHTML = `
-          <div class="source-item-details">
-            <span class="source-item-name">${source.name} (${typeText})</span>
-            <span class="source-item-path" title="${pathOrUrl}">${pathOrUrl}</span>
-          </div>
-          <div class="source-item-actions">
-            <button type="button" class="edit-btn icon-btn" title="${t('settings.modelSources.edit')}">✏️</button>
-            <button type="button" class="delete-btn icon-btn" title="${t('settings.modelSources.delete')}">🗑️</button>
-          </div>
+        // Main content of the list item
+        const mainContent = document.createElement('div');
+        mainContent.className = 'source-details-actions'; // Wrapper for easier show/hide
+        mainContent.innerHTML = `
+            <span class="source-name" title="${source.name}">${source.name}</span> <!-- Added title for potential overflow -->
+            <span class="source-type">(${typeText})</span>
+            <span class="source-path" title="${pathOrUrl}">${pathOrUrl}</span>
+            <div class="actions">
+                <button type="button" class="edit-btn btn btn-sm btn-secondary" title="${t('settings.dataSources.edit')}">${t('settings.dataSources.edit')}</button> <!-- Use correct key path -->
+                <button type="button" class="delete-btn btn btn-sm btn-danger" title="${t('settings.dataSources.delete')}">${t('settings.dataSources.delete')}</button> <!-- Use correct key path -->
+            </div>
         `;
 
-        // Add event listeners for edit/delete buttons
-        const editButton = item.querySelector('.edit-btn');
-        logMessage('info', `[SettingsModel] Found edit button for source "${source.name}":`, editButton); // Log found button
-        if (editButton) {
-            // Task 4: Click Event Logging
-            editButton.addEventListener('click', (e) => {
-                logMessage('info', `[UI] 点击了编辑数据源按钮: ${source.name} (ID: ${source.id})`);
-                e.stopPropagation(); // Prevent li click if needed
-                openSourceEditModel(source); // Pass the source object to edit
-            });
-        } else {
-             // Task 1: Error Logging (Minor issue, maybe log as warning)
-            logMessage('warn', `[SettingsModel] 未找到数据源 "${source.name}" 的编辑按钮`);
-        }
-        const deleteButton = item.querySelector('.delete-btn');
-        if (deleteButton) {
-             // Task 4: Click Event Logging
-            deleteButton.addEventListener('click', (e) => {
-                 logMessage('info', `[UI] 点击了删除数据源按钮: ${source.name} (ID: ${source.id})`);
-                e.stopPropagation();
-                handleDeleteSource(source.id);
-            });
-        } else {
-             logMessage('warn', `[SettingsModel] 未找到数据源 "${source.name}" 的删除按钮`);
-        }
+        // Inline edit form (initially hidden)
+        const editForm = document.createElement('div');
+        editForm.className = 'edit-form';
+        editForm.style.display = 'none';
+        // Populate with form fields based on source type - FRAMEWORK ONLY
+        editForm.innerHTML = `
+            <p><strong>${t('settings.dataSources.editing')}: ${source.name}</strong></p>
+            <!-- Actual form fields - Use dataSources path for consistency -->
+            <div class="form-group">
+                <label>${t('settings.dataSources.nameLabel')}:</label> <input type="text" class="edit-name" value="${source.name}">
+            </div>
+             ${source.type === 'local' ? `
+             <div class="form-group">
+                 <label>${t('settings.dataSources.pathLabel')}:</label>
+                 <div class="input-group"> <!-- Added input-group wrapper -->
+                     <input type="text" class="edit-path" value="${source.path}">
+                     <button type="button" class="browse-inline-btn btn btn-secondary" title="${t('settings.dataSources.browse')}">${t('settings.dataSources.browseShort', '...')}</button> <!-- Use btn-secondary like add form -->
+                 </div>
+             </div>
+             ` : `
+             <div class="form-group">
+                 <label>${t('settings.dataSources.urlLabel')}:</label> <input type="text" class="edit-url" value="${source.url}">
+             </div>
+             <div class="form-group">
+                 <label>${t('settings.dataSources.usernameLabel')}:</label> <input type="text" class="edit-username" value="${source.username || ''}">
+             </div>
+              <div class="form-group">
+                 <label>${t('settings.dataSources.passwordLabel')}:</label> <input type="password" class="edit-password" placeholder="${t('settings.dataSources.passwordPlaceholder', 'Enter new password to change')}">
+             </div>
+             `}
+            <div class="inline-actions">
+                <button type="button" class="save-inline-btn btn btn-sm btn-primary" title="${t('settings.save')}">${t('settings.save')}</button>
+                <button type="button" class="cancel-inline-btn btn btn-sm btn-secondary" title="${t('settings.cancel')}">${t('settings.cancel')}</button>
+            </div>
+        `;
 
-        sourceListContainer.appendChild(item);
+        item.appendChild(mainContent);
+        item.appendChild(editForm);
+        dataSourceListEl.appendChild(item);
     });
+     logMessage('debug', "[SettingsModel] 数据源列表渲染完成");
 }
+
+/** Handles showing the inline edit form for a data source. */
+function handleEditSourceInline(listItem) {
+     if (!listItem) return;
+     logMessage('debug', `[SettingsModel] 显示行内编辑表单: ${listItem.dataset.id}`);
+     // Hide main content, show edit form
+     const mainContent = listItem.querySelector('.source-details-actions');
+     const editForm = listItem.querySelector('.edit-form');
+     if (mainContent) mainContent.style.display = 'none';
+     if (editForm) editForm.style.display = 'block';
+     // TODO: Potentially fetch fresh data or ensure form fields are correct
+}
+
+/** Handles saving changes from the inline edit form. */
+function handleSaveSourceInline(listItem) {
+    if (!listItem) return;
+    const sourceId = listItem.dataset.id;
+    logMessage('info', `[SettingsModel] 尝试保存行内编辑: ${sourceId}`);
+    const editForm = listItem.querySelector('.edit-form');
+    if (!editForm) return;
+
+    const sourceIndex = tempModelSources.findIndex(s => s.id === sourceId);
+    if (sourceIndex === -1) {
+        logMessage('error', `[SettingsModel] 行内保存失败：未找到源 ID ${sourceId}`);
+        return;
+    }
+
+    const originalSource = tempModelSources[sourceIndex];
+    const updatedSource = { ...originalSource }; // Clone to modify
+
+    // --- Collect data from inline form ---
+    const nameInput = editForm.querySelector('.edit-name');
+    if (nameInput) updatedSource.name = nameInput.value.trim();
+
+    if (updatedSource.type === 'local') {
+        const pathInput = editForm.querySelector('.edit-path');
+        if (pathInput) updatedSource.path = pathInput.value.trim();
+        // TODO: Add validation if needed
+    } else if (updatedSource.type === 'webdav') {
+        const urlInput = editForm.querySelector('.edit-url');
+        const usernameInput = editForm.querySelector('.edit-username');
+        const passwordInput = editForm.querySelector('.edit-password'); // Note: Password might be empty if not changed
+        if (urlInput) updatedSource.url = urlInput.value.trim();
+        if (usernameInput) updatedSource.username = usernameInput.value.trim();
+        if (passwordInput && passwordInput.value) { // Only update password if field is not empty
+            updatedSource.password = passwordInput.value;
+        } else {
+             // If password field is empty, keep the original password (or lack thereof)
+             // delete updatedSource.password; // Or ensure it remains undefined/null if that's the convention
+             updatedSource.password = originalSource.password; // Explicitly keep original
+        }
+        // TODO: Add validation if needed
+    }
+
+    // --- Update temporary state and re-render ---
+    logMessage('debug', `[SettingsModel] 更新后的行内数据:`, updatedSource);
+    tempModelSources[sourceIndex] = updatedSource;
+    renderSourceListForSettings(); // Re-render the entire list to reflect changes
+
+    // Note: The list re-render will automatically hide the edit form.
+    // If a more targeted update is needed later, adjust this.
+    showFeedback(settingsContent.querySelector('#settingsDataSources'), t('settings.modelSources.inlineSaveSuccess'), 'success', 1500); // Show feedback in the pane
+}
+
+/** Handles canceling the inline edit form. */
+function handleCancelSourceInline(listItem) {
+     if (!listItem) return;
+     logMessage('debug', `[SettingsModel] 取消行内编辑: ${listItem.dataset.id}`);
+     // Hide edit form, show main content
+     const mainContent = listItem.querySelector('.source-details-actions');
+     const editForm = listItem.querySelector('.edit-form');
+     if (editForm) editForm.style.display = 'none';
+     if (mainContent) mainContent.style.display = ''; // Reset display
+     // No data changes needed, just UI reset
+}
+
 
 /** Handles the deletion of a model source from the temporary list. */
 function handleDeleteSource(sourceId) {
@@ -372,128 +594,411 @@ function handleDeleteSource(sourceId) {
                 logMessage('info', `[SettingsModel] 已从临时列表中删除数据源: ${sourceId}`);
                 renderSourceListForSettings(); // Re-render the list
             } else {
-                // This case should ideally not happen if sourceToDelete was found, but keep for safety
                 logMessage('error', `[SettingsModel] 删除失败：在临时列表中未找到数据源 ID: ${sourceId} (确认后)`);
             }
         },
         () => { // onCancel callback
             logMessage('info', `[SettingsModel] 用户取消删除数据源: ${sourceId} (${sourceName})`);
-        }
-    );
-}
+        } // Closing brace for onCancel callback
+    ); // Closing parenthesis for showConfirmationDialog
+} // Closing brace for handleDeleteSource function
 
-/**
- * Callback function passed to source-edit-Model.
- * Updates the temporary list when a source is added or edited.
- * @param {object} savedSourceData - The source data returned from the edit Model.
- */
-function handleSourceSaved(savedSourceData) {
-    const existingIndex = tempModelSources.findIndex(s => s.id === savedSourceData.id);
-    if (existingIndex !== -1) {
-        // Editing existing: Replace in temp list
-        logMessage('info', `[SettingsModel] 更新临时列表中的数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
-        tempModelSources[existingIndex] = savedSourceData;
-    } else {
-        // Adding new: Push to temp list
-         logMessage('info', `[SettingsModel] 向临时列表添加新数据源: ${savedSourceData.name} (ID: ${savedSourceData.id})`);
-        tempModelSources.push(savedSourceData);
-    }
-    renderSourceListForSettings(); // Re-render the list in the settings Model
-}
+// --- Add Data Source Form Functions ---
 
-
-/** Handles saving the entire settings configuration. */
-async function handleSaveSettings() {
-    // Logging for click is handled by the event listener setup in init
-    if (!settingsForm) {
-         logMessage('error', "[SettingsModel] handleSaveSettings 失败：表单元素未初始化");
+/** Shows the form to add a new data source below the list. */
+function showAddDataSourceForm() {
+    if (!addDataSourceFormContainer) {
+        logMessage('error', "[SettingsModel] 无法显示添加表单：容器元素未找到");
         return;
     }
-    logMessage('info', "[SettingsModel] 开始保存设置");
-    const startTime = Date.now();
+    logMessage('debug', "[SettingsModel] 显示添加数据源表单");
 
-    clearFeedback(settingsFeedbackEl);
-    settingsSaveBtn.disabled = true;
-    settingsSaveBtn.textContent = t('settings.saving'); // Indicate progress
+    // Clear previous content and create the form
+    clearChildren(addDataSourceFormContainer);
+    addDataSourceFormContainer.style.display = 'block';
 
-    try {
-        // 1. Construct the new config object using tempModelSources
-        logMessage('debug', "[SettingsModel] 开始构建新的配置对象");
-        const newConfig = {
-            modelSources: tempModelSources, // Use the edited list
-            supportedExtensions: [],
-            imageCache: {}
-        };
+    const form = document.createElement('form');
+    form.id = 'addSourceForm'; // Give it an ID for potential styling/selection
+    form.innerHTML = `
+        <h4 data-i18n-key="settings.modelSources.addTitle"></h4>
+        <div class="form-group">
+            <label for="addSourceName" data-i18n-key="settings.modelSources.nameLabel"></label>
+            <input type="text" id="addSourceName" required>
+        </div>
+        <div class="form-group">
+            <label for="addSourceType" data-i18n-key="settings.modelSources.typeLabel"></label>
+            <select id="addSourceType" required>
+                <option value="local" data-i18n-key="settings.modelSources.typeLocal"></option>
+                <option value="webdav" data-i18n-key="settings.modelSources.typeWebdav"></option>
+            </select>
+        </div>
 
-        // 2. Collect data from other form elements using FormData
-        const formData = new FormData(settingsForm);
+        <!-- Fields for Local Type -->
+        <div id="addSourceLocalFields" class="form-group source-type-fields">
+            <label for="addSourcePath" data-i18n-key="settings.modelSources.pathLabel"></label>
+            <div class="input-group">
+                <input type="text" id="addSourcePath" required>
+                <button type="button" id="addSourceBrowseBtn" class="btn btn-secondary" data-i18n-key="settings.modelSources.browse"></button>
+            </div>
+        </div>
 
-        // Supported Extensions
-        const extensionsText = formData.get('supportedExtensions') || '';
-        newConfig.supportedExtensions = extensionsText.split(',')
-            .map(ext => ext.trim()) // Trim only, keep leading dots
-            .filter(ext => ext.length > 0);
+        <!-- Fields for WebDAV Type -->
+        <div id="addSourceWebdavFields" class="form-group source-type-fields" style="display: none;">
+            <div class="form-group">
+                <label for="addSourceUrl" data-i18n-key="settings.modelSources.urlLabel"></label>
+                <input type="url" id="addSourceUrl" required data-i18n-key="[placeholder]settings.modelSources.urlPlaceholder" placeholder="https://example.com/webdav/">
+            </div>
+            <div class="form-group">
+                <label for="addSourceUsername" data-i18n-key="settings.modelSources.usernameLabel"></label>
+                <input type="text" id="addSourceUsername">
+            </div>
+            <div class="form-group">
+                <label for="addSourcePassword" data-i18n-key="settings.modelSources.passwordLabel"></label>
+                <input type="password" id="addSourcePassword">
+            </div>
+        </div>
 
-        // Image Cache
-        newConfig.imageCache.debug = formData.has('imageCacheDebug'); // Checkbox value
-        const quality = parseInt(formData.get('imageCacheQuality') || '80', 10);
-        const size = parseInt(formData.get('imageCacheSize') || '500', 10);
-        newConfig.imageCache.compressFormat = formData.get('imageCacheFormat') || 'jpeg';
+        <div class="form-actions">
+             <div id="addSourceFeedback" class="feedback" style="margin-bottom: 10px;"></div> <!-- Feedback Area -->
+            <button type="submit" class="btn btn-primary" data-i18n-key="settings.modelSources.addSource"></button>
+            <button type="button" id="addSourceCancelBtn" class="btn btn-secondary" data-i18n-key="settings.cancel"></button>
+        </div>
+    `;
 
-        // 3. Basic validation for numbers
-        logMessage('debug', "[SettingsModel] 验证表单数据");
-        if (isNaN(quality) || quality < 0 || quality > 100) {
-            // Task 1: Error Logging (Validation Failure)
-            const errorMsg = t('settings.validation.qualityError');
-            logMessage('error', `[SettingsModel] 保存失败：验证错误 - ${errorMsg}`);
-            showFeedback(settingsFeedbackEl, errorMsg, 'error');
-            settingsForm.querySelector('#imageCacheQuality')?.focus();
-            throw new Error(t('settings.validation.failed')); // Throw to prevent saving
+    addDataSourceFormContainer.appendChild(form);
+    updateUIWithTranslations(form); // Apply translations to the new form
+
+    // --- Add Event Listeners for the new form ---
+
+    // Type selector change
+    const typeSelect = form.querySelector('#addSourceType');
+    const localFields = form.querySelector('#addSourceLocalFields');
+    const webdavFields = form.querySelector('#addSourceWebdavFields');
+    const pathInput = form.querySelector('#addSourcePath');
+    const urlInput = form.querySelector('#addSourceUrl');
+
+    typeSelect.addEventListener('change', (event) => {
+        const isLocal = event.target.value === 'local';
+        localFields.style.display = isLocal ? '' : 'none';
+        webdavFields.style.display = isLocal ? 'none' : '';
+        // Toggle required attribute based on visibility
+        pathInput.required = isLocal;
+        urlInput.required = !isLocal;
+         logMessage('debug', `[SettingsModel] 添加表单类型切换为: ${event.target.value}`);
+    });
+    // Initial setup based on default selection
+    pathInput.required = typeSelect.value === 'local';
+    urlInput.required = typeSelect.value !== 'local';
+
+
+    // Browse button click
+    const browseBtn = form.querySelector('#addSourceBrowseBtn');
+    browseBtn.addEventListener('click', handleAddBrowse);
+
+    // Form submission
+    form.addEventListener('submit', handleAddDataSourceSubmit);
+
+    // Cancel button click
+    const cancelBtn = form.querySelector('#addSourceCancelBtn');
+    cancelBtn.addEventListener('click', handleAddDataSourceCancel);
+
+    // Hide the main "Add Data Source" button while the form is shown
+    if (addDataSourceBtn) addDataSourceBtn.style.display = 'none';
+}
+
+/** Hides the add data source form and shows the main add button again. */
+function hideAddDataSourceForm() {
+    if (addDataSourceFormContainer) {
+        clearChildren(addDataSourceFormContainer);
+        addDataSourceFormContainer.style.display = 'none';
+    }
+     if (addDataSourceBtn) addDataSourceBtn.style.display = ''; // Show the main button again
+     logMessage('debug', "[SettingsModel] 隐藏添加数据源表单");
+}
+
+/** Handles the submission of the add data source form. */
+function handleAddDataSourceSubmit(event) {
+    event.preventDefault(); // Prevent default form submission
+    logMessage('info', "[SettingsModel] 尝试提交添加数据源表单");
+    const form = event.target;
+    const feedbackArea = form.querySelector('#addSourceFeedback');
+    clearFeedback(feedbackArea);
+
+    const name = form.querySelector('#addSourceName').value.trim();
+    const type = form.querySelector('#addSourceType').value;
+
+    if (!name) {
+        showFeedback(feedbackArea, t('settings.validation.nameRequired'), 'error');
+        form.querySelector('#addSourceName').focus();
+        return;
+    }
+
+    const newSource = {
+        id: crypto.randomUUID(), // Generate a unique ID
+        name: name,
+        type: type,
+    };
+
+    if (type === 'local') {
+        const path = form.querySelector('#addSourcePath').value.trim();
+        if (!path) {
+            showFeedback(feedbackArea, t('settings.validation.pathRequired'), 'error');
+            form.querySelector('#addSourcePath').focus();
+            return;
         }
-        newConfig.imageCache.compressQuality = quality;
+        newSource.path = path;
+    } else if (type === 'webdav') {
+        const url = form.querySelector('#addSourceUrl').value.trim();
+        const username = form.querySelector('#addSourceUsername').value.trim();
+        const password = form.querySelector('#addSourcePassword').value; // Don't trim password
 
-        if (isNaN(size) || size < 0) {
-             // Task 1: Error Logging (Validation Failure)
-            const errorMsg = t('settings.validation.sizeError');
-            logMessage('error', `[SettingsModel] 保存失败：验证错误 - ${errorMsg}`);
-            showFeedback(settingsFeedbackEl, errorMsg, 'error');
-            settingsForm.querySelector('#imageCacheSize')?.focus();
-            throw new Error(t('settings.validation.failed')); // Throw to prevent saving
+        if (!url) {
+             showFeedback(feedbackArea, t('settings.validation.urlRequired'), 'error');
+             form.querySelector('#addSourceUrl').focus();
+             return;
         }
-        newConfig.imageCache.maxCacheSizeMB = size;
-
-        logMessage('info', "[SettingsModel] 构造的新配置对象:", newConfig);
-
-        // 4. Send to main process
-        logMessage('info', "[SettingsModel] 调用 API 保存配置");
-        const apiStartTime = Date.now();
-        await saveConfig(newConfig); // 使用导入的函数
-        const apiDuration = Date.now() - apiStartTime;
-        logMessage('info', `[SettingsModel] API 保存配置成功, 耗时: ${apiDuration}ms`);
-
-        // 5. Handle success
-        const duration = Date.now() - startTime;
-        logMessage('info', `[SettingsModel] 设置保存成功, 总耗时: ${duration}ms`);
-        showFeedback(settingsFeedbackEl, t('settings.saveSuccess'), 'success', 2000);
-        setTimeout(closeSettingsModel, 2100); // Close after feedback
-        // Main process should notify renderer via 'config-updated' to reload state
-
-    } catch (error) {
-         const duration = Date.now() - startTime;
-         // Task 1: Error Logging
-        logMessage('error', `[SettingsModel] 保存设置失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
-        // Don't show feedback if validation already did
-        if (!settingsFeedbackEl.textContent || settingsFeedbackEl.textContent === t('settings.saving')) {
-             showFeedback(settingsFeedbackEl, t('settings.saveError', { message: error.message }), 'error');
+         // Basic URL validation (can be improved)
+        try {
+            new URL(url); // Check if it's a valid URL structure
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                 throw new Error(t('settings.validation.urlSchemeInvalid')); // Use translation key
+            }
+        } catch (e) {
+            logMessage('warn', `[SettingsModel] WebDAV URL 验证失败: ${url}`, e.message);
+            showFeedback(feedbackArea, t('settings.validation.urlInvalid', { message: e.message }), 'error');
+            form.querySelector('#addSourceUrl').focus();
+            return;
         }
-    } finally {
-        // Re-enable button and restore text only if Model didn't close
-         if (settingsModel && settingsModel.classList.contains('active')) {
-            settingsSaveBtn.disabled = false;
-            settingsSaveBtn.textContent = t('settings.save');
-         }
+
+        newSource.url = url;
+        if (username) newSource.username = username;
+        if (password) newSource.password = password; // Only add password if provided
+    }
+
+    logMessage('info', "[SettingsModel] 创建新的数据源对象:", newSource);
+
+    // Add to temporary list and re-render
+    tempModelSources.push(newSource);
+    renderSourceListForSettings();
+
+    // Hide the form and show success feedback (maybe on the main pane?)
+    hideAddDataSourceForm();
+    // Show feedback in the dedicated area within the data sources pane
+    const paneFeedbackArea = settingsContent.querySelector('#settingsDataSources #dataSourceFeedbackArea');
+    if (paneFeedbackArea) {
+        showFeedback(paneFeedbackArea, t('settings.modelSources.addSuccess', { name: newSource.name }), 'success', 2000);
+    } else {
+        logMessage('warn', '[SettingsModel] 未找到数据源面板的反馈区域 (#dataSourceFeedbackArea)，无法显示添加成功消息。');
+        // Fallback: maybe use alert or log? For now, just log.
     }
 }
+
+/** Handles the cancellation of the add data source form. */
+function handleAddDataSourceCancel() {
+    logMessage('info', "[SettingsModel] 取消添加数据源表单");
+    hideAddDataSourceForm();
+}
+
+/** Handles the 'Browse...' button click for the add form. */
+async function handleAddBrowse() {
+    logMessage('debug', "[SettingsModel] 点击添加表单的浏览按钮");
+    const pathInput = addDataSourceFormContainer.querySelector('#addSourcePath');
+    if (!pathInput) return;
+
+    try {
+        const selectedPath = await openFolderDialog({ // Correct API function call
+            properties: ['openDirectory']
+        });
+        // Check if a non-empty string path was returned
+        if (typeof selectedPath === 'string' && selectedPath.trim() !== '') {
+            logMessage('info', `[SettingsModel] 用户选择的目录 (添加表单): ${selectedPath}`);
+            pathInput.value = selectedPath;
+        } else {
+             logMessage('debug', "[SettingsModel] 用户取消了目录选择或未返回有效路径 (添加表单)");
+        }
+    } catch (error) {
+        logMessage('error', "[SettingsModel] 浏览目录时出错 (添加表单):", error);
+        // Show error feedback in the add form's feedback area
+        const feedbackArea = addDataSourceFormContainer.querySelector('#addSourceFeedback');
+        if(feedbackArea) {
+            showFeedback(feedbackArea, t('settings.browseError', { message: error.message }), 'error');
+        }
+    }
+}
+
+// --- Inline Edit Browse Function ---
+/** Handles the 'Browse...' button click for the inline edit form. */
+async function handleBrowseInline(listItem) {
+     if (!listItem) return;
+     const sourceId = listItem.dataset.id;
+     logMessage('debug', `[SettingsModel] 点击行内编辑的浏览按钮: ${sourceId}`);
+     const pathInput = listItem.querySelector('.edit-form .edit-path');
+     if (!pathInput) {
+         logMessage('warn', `[SettingsModel] 未找到 ID ${sourceId} 的行内编辑路径输入框`);
+         return;
+     }
+ 
+     try {
+         const selectedPath = await openFolderDialog({ // Correct API function call
+             properties: ['openDirectory'],
+             defaultPath: pathInput.value || undefined // Start browsing from current path if set
+         });
+         // Check if a non-empty string path was returned
+         if (typeof selectedPath === 'string' && selectedPath.trim() !== '') {
+            logMessage('info', `[SettingsModel] 用户选择的目录 (行内编辑 ${sourceId}): ${selectedPath}`);
+            pathInput.value = selectedPath;
+        } else {
+             logMessage('debug', `[SettingsModel] 用户取消了目录选择或未返回有效路径 (行内编辑 ${sourceId})`);
+        }
+    } catch (error) {
+        logMessage('error', `[SettingsModel] 浏览目录时出错 (行内编辑 ${sourceId}):`, error);
+        // Show error feedback within the inline form? Needs a dedicated area or use alert.
+        // For now, log it. Consider adding a small feedback span in the inline form later.
+        alert(t('settings.browseError', { message: error.message })); // Simple alert for now
+    }
+}
+
+// 移除 handleSourceSaved 函数
+
+
+/** Handles saving the settings for a specific section/pane. */
+async function handleSaveSection(category, paneElement) {
+    if (!paneElement || !currentConfigData) {
+        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：面板元素或当前配置不可用`);
+        return;
+    }
+    logMessage('info', `[SettingsModel] 开始保存分区: ${category}`);
+    const saveButton = paneElement.querySelector('.settings-save-section');
+    // Find the dedicated feedback area within the pane
+    const feedbackArea = paneElement.querySelector('.feedback-area');
+    const startTime = Date.now();
+
+    // Check if feedback area exists
+    if (!feedbackArea) {
+        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：未找到 .feedback-area 元素。`);
+        // Optionally show an alert or log, but don't proceed with saving if feedback area is crucial
+        // For now, just log and return to prevent further errors using a null feedbackArea
+        return;
+    }
+
+    if (saveButton) {
+        saveButton.disabled = true;
+        saveButton.textContent = t('settings.saving');
+    }
+    clearFeedback(feedbackArea); // Clear previous feedback in this pane
+
+    try {
+        // Create a partial config object to send
+        const configUpdate = {};
+        let validationFailed = false;
+
+        switch (category) {
+            case 'data-sources':
+                // Use the temporary list directly
+                configUpdate.modelSources = tempModelSources;
+                logMessage('debug', `[SettingsModel] 保存数据源:`, configUpdate.modelSources);
+                break;
+            case 'general':
+                // General settings like language are saved on change,
+                // Theme might be saved here if added.
+                // Example:
+                // const themeSelect = paneElement.querySelector('#themeSelect');
+                // Language is saved on change via handleLanguageChange, no need to save here.
+                // If other general settings like theme were added, save them here.
+                // Example:
+                // const themeSelect = paneElement.querySelector('#themeSelector');
+                // if (themeSelect) {
+                //     configUpdate.theme = themeSelect.value;
+                //     logMessage('debug', `[SettingsModel] 保存主题设置: ${configUpdate.theme}`);
+                // } else {
+                //     logMessage('debug', `[SettingsModel] 常规设置中无其他可保存项`);
+                // }
+                logMessage('debug', `[SettingsModel] 保存常规设置 (目前仅语言，已自动保存)`);
+                // Return early if nothing else to save in this section? Or let saveConfig handle empty update.
+                break;
+            case 'file-recognition':
+                const extensionsText = paneElement.querySelector('#supportedFileExtensions')?.value || ''; // Corrected ID
+                const extensionsArray = extensionsText.split(',')
+                    .map(ext => ext.trim().toLowerCase()) // Normalize to lowercase
+                    .filter(ext => ext.length > 0 && ext.startsWith('.')); // Basic validation: non-empty and starts with '.'
+                // Further validation could be added here (e.g., regex for valid chars)
+                configUpdate.supportedExtensions = extensionsArray;
+                logMessage('debug', `[SettingsModel] 保存文件识别扩展名:`, configUpdate.supportedExtensions);
+                break;
+            case 'image-cache':
+                configUpdate.imageCache = { ...(currentConfigData.imageCache || {}) }; // Start with existing cache settings
+                const sizeInput = paneElement.querySelector('#imageCacheSizeLimit'); // Corrected ID
+                const size = parseInt(sizeInput?.value || '500', 10); // Default 500
+
+                if (isNaN(size) || size < 0) {
+                    const errorMsg = t('settings.validation.sizeError'); // Assuming this key exists in locales
+                    logMessage('error', `[SettingsModel] 保存图片缓存失败：验证错误 - ${errorMsg}`);
+                    showFeedback(feedbackArea, errorMsg, 'error'); // Use the found feedbackArea
+                    sizeInput?.focus();
+                    validationFailed = true;
+                } else {
+                    configUpdate.imageCache.maxCacheSizeMB = size;
+                }
+                logMessage('debug', `[SettingsModel] 保存图片缓存设置:`, configUpdate.imageCache);
+                break;
+            // Updates and About typically don't have save buttons
+            default:
+                logMessage('warn', `[SettingsModel] 未知的保存分区: ${category}`);
+                return; // Don't proceed if category is unknown
+        } // End of switch(category)
+
+        // --- Perform validation check AFTER collecting data from the switch ---
+        if (validationFailed) {
+             logMessage('error', `[SettingsModel] 保存分区 ${category} 因验证失败而中止`);
+             throw new Error(t('settings.validation.failed')); // Throw error to be caught by outer catch block
+        }
+
+        // --- If validation passed, proceed to merge and save ---
+
+        // Merge partial update with existing config before saving
+        // Note: saveConfig expects the *full* config object.
+        // We need to merge our changes into the last known full config.
+        const fullConfigToSend = { ...currentConfigData, ...configUpdate };
+
+        // Special case for modelSources: ensure it uses the temp list
+        if (category === 'data-sources') {
+            fullConfigToSend.modelSources = tempModelSources;
+        }
+         // Special case for imageCache: ensure it merges correctly
+         if (category === 'image-cache' && configUpdate.imageCache) {
+             fullConfigToSend.imageCache = { ...(currentConfigData.imageCache || {}), ...configUpdate.imageCache };
+         }
+
+
+        logMessage('info', `[SettingsModel] 调用 API 保存配置 (分区: ${category})`, fullConfigToSend);
+        const apiStartTime = Date.now();
+        await saveConfig(fullConfigToSend); // Send the merged full config
+        const apiDuration = Date.now() - apiStartTime;
+        logMessage('info', `[SettingsModel] API 保存配置成功 (分区: ${category}), 耗时: ${apiDuration}ms`);
+
+        // Update our local copy of the config
+        currentConfigData = fullConfigToSend;
+
+        const duration = Date.now() - startTime;
+        logMessage('info', `[SettingsModel] 分区 ${category} 保存成功, 总耗时: ${duration}ms`);
+        showFeedback(feedbackArea, t('settings.saveSectionSuccess'), 'success', 2000); // Use the found feedbackArea
+        // Optionally close Model after saving a section? Or just show feedback.
+
+    } catch (error) {
+        const duration = Date.now() - startTime;
+        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
+        // Show feedback only if validation didn't already (check the specific feedbackArea)
+        if (!feedbackArea.classList.contains('feedback-error')) { // Check class on the feedbackArea itself
+             showFeedback(feedbackArea, t('settings.saveError', { message: error.message }), 'error'); // Use the found feedbackArea
+        }
+    } finally {
+        if (saveButton) {
+            saveButton.disabled = false;
+            saveButton.textContent = t('settings.save'); // Or specific text like "Save Data Sources"
+        }
+    }
+}
+
 
 /** Handles the change event for the language select dropdown. */
 async function handleLanguageChange(event) {
@@ -503,111 +1008,223 @@ async function handleLanguageChange(event) {
 
     if (newLocale !== currentLocale) {
         setLoading(true); // Show loading indicator
+        const generalPaneBefore = settingsContent?.querySelector('#settingsGeneral');
+        logMessage('debug', `[SettingsModel] Before loadLocale/updateUI, #settingsGeneral innerHTML: ${generalPaneBefore?.innerHTML?.substring(0, 100)}...`);
         try {
             logMessage('info', `[SettingsModel] 调用 loadLocale 加载新语言: ${newLocale}`);
-            await loadLocale(newLocale); // This now handles saving the preference
+            await loadLocale(newLocale); // Re-enable save on language change (default is true)
             logMessage('info', `[SettingsModel] loadLocale 完成，调用 updateUIWithTranslations 更新 UI`);
             updateUIWithTranslations(); // Update the entire UI
             logMessage('info', `[SettingsModel] 语言切换和 UI 更新成功: ${newLocale}`);
-            // Optionally show brief success feedback, though UI update is the main feedback
-            // showFeedback(settingsFeedbackEl, t('settings.language.changeSuccess', { lang: newLocale }), 'info', 1500);
+            const generalPaneAfter = settingsContent?.querySelector('#settingsGeneral');
+            logMessage('debug', `[SettingsModel] After loadLocale/updateUI, #settingsGeneral innerHTML: ${generalPaneAfter?.innerHTML?.substring(0, 100)}...`);
+            // Update the dropdown in settings if it's open
+            const langSelect = settingsContent?.querySelector('#settingsLanguageSelect'); // Corrected ID based on HTML
+            if (langSelect) {
+                 langSelect.value = newLocale;
+            }
+            // Show feedback in the General pane
+            const generalPane = settingsContent?.querySelector('#settingsGeneral');
+            const feedbackArea = generalPane?.querySelector('#generalFeedbackArea'); // Find the specific feedback area
+            if (feedbackArea) { // Check if feedbackArea exists
+                showFeedback(feedbackArea, t('settings.general.changeSuccess', { lang: newLocale }), 'info', 1500); // Pass feedbackArea instead of generalPane
+            } else if (generalPane) {
+                // Fallback or log error if feedback area is missing
+                 logMessage('warn', '[SettingsModel] #generalFeedbackArea not found in #settingsGeneral. Cannot display language change feedback.');
+            }
         } catch (error) {
-            // Task 1: Error Logging
             logMessage('error', `[SettingsModel] 切换语言失败: ${newLocale}`, error.message, error.stack);
-            showFeedback(settingsFeedbackEl, t('settings.language.changeError', { message: error.message }), 'error');
+             const generalPane = settingsContent?.querySelector('#settingsGeneral');
+             if (generalPane) {
+                 showFeedback(generalPane, t('settings.general.changeError', { message: error.message }), 'error');
+             }
             // Revert dropdown selection if loading failed?
             event.target.value = currentLocale;
         } finally {
             setLoading(false); // Hide loading indicator
+            const generalPaneFinal = settingsContent?.querySelector('#settingsGeneral');
+            logMessage('debug', `[SettingsModel] handleLanguageChange finally #settingsGeneral display: ${generalPaneFinal?.style.display}, innerHTML: ${generalPaneFinal?.innerHTML?.substring(0,100)}...`);
         }
+        logMessage('debug', `[SettingsModel] handleLanguageChange 结束时 #settingsGeneral display: ${settingsContent?.querySelector('#settingsGeneral')?.style.display}, innerHTML: ${settingsContent?.querySelector('#settingsGeneral')?.innerHTML?.substring(0,100)}...`);
     } else {
         logMessage('debug', '[SettingsModel] 选择的语言与当前语言相同，无需操作');
     }
 }
 
+// ===== Image Cache Handling Functions =====
+
+/** Handles the click event for the "Clear Image Cache" button. */
+async function handleClearImageCache() {
+    if (!clearImageCacheBtn || !clearCacheStatusEl) {
+        logMessage('error', "[SettingsModel] 清除缓存失败：按钮或状态元素未找到");
+        return;
+    }
+    logMessage('info', "[UI] 点击了清除图片缓存按钮");
+
+    clearImageCacheBtn.disabled = true;
+    clearCacheStatusEl.textContent = t('settings.imageCache.clearing');
+    clearCacheStatusEl.className = 'status-message info'; // Use info class
+
+    try {
+        logMessage('info', "[SettingsModel] 调用 clearImageCache API...");
+        const result = await clearImageCache(); // Call the imported async function
+        logMessage('info', "[SettingsModel] clearImageCache API 返回结果:", result);
+
+        if (result.success) {
+            clearCacheStatusEl.textContent = t('settings.imageCache.clearSuccess');
+            clearCacheStatusEl.className = 'status-message success';
+            logMessage('info', '[SettingsModel] 图片缓存已成功清除。');
+            // Optionally update cache size display if available
+        } else {
+            const errorMessage = result.error || t('settings.imageCache.unknownError'); // Use unknown error key as fallback
+            clearCacheStatusEl.textContent = t('settings.imageCache.clearError', { message: errorMessage });
+            clearCacheStatusEl.className = 'status-message error';
+            logMessage('error', `[SettingsModel] 清除图片缓存失败: ${errorMessage}`);
+        }
+    } catch (error) {
+        logMessage('error', "[SettingsModel] 调用 clearImageCache 时发生意外错误:", error.message, error.stack);
+        clearCacheStatusEl.textContent = t('settings.imageCache.clearError', { message: error.message });
+        clearCacheStatusEl.className = 'status-message error';
+    } finally {
+        clearImageCacheBtn.disabled = false;
+        // Optionally clear the success/info message after a delay, keep errors visible longer?
+        setTimeout(() => {
+            // Only clear non-error messages automatically
+            if (clearCacheStatusEl && !clearCacheStatusEl.classList.contains('error')) {
+                 clearCacheStatusEl.textContent = '';
+                 clearCacheStatusEl.className = 'status-message';
+            }
+        }, 3000); // Keep error messages until user interacts again or pane is hidden
+    }
+}
+
+
 // ===== Update Handling Functions =====
+
+/** Sets up event listeners and subscribes to updates for the Update pane. */
+function setupUpdateSection() {
+    const pane = settingsContent.querySelector('#settingsUpdates');
+    if (!pane) {
+        logMessage('warn', "[SettingsModel] 无法设置更新部分：面板未找到");
+        return;
+    }
+
+    updateStatusInfoEl = pane.querySelector('#updateStatusInfo'); // Corrected ID
+    checkUpdatesBtn = pane.querySelector('#checkUpdatesBtn'); // Corrected ID
+
+    if (!updateStatusInfoEl || !checkUpdatesBtn) {
+        logMessage('error', "[SettingsModel] 初始化更新 UI 失败：状态 (#updateStatusInfo) 或按钮 (#checkUpdatesBtn) 元素在更新面板中未找到");
+        return;
+    }
+
+    // Remove previous listener before adding a new one
+    checkUpdatesBtn.removeEventListener('click', handleUpdateButtonClick);
+    checkUpdatesBtn.addEventListener('click', handleUpdateButtonClick);
+
+    // Register listener for update status changes from main process
+    // Ensure previous listener is removed if Model is reopened/pane reshown
+    if (unsubscribeUpdateStatus) {
+        unsubscribeUpdateStatus();
+        unsubscribeUpdateStatus = null; // Reset before re-subscribing
+    }
+    unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus);
+    logMessage('info', "[SettingsModel] 已订阅更新状态事件 (更新面板激活)");
+
+    // Optionally, trigger a status check or display current known status here?
+    // For now, it relies on the main process sending status updates.
+     updateStatusInfoEl.textContent = t('settings.updates.statusIdle'); // Reset text on show (use correct key)
+     checkUpdatesBtn.textContent = t('settings.updates.checkButton'); // Use correct key
+     checkUpdatesBtn.disabled = false;
+}
+
 
 /**
  * Handles clicks on the "Check for Updates" / "Restart & Install" button.
  */
 function handleUpdateButtonClick() {
-    if (!checkUpdateButton || !updateStatusEl) {
-        logMessage('error', "[SettingsModel] handleUpdateButtonClick 失败：更新按钮或状态元素未初始化");
+    // References (updateStatusInfoEl, checkUpdatesBtn) are now set by setupUpdateSection
+    if (!checkUpdatesBtn || !updateStatusInfoEl) {
+        logMessage('error', "[SettingsModel] handleUpdateButtonClick 失败：更新按钮 (#checkUpdatesBtn) 或状态元素 (#updateStatusInfo) 未初始化 (可能面板未正确设置)");
         return;
     }
 
-    // Read the current button text to determine the action
-    const currentActionText = checkUpdateButton.textContent;
+    const currentActionText = checkUpdatesBtn.textContent;
 
-    // Compare with translated strings to decide action
-    if (currentActionText === t('settings.update.install')) {
-        // Task 4: Click Event Logging
+    // Compare against the specific text for install action
+    if (currentActionText === t('settings.updates.installButton')) { // Use correct key
         logMessage('info', "[UI] 点击了更新按钮：执行退出并安装");
-        quitAndInstall(); // 使用导入的函数
+        quitAndInstall().catch(err => { // Add error handling for quitAndInstall
+             logMessage('error', "[SettingsModel] 调用 quitAndInstall 失败:", err);
+             updateStatusInfoEl.textContent = t('settings.updates.installError', { message: err.message }); // Show error
+        });
     } else {
-         // Task 4: Click Event Logging
         logMessage('info', "[UI] 点击了更新按钮：执行检查更新");
-        checkForUpdate(); // 使用导入的函数
+        checkForUpdate().catch(err => { // Add error handling for checkForUpdate
+             logMessage('error', "[SettingsModel] 调用 checkForUpdate 失败:", err);
+             updateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message }); // Show error
+        });
     }
 }
 
 /**
  * Callback function to handle update status updates from the main process.
- * Updates the UI elements (status text and button) accordingly.
- * @param {string} status - The update status code (e.g., 'checking', 'downloaded').
- * @param {...any} args - Additional arguments depending on the status (e.g., error message, progress info).
+ * Updates the UI elements (status text and button) in the Update pane.
+ * @param {string} status - The update status code.
+ * @param {...any} args - Additional arguments.
  */
 function handleUpdateStatus(status, ...args) {
-    if (!updateStatusEl || !checkUpdateButton) {
-        logMessage('warn', `[SettingsModel] 无法处理更新状态 '${status}'：UI 元素不可用`);
+     // Ensure elements are available using the correct IDs
+    const currentUpdateStatusInfoEl = settingsContent?.querySelector('#settingsUpdates #updateStatusInfo');
+    const currentCheckUpdatesBtn = settingsContent?.querySelector('#settingsUpdates #checkUpdatesBtn');
+
+    if (!currentUpdateStatusInfoEl || !currentCheckUpdatesBtn) {
+        logMessage('warn', `[SettingsModel] 无法处理更新状态 '${status}'：更新面板的 UI 元素 (#updateStatusInfo 或 #checkUpdatesBtn) 不可用`);
+        // If the pane isn't visible, we might not want to log an error, just ignore.
         return;
     }
     logMessage('info', `[SettingsModel] 收到更新状态: ${status}`, args);
 
-    // Reset button state initially, enable by default unless specified otherwise
-    checkUpdateButton.disabled = false;
-    checkUpdateButton.textContent = t('settings.update.check'); // Default text
+    // Use the current references
+    updateStatusInfoEl = currentUpdateStatusInfoEl; // Update module-level reference
+    checkUpdatesBtn = currentCheckUpdatesBtn; // Update module-level reference
+
+    // Reset button state initially
+    checkUpdatesBtn.disabled = false;
+    checkUpdatesBtn.textContent = t('settings.updates.checkButton'); // Use correct key
 
     switch (status) {
         case 'checking':
-            updateStatusEl.textContent = t('settings.update.statusChecking');
-            checkUpdateButton.disabled = true;
-            checkUpdateButton.textContent = t('settings.update.checking'); // Change button text while checking
+            updateStatusInfoEl.textContent = t('settings.updates.statusChecking'); // Use correct key
+            checkUpdatesBtn.disabled = true;
+            checkUpdatesBtn.textContent = t('settings.updates.checkingButton'); // Use correct key
             break;
         case 'available':
-            // This state might be brief, often followed by 'downloading'.
-            updateStatusEl.textContent = t('settings.update.statusAvailable');
-            // Keep button as "Check for Updates" or let 'downloading' state handle it.
-            // Button remains enabled here, allowing another check if desired, though unlikely needed.
+            updateStatusInfoEl.textContent = t('settings.updates.statusAvailable'); // Use correct key
             break;
         case 'not-available':
-            updateStatusEl.textContent = t('settings.update.statusNotAvailable');
-            // Button remains enabled with "Check for Updates" text.
+            updateStatusInfoEl.textContent = t('settings.updates.statusNotAvailable'); // Use correct key
             break;
         case 'downloading':
-            const progress = args[0]?.percent; // Progress info is usually the first arg
+            const progress = args[0]?.percent;
             const progressText = progress ? `(${progress.toFixed(1)}%)` : '';
-            updateStatusEl.textContent = `${t('settings.update.statusDownloading')} ${progressText}`;
-            checkUpdateButton.disabled = true;
-            checkUpdateButton.textContent = t('settings.update.downloading'); // Change button text while downloading
+            updateStatusInfoEl.textContent = `${t('settings.updates.statusDownloading')} ${progressText}`; // Use correct key
+            checkUpdatesBtn.disabled = true;
+            checkUpdatesBtn.textContent = t('settings.updates.downloadingButton'); // Use correct key
             break;
         case 'downloaded':
-            updateStatusEl.textContent = t('settings.update.statusDownloaded');
-            checkUpdateButton.disabled = false; // Enable button for install action
-            checkUpdateButton.textContent = t('settings.update.install'); // Change button text to prompt install
+            updateStatusInfoEl.textContent = t('settings.updates.statusDownloaded'); // Use correct key
+            checkUpdatesBtn.disabled = false;
+            checkUpdatesBtn.textContent = t('settings.updates.installButton'); // Use correct key
             break;
         case 'error':
-            const error = args[0]; // Error object or message is usually the first arg
+            const error = args[0];
             const errorMessage = error instanceof Error ? error.message : String(error || t('settings.update.unknownError'));
-             // Task 1: Error Logging (Update Error)
             logMessage('error', `[SettingsModel] 更新过程中发生错误: ${errorMessage}`, error);
-            updateStatusEl.textContent = t('settings.update.statusError', { message: errorMessage });
-            // Button remains enabled with "Check for Updates" text.
+            updateStatusInfoEl.textContent = t('settings.updates.statusError', { message: errorMessage }); // Use correct key
             break;
         default:
-            // Optional: Handle any unexpected status or reset to a known idle state
             logMessage('warn', `[SettingsModel] 未处理的更新状态: ${status}`);
-            // updateStatusEl.textContent = t('settings.update.statusIdle'); // Uncomment to reset explicitly
+            // updateStatusInfoEl.textContent = t('settings.updates.statusIdle'); // Optional reset
             break;
     }
 }

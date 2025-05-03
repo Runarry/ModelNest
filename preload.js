@@ -3,6 +3,7 @@ const { contextBridge, ipcRenderer } = require('electron');
 console.log('[Preload] Exposing API via contextBridge...');
 contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('getConfig'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'), // 添加获取应用版本号的 API
   listModels: (sourceId, directory = null) => ipcRenderer.invoke('listModels', { sourceId, directory }), // 添加 directory 参数
   listSubdirectories: (sourceId) => ipcRenderer.invoke('listSubdirectories', { sourceId }), // 添加新 API
   getModelDetail: (sourceId, jsonPath) => ipcRenderer.invoke('getModelDetail', { sourceId, jsonPath }),
@@ -35,7 +36,7 @@ contextBridge.exposeInMainWorld('api', {
     ipcRenderer.send('log-message', level, message, ...args);
   },
 
-  // 渲染进程错误上报 (保留现有，或考虑统一到 logMessage)
+clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片缓存清理接口
   sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo)
 });
 console.log('[Preload] API exposed successfully.');

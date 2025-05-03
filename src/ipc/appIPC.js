@@ -1,5 +1,6 @@
-const { ipcMain, BrowserWindow } = require('electron');
+const { ipcMain, BrowserWindow, app } = require('electron');
 const log = require('electron-log');
+const { clearCache } = require('../common/imageCache');
 /**
  * 初始化应用级别的 IPC Handlers
  * @param {object} services - 包含所有服务的对象
@@ -56,6 +57,33 @@ function initializeAppIPC(services) {
       log.error('[IPC] 调用 configService.saveConfig 或后续处理失败:', error);
       // 将错误传递给渲染进程
       throw error;
+    }
+  });
+
+  // 清理图片缓存
+  ipcMain.handle('clear-image-cache', async () => {
+    log.info('[IPC] clear-image-cache 请求');
+    try {
+      await clearCache();
+      log.info('[IPC] Image cache cleared successfully.');
+      return { success: true };
+    } catch (error) {
+      log.error('[IPC] Failed to clear image cache:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 获取应用版本号
+  ipcMain.handle('get-app-version', () => {
+    log.info('[IPC] get-app-version 请求');
+    try {
+      const version = app.getVersion();
+      log.info(`[IPC] 应用版本号: ${version}`);
+      return version;
+    } catch (error) {
+      log.error('[IPC] 获取应用版本号失败:', error);
+      // 返回 null 或根据需要抛出错误
+      return null;
     }
   });
 

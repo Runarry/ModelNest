@@ -1,5 +1,6 @@
 {
   "appTitle": "ModelNest 模型管理",
+  "appName": "ModelNest",
   "loadingModels": "加载模型数据中...",
   "viewCard": "卡片视图",
   "viewList": "列表视图",
@@ -33,82 +34,133 @@
   },
   "settings": {
     "title": "设置",
-    "loading": "正在加载设置...",
+    "save": "保存",
     "cancel": "取消",
-    "save": "保存设置",
-    "placeholderText": "配置选项将显示在此处。",
+    "saving": "保存中...",
     "loadError": "加载设置失败: {message}",
     "saveSuccess": "设置保存成功！",
+    "saveSectionSuccess": "此部分设置已成功保存！",
     "saveError": "保存设置失败: {message}",
-    "saveErrorUnknown": "保存设置失败，发生未知错误。",
-    "folderDialogError": "打开文件夹选择对话框失败: {message}",
-    "modelSources": {
-      "title": "模型来源",
-      "add": "添加来源",
+    "browseError": "浏览文件夹失败：{message}",
+    "nav": {
+      "dataSources": "数据源",
+      "general": "通用",
+      "fileRecognition": "文件识别",
+      "imageCache": "图片缓存",
+      "updates": "更新",
+      "about": "关于"
+    },
+    "dataSources": {
+      "title": "数据源",
+      "description": "管理您的模型来源。",
+      "add": "添加数据源",
       "edit": "编辑",
       "delete": "删除",
-      "deleteConfirm": "您确定要删除此模型来源吗？",
-      "addTitle": "添加模型来源",
-      "editTitle": "编辑模型来源",
-      "nameLabel": "名称:",
-      "typeLabel": "类型:",
+      "none": "尚未配置数据源。",
+      "deleteConfirm": "您确定要删除数据源 '{name}' 吗？",
+      "addTitle": "添加新数据源",
+      "editTitle": "编辑数据源",
+      "editing": "正在编辑",
+      "nameLabel": "名称",
+      "typeLabel": "类型",
       "typeLocal": "本地文件夹",
       "typeWebdav": "WebDAV",
-      "pathLabel": "文件夹路径:",
+      "pathLabel": "文件夹路径",
       "browse": "浏览...",
-      "urlLabel": "WebDAV URL:",
-      "usernameLabel": "用户名:",
-      "passwordLabel": "密码:",
-      "saveSource": "保存来源"
+      "browseShort": "...",
+      "urlLabel": "WebDAV URL",
+      "urlPlaceholder": "https://example.com/webdav/",
+      "usernameLabel": "用户名",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "输入新密码以更改",
+      "saveSource": "保存数据源",
+      "addSource": "添加数据源",
+      "inlineSaveSuccess": "数据源已更新。",
+      "addSuccess": "数据源 '{name}' 添加成功。"
     },
-    "extensions": {
-      "title": "支持的文件扩展名",
-      "label": "扩展名 (逗号分隔):",
-      "hint": "例如: .ckpt, .safetensors, .pt"
+    "general": {
+      "title": "通用",
+      "languageLabel": "语言",
+      "language": {
+        "enUS": "English",
+        "zhCN": "简体中文",
+        "changeSuccess": "语言已切换至 {lang}。"
+      },
+      "changeError": "切换语言失败: {message}"
+    },
+    "fileRecognition": {
+      "title": "文件识别",
+      "extensionsLabel": "支持的文件扩展名 (逗号分隔)",
+      "extensionsPlaceholder": ".json, .yaml, .txt"
     },
     "imageCache": {
       "title": "图片缓存",
-      "debug": "启用调试日志",
-      "quality": "压缩质量:",
-      "qualityHint": "(0-100)",
-      "format": "压缩格式:",
-      "formatJpeg": "JPEG",
-      "formatWebp": "WebP",
-      "formatPng": "PNG",
-      "maxSize": "最大缓存大小:",
-      "maxSizeHint": "(MB)"
+      "sizeLimitLabel": "缓存大小限制 (MB)",
+      "sizeLimitPlaceholder": "例如：500",
+      "clearCacheLabel": "清除图片缓存",
+      "clearButton": "立即清除缓存",
+      "clearing": "正在清除缓存...",
+      "clearSuccess": "图片缓存已成功清除。",
+      "clearError": "清除图片缓存失败：{message}",
+      "unknownError": "发生未知错误"
     },
-    "validation": {
-      "sourceNameRequired": "来源名称不能为空。",
-      "pathRequired": "本地来源的文件夹路径不能为空。",
-      "urlRequired": "WebDAV URL 不能为空。",
-      "qualityError": "压缩质量必须介于 0 和 100 之间。",
-      "sizeError": "最大缓存大小必须是非负数。",
-      "failed": "验证失败"
-    },
-    "update": {
-      "title": "应用更新",
-      "currentVersion": "当前版本: {version}",
+    "updates": {
+      "title": "更新",
+      "loading": "加载中...",
+      "currentVersion": "当前版本:",
+      "versionUnknown": "未知",
+      "versionError": "加载版本出错",
+      "checkButton": "检查更新",
+      "checkingButton": "检查中...",
+      "downloadingButton": "下载中...",
+      "installButton": "重启并安装",
       "statusIdle": "就绪",
       "statusChecking": "正在检查更新...",
       "statusAvailable": "发现新版本！",
-      "statusNotAvailable": "已是最新版本",
-      "statusError": "检查更新失败: {error}",
-      "check": "检查更新",
-      "checking": "检查中...",
-      "downloading": "下载中... ({progress}%)",
-      "install": "下载完成，点击安装",
-      "hint": "应用将在后台自动检查更新。"
+      "statusNotAvailable": "您使用的已是最新版本。",
+      "statusDownloading": "正在下载更新",
+      "statusDownloaded": "更新下载完成，可以安装。",
+      "statusError": "更新出错：{message}",
+      "checkError": "检查更新失败：{message}",
+      "installError": "启动安装失败：{message}"
     },
-    "language": {
-      "title": "语言设置",
-      "label": "界面语言:",
-      "changeError": "切换语言失败: {message}"
-    }
-  },
-  "sourceEdit": {
-    "error": {
-      "saveCallbackUndefined": "内部错误：保存回调未设置。"
+    "about": {
+      "title": "关于",
+      "version": "版本:",
+      "developer": "开发者:",
+      "linksTitle": "链接:",
+      "githubLink": "GitHub 仓库",
+      "websiteLink": "官方网站"
+    },
+    "validation": {
+      "nameRequired": "数据源名称不能为空。",
+      "pathRequired": "本地数据源的文件夹路径不能为空。",
+      "urlRequired": "WebDAV URL 不能为空。",
+      "urlInvalid": "无效的 WebDAV URL：{message}",
+      "urlSchemeInvalid": "URL 必须以 http:// 或 https:// 开头",
+      "sizeError": "缓存大小限制必须是非负数。",
+      "failed": "验证失败"
+    },
+    "modelSources": {
+      "none": "尚未配置模型源。",
+      "deleteConfirm": "您确定要删除模型源 '{name}' 吗？",
+      "inlineSaveSuccess": "模型源已更新。",
+      "addSuccess": "模型源 '{name}' 添加成功。",
+      "addTitle": "添加新模型源",
+      "editing": "正在编辑",
+      "nameLabel": "名称",
+      "typeLabel": "类型",
+      "typeLocal": "本地文件夹",
+      "typeWebdav": "WebDAV",
+      "pathLabel": "文件夹路径",
+      "browse": "浏览...",
+      "urlLabel": "WebDAV URL",
+      "urlPlaceholder": "https://example.com/webdav/",
+      "usernameLabel": "用户名",
+      "passwordLabel": "密码",
+      "passwordPlaceholder": "输入新密码以更改",
+      "addSource": "添加模型源",
+      "saveSource": "保存模型源"
     }
   }
 }

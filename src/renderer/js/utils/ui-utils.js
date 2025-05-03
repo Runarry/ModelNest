@@ -24,8 +24,11 @@ export function showFeedback(feedbackElement, message, type = 'info', duration =
     // Auto-hide after duration (if duration is positive)
     if (duration > 0) {
         feedbackTimeout = setTimeout(() => {
-            feedbackElement.textContent = '';
-            feedbackElement.className = 'Model-feedback'; // Reset class
+            // Check if the element is still part of the document before modifying it
+            if (feedbackElement && document.body.contains(feedbackElement)) {
+                feedbackElement.textContent = '';
+                feedbackElement.className = 'Model-feedback'; // Reset class
+            }
             feedbackTimeout = null;
         }, duration);
     }

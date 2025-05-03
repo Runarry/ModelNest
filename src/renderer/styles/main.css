@@ -8,6 +8,13 @@
   --success-color: #4bb543;
   --warning-color: #ff9500;
   --danger-color: #ff3b30;
+  /* 按钮相关变量 */
+  --button-text-color: #fff;
+  --button-bg: var(--primary-color);
+  --button-hover-bg: var(--secondary-color);
+  --secondary-button-bg: #f0f0f0;
+  --secondary-button-text-color: #333;
+  --secondary-button-border: #d0d0d0;
 }
 
 [data-theme="dark"] {
@@ -17,6 +24,13 @@
   --bg-color: #212529;
   --card-bg: #343a40;
   --border-color: #495057;
+  /* 按钮相关变量（暗色主题） */
+  --button-text-color: #fff;
+  --button-bg: var(--primary-color);
+  --button-hover-bg: var(--secondary-color);
+  --secondary-button-bg: #444950;
+  --secondary-button-text-color: #f8f9fa;
+  --secondary-button-border: #495057;
 }
 
 * {

@@ -1,5 +1,6 @@
 {
   "appTitle": "ModelNest Model Management",
+  "appName": "ModelNest",
   "loadingModels": "Loading model data...",
   "viewCard": "Card View",
   "viewList": "List View",
@@ -33,82 +34,134 @@
   },
   "settings": {
     "title": "Settings",
-    "loading": "Loading settings...",
+    "save": "Save",
     "cancel": "Cancel",
-    "save": "Save Settings",
-    "placeholderText": "Configuration options will appear here.",
+    "saving": "Saving...",
     "loadError": "Failed to load settings: {message}",
     "saveSuccess": "Settings saved successfully!",
+    "saveSectionSuccess": "Settings for this section saved successfully!",
     "saveError": "Failed to save settings: {message}",
-    "saveErrorUnknown": "Failed to save settings due to an unknown error.",
-    "folderDialogError": "Failed to open folder dialog: {message}",
-    "modelSources": {
-      "title": "Model Sources",
-      "add": "Add Source",
+    "browseError": "Failed to browse for folder: {message}",
+    "nav": {
+      "dataSources": "Data Sources",
+      "general": "General",
+      "fileRecognition": "File Recognition",
+      "imageCache": "Image Cache",
+      "updates": "Updates",
+      "about": "About"
+    },
+    "dataSources": {
+      "title": "Data Sources",
+      "description": "Manage your model sources.",
+      "add": "Add Data Source",
       "edit": "Edit",
       "delete": "Delete",
-      "deleteConfirm": "Are you sure you want to delete this model source?",
-      "addTitle": "Add Model Source",
-      "editTitle": "Edit Model Source",
-      "nameLabel": "Name:",
-      "typeLabel": "Type:",
+      "none": "No data sources configured yet.",
+      "deleteConfirm": "Are you sure you want to delete the data source '{name}'?",
+      "addTitle": "Add New Data Source",
+      "editTitle": "Edit Data Source",
+      "editing": "Editing",
+      "nameLabel": "Name",
+      "typeLabel": "Type",
       "typeLocal": "Local Folder",
       "typeWebdav": "WebDAV",
-      "pathLabel": "Folder Path:",
+      "pathLabel": "Folder Path",
       "browse": "Browse...",
-      "urlLabel": "WebDAV URL:",
-      "usernameLabel": "Username:",
-      "passwordLabel": "Password:",
+      "browseShort": "...",
+      "urlLabel": "WebDAV URL",
+      "urlPlaceholder": "https://example.com/webdav/",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter new password to change",
+      "saveSource": "Save Source",
+      "addSource": "Add Source",
+      "inlineSaveSuccess": "Data source updated.",
+      "addSuccess": "Data source '{name}' added successfully."
+    },
+    "modelSources": {
+      "none": "No model sources configured yet.",
+      "deleteConfirm": "Are you sure you want to delete the model source '{name}'?",
+      "inlineSaveSuccess": "Model source updated.",
+      "addSuccess": "Model source '{name}' added successfully.",
+      "addTitle": "Add Model Source",
+      "editing": "Editing",
+      "nameLabel": "Name",
+      "typeLabel": "Type",
+      "typeLocal": "Local",
+      "typeWebdav": "WebDAV",
+      "pathLabel": "Path",
+      "browse": "Browse",
+      "urlLabel": "URL",
+      "urlPlaceholder": "Please enter the WebDAV URL",
+      "usernameLabel": "Username",
+      "passwordLabel": "Password",
+      "passwordPlaceholder": "Enter new password to change",
+      "addSource": "Add Source",
       "saveSource": "Save Source"
     },
-    "extensions": {
-      "title": "Supported File Extensions",
-      "label": "Extensions (comma-separated):",
-      "hint": "e.g., .ckpt, .safetensors, .pt"
+    "general": {
+      "title": "General",
+      "languageLabel": "Language",
+      "language": {
+        "enUS": "English",
+        "zhCN": "简体中文"
+      },
+      "changeSuccess": "Language changed to {lang}.",
+      "changeError": "Failed to change language: {message}"
+    },
+    "fileRecognition": {
+      "title": "File Recognition",
+      "extensionsLabel": "Supported File Extensions (comma-separated)",
+      "extensionsPlaceholder": ".json, .yaml, .txt"
     },
     "imageCache": {
       "title": "Image Cache",
-      "debug": "Enable Debug Logging",
-      "quality": "Compression Quality:",
-      "qualityHint": "(0-100)",
-      "format": "Compression Format:",
-      "formatJpeg": "JPEG",
-      "formatWebp": "WebP",
-      "formatPng": "PNG",
-      "maxSize": "Max Cache Size:",
-      "maxSizeHint": "(MB)"
+      "sizeLimitLabel": "Cache Size Limit (MB)",
+      "sizeLimitPlaceholder": "e.g., 500",
+      "clearCacheLabel": "Clear Image Cache",
+      "clearButton": "Clear Cache Now",
+      "clearing": "Clearing cache...",
+      "clearSuccess": "Image cache cleared successfully.",
+      "clearError": "Failed to clear image cache: {message}",
+      "unknownError": "Unknown error occurred"
     },
-    "validation": {
-      "sourceNameRequired": "Source name cannot be empty.",
-      "pathRequired": "Folder path cannot be empty for local source.",
-      "urlRequired": "WebDAV URL cannot be empty.",
-      "qualityError": "Compression quality must be between 0 and 100.",
-      "sizeError": "Max cache size must be a non-negative number.",
-      "failed": "Validation failed"
-    },
-    "update": {
-      "title": "Application Update",
-      "currentVersion": "Current Version: {version}",
+    "updates": {
+      "title": "Updates",
+      "loading": "Loading...",
+      "currentVersion": "Current Version:",
+      "versionUnknown": "Unknown",
+      "versionError": "Error loading version",
+      "checkButton": "Check for Updates",
+      "checkingButton": "Checking...",
+      "downloadingButton": "Downloading...",
+      "installButton": "Restart & Install",
       "statusIdle": "Ready",
       "statusChecking": "Checking for updates...",
       "statusAvailable": "New version available!",
-      "statusNotAvailable": "Already up to date",
-      "statusError": "Failed to check for updates: {error}",
-      "check": "Check for Updates",
-      "checking": "Checking...",
-      "downloading": "Downloading... ({progress}%)",
-      "install": "Download complete, click to install",
-      "hint": "The application will automatically check for updates in the background."
+      "statusNotAvailable": "You are using the latest version.",
+      "statusDownloading": "Downloading update",
+      "statusDownloaded": "Update downloaded. Ready to install.",
+      "statusError": "Update error: {message}",
+      "checkError": "Failed to check for updates: {message}",
+      "installError": "Failed to initiate installation: {message}"
     },
-    "language": {
-      "title": "Language Settings",
-      "label": "Interface Language:",
-      "changeError": "Failed to change language: {message}"
-    }
-  },
-  "sourceEdit": {
-    "error": {
-      "saveCallbackUndefined": "Internal error: Save callback is not set."
-    }
+    "about": {
+      "title": "About",
+      "version": "Version:",
+      "developer": "Developer:",
+      "linksTitle": "Links:",
+      "githubLink": "GitHub Repository",
+      "websiteLink": "Official Website"
+    },
+    "validation": {
+      "nameRequired": "Source name cannot be empty.",
+      "pathRequired": "Folder path cannot be empty for local source.",
+      "urlRequired": "WebDAV URL cannot be empty.",
+      "urlInvalid": "Invalid WebDAV URL: {message}",
+      "urlSchemeInvalid": "URL must start with http:// or https://",
+      "sizeError": "Cache size limit must be a non-negative number.",
+      "failed": "Validation failed"
+    },
+    "language.changeSuccess": "Language changed successfully. Restart the application to apply changes."
   }
 }
