@@ -871,9 +871,16 @@ async function handleSaveSection(category, paneElement) {
     const saveButton = paneElement.querySelector('.settings-save-section');
     // Find the dedicated feedback area within the pane
     // Use specific ID for data-sources, class for others
-    const feedbackArea = category === 'data-sources'
-        ? paneElement.querySelector('#dataSourceFeedbackArea')
-        : paneElement.querySelector('.feedback-area');
+    let feedbackArea;
+    if (category === 'data-sources') {
+        feedbackArea = paneElement.querySelector('#dataSourceFeedbackArea');
+    } else if (category === 'general') {
+        // Use the specific ID for the general feedback area
+        feedbackArea = paneElement.querySelector('#generalFeedbackArea');
+    } else {
+        // Fallback for other potential sections, though ideally each should have a specific ID
+        feedbackArea = paneElement.querySelector('.feedback-area');
+    }
     const startTime = Date.now();
 
     // Check if feedback area exists (now more robust for data-sources)
