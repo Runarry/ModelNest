@@ -4,9 +4,9 @@
   "description": "跨平台 AIGC 模型管理与浏览工具，支持本地与 WebDAV 多数据源。",
   "main": "main.js",
   "scripts": {
-    "start": "cross-env IS_DEV_MODE=true electron .",
-    "pack": "cross-env IS_DEV_MODE=false BUILD_DEFAULT_LOG_LEVEL=warn electron-builder --dir -c electron-builder.yml",
-    "dist": "cross-env IS_DEV_MODE=false BUILD_DEFAULT_LOG_LEVEL=warn electron-builder -c electron-builder.yml"
+    "start": "cross-env LOG_LEVEL=warn IS_DEV_MODE=true electron .",
+    "pack": "cross-env IS_DEV_MODE=false LOG_LEVEL=warn electron-builder --dir -c electron-builder.yml",
+    "dist": "cross-env IS_DEV_MODE=false LOG_LEVEL=warn electron-builder -c electron-builder.yml"
   },
   "dependencies": {
     "electron-log": "^5.3.4",

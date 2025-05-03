@@ -71,14 +71,16 @@ app.whenReady().then(async () => { // 改为 async 回调
 
   // 使用 services.configService 获取配置来设置日志级别
   const appConfig = await services.configService.getConfig();
-  let level = 'debug'; // Default level
+  let level = 'warn'; // Default level
+  if (process.env.LOG_LEVEL){
+    level = process.env.LOG_LEVEL;
+     log.warn(`LOG_LEVEL from env: ${process.env.LOG_LEVEL}` )
+  }
   if (appConfig && typeof appConfig.logLevel === 'string') {
     level = appConfig.logLevel;
-  } else if (process.env.LOG_LEVEL) {
-    level = process.env.LOG_LEVEL;
-  } else if (process.env.BUILD_DEFAULT_LOG_LEVEL) {
-    level = process.env.BUILD_DEFAULT_LOG_LEVEL;
-  }
+
+  } 
+
   log.level = level; // 设置主日志级别，影响所有 transports
   log.info(`[Log] 日志级别已根据服务配置设置为: ${level}`);
 
@@ -131,10 +133,8 @@ app.whenReady().then(async () => { // 改为 async 回调
       // Optionally send an error status back if needed
     }
   });
-  // --- End Updater IPC Handlers ---
-  // --- End Electron Updater Logic ---
 
-// 移除旧的占位 initializeIPC 函数
+
 
 app.on('activate', function () {
     log.info('[Lifecycle] 应用激活');
