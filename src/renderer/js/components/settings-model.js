@@ -934,20 +934,6 @@ async function handleSaveSection(category, paneElement) {
                 logMessage('debug', `[SettingsModel] 保存数据源:`, configUpdate.modelSources);
                 break;
             case 'general':
-                // General settings like language are saved on change,
-                // Theme might be saved here if added.
-                // Example:
-                // const themeSelect = paneElement.querySelector('#themeSelect');
-                // Language is saved on change via handleLanguageChange, no need to save here.
-                // If other general settings like theme were added, save them here.
-                // Example:
-                // const themeSelect = paneElement.querySelector('#themeSelector');
-                // if (themeSelect) {
-                //     configUpdate.theme = themeSelect.value;
-                //     logMessage('debug', `[SettingsModel] 保存主题设置: ${configUpdate.theme}`);
-                // } else {
-                //     logMessage('debug', `[SettingsModel] 常规设置中无其他可保存项`);
-                // }
                 logMessage('debug', `[SettingsModel] 保存常规设置 (目前仅语言，已自动保存)`);
                 // Return early if nothing else to save in this section? Or let saveConfig handle empty update.
                 break;
