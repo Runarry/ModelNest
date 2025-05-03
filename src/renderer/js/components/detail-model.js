@@ -184,7 +184,7 @@ function renderModelContent(model) {
 
         <div class="tab-content" id="description-tab">
           <div class="detail-info">
-            <textarea id="model-description" class="description-textarea" rows="8" placeholder="${t('detail.descriptionPlaceholder')}">${model.description || ''}</textarea>
+            <textarea id="model-description" class="description-textarea" rows="8" }">${model.description || ''}</textarea>
           </div>
         </div>
 
