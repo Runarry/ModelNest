@@ -63,22 +63,22 @@ body {
 }
 
 #app {
-  max-width: 1400px;
-  margin: 0 auto;
-  flex-grow: 1; /* Allow #app to grow vertically */
-  display: flex; /* Make #app a flex container */
-  flex-direction: column; /* Arrange children vertically */
-  padding: 0 2rem; /* Add horizontal padding back to #app for overall centering */
+  max-width: 1600px; /* 增加最大宽度，使界面更宽 */
+  margin: 0 auto; /* Center the app content */
+  display: flex;
+  flex-direction: column;
+  height: 100vh; /* Make app take full viewport height */
+  overflow: hidden; /* Prevent body scroll */
 }
 
 /* Top Menu Bar Styles */
 .top-menu-bar {
-  padding: 0.5rem 0; /* 减小垂直内边距 */
+  padding: 0.5rem 1.5rem; /* 减小水平内边距 */
   display: flex;
-  flex-direction: column; /* 垂直排列 */
-  gap: 0.8rem; /* 增加行之间的间距 */
-  margin-bottom: 1rem; /* 下方间距 */
-  border-bottom: 1px solid var(--border-color); /* 底部分隔线 */
+  flex-direction: column;
+  gap: 0.6rem; /* 减小行间距 */
+  border-bottom: 1px solid var(--border-color);
+  flex-shrink: 0; /* Prevent top bar from shrinking */
 }
 
 /* 顶部行样式 */
@@ -145,18 +145,18 @@ body {
 
 /* Main Layout Styles */
 .main-layout {
-  /* display: flex; Removed flex */
-  flex-grow: 1; /* Allow main-layout to grow vertically */
-  display: flex; /* Make it a flex container again for content-layout */
-  /* gap: 1.5rem; Removed gap */
-  padding-bottom: 2rem; /* Add space at the bottom */
+  flex: 1; /* Take remaining vertical space */
+  display: flex; /* Arrange children (directory + content) horizontally */
+  overflow: hidden; /* Prevent this layout from scrolling */
+  padding: 0.8rem 1.5rem 1.5rem 1.5rem; /* 减小内边距，使内容区域更大 */
 }
 
 /* Removed .sidebar and .sidebar-label styles */
 
 .content-area {
-  /* flex-grow: 1; Removed flex-grow */
-  width: 100%; /* Ensure content area takes full width */
+  flex: 1; /* Take remaining space within main-layout */
+  display: flex; /* Use flex for content-layout */
+  overflow: hidden; /* Prevent content-area scroll */
   min-width: 0; /* Prevent content overflow issues */
 }
 
@@ -567,18 +567,21 @@ select:hover {
 /* 目录 Tab 栏样式 */
 .content-layout {
  display: flex;
- flex-grow: 1; /* Allow content-layout to grow vertically */
- align-items: flex-start; /* Align items to the top, prevent stretching */
- gap: 1.5rem;
+ height: 100%; /* Take full height of parent (.content-area) */
+ width: 100%; /* Take full width of parent (.content-area) */
+ /* Removed gap, use margin on directory-tabs instead */
 }
 
 .directory-tabs {
- width: 220px;
+ width: 180px; /* 减小左侧目录宽度 */
  flex-shrink: 0;
  background-color: var(--card-bg);
  border-radius: 8px;
  padding: 0.8rem;
  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+ height: 100%; /* Take full height */
+ overflow-y: hidden; /* Prevent directory tabs from scrolling */
+ margin-right: 1.5rem; /* Space between tabs and content */
 }
 
 .tab-header {
@@ -614,11 +617,12 @@ select:hover {
 }
 
 .content-main {
- flex-grow: 1;
- /* min-width: 0; Replaced by specific min-width below */
- min-width: calc(4 * 220px + 3 * 1rem); /* Enforce min width for 4 cards + 3 gaps */
+ flex: 1; /* Take remaining horizontal space */
+ /* Removed min-width */
  position: relative;
- padding-top: 0; /* 移除顶部内边距 */
+ padding-top: 0;
+ height: 100%; /* Take full height */
+ overflow-y: auto; /* Enable vertical scrolling ONLY for this area */
 }
 
 /* 响应式调整 */
