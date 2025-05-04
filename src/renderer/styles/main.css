@@ -116,11 +116,6 @@ body {
   width: auto;
 }
 
-/* Removed styles for .source-selector and .top-bar-label in top bar */
-
-#sourceSelect {
-  /* General style for the select, width/max-width might be set below */
-}
 
 /* 空白填充元素，使筛选区域靠右对齐 */
 .spacer {

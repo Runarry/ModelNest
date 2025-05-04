@@ -80,6 +80,7 @@
   margin: 0;
   display: -webkit-box;
   -webkit-line-clamp: 2; /* 限制显示2行 */
+  line-clamp: 2; /* 标准属性 */
   -webkit-box-orient: vertical;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -221,6 +222,7 @@
 
   .list-view .model-description {
     -webkit-line-clamp: 1; /* 小屏幕下只显示1行描述 */
+    line-clamp: 1; /* 标准属性 */
   }
 }
 
