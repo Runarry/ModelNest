@@ -8,6 +8,32 @@ const { WebDavDataSource } = require('./webdavDataSource');
 const dataSourceInstances = {};
 
 /**
+ * 比较两个数据源配置对象的关键字段是否相同。
+ * @param {object} config1 第一个配置对象。
+ * @param {object} config2 第二个配置对象。
+ * @returns {boolean} 如果关键字段相同则返回 true，否则返回 false。
+ */
+function compareDataSourceConfigs(config1, config2) {
+    if (!config1 || !config2) return false; // 如果任一配置为空，则认为不同
+    if (config1.type !== config2.type) return false; // 类型必须相同
+
+    if (config1.type === 'local') {
+        // 对于 local 类型，比较 path
+        return config1.path === config2.path;
+    } else if (config1.type === 'webdav') {
+        // 对于 webdav 类型，比较 url, username, password, basePath
+        return config1.url === config2.url &&
+               config1.username === config2.username &&
+               config1.password === config2.password &&
+               (config1.basePath || '/') === (config2.basePath || '/'); // 处理 basePath 可能未定义的情况，默认为 '/'
+    }
+    // 对于未知类型，保守地认为不同
+    log.warn(`[DataSourceInterface] compareDataSourceConfigs encountered unknown type: ${config1.type}`);
+    return false;
+}
+
+
+/**
  * 获取或创建数据源实例。
  * @param {object} sourceConfig - 数据源配置。
  * @returns {import('./baseDataSource').DataSource} 数据源实例。
@@ -25,12 +51,15 @@ function getDataSourceInstance(sourceConfig) {
     if (dataSourceInstances[sourceId]) {
         // 检查配置是否已更改，如果更改则需要创建新实例或更新现有实例
         // 简单起见，如果配置对象不同，则重新创建（这假设配置对象是不可变的）
-        // 注意：这种比较可能不够健壮，取决于 sourceConfig 如何传递和修改
-        if (dataSourceInstances[sourceId].config === sourceConfig) {
-             log.debug(`[DataSourceInterface] Reusing existing DataSource instance for sourceId: ${sourceId}`);
+        // 注意：现在使用关键字段比较来判断配置是否实质性更改
+        if (compareDataSourceConfigs(dataSourceInstances[sourceId].config, sourceConfig)) {
+             log.debug(`[DataSourceInterface] Reusing existing DataSource instance for sourceId: ${sourceId} (key fields match)`);
              return dataSourceInstances[sourceId];
         } else {
-             log.warn(`[DataSourceInterface] Source config changed for sourceId: ${sourceId}. Creating new instance.`);
+             log.warn(`[DataSourceInterface] Source config changed (key fields mismatch) for sourceId: ${sourceId}. Creating new instance.`);
+             // 记录具体的配置差异，帮助调试 (可选，但可能有用)
+             // log.debug(`[DataSourceInterface] Old config: ${JSON.stringify(dataSourceInstances[sourceId].config)}`);
+             // log.debug(`[DataSourceInterface] New config: ${JSON.stringify(sourceConfig)}`);
              // 可以选择性地清理旧实例的资源，如果需要的话
              // delete dataSourceInstances[sourceId]; // 如果需要强制重新创建
         }
