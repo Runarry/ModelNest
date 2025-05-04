@@ -46,17 +46,17 @@ function calcFileHash(filePath) {
 async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   // 1. 计算模型文件哈希
   const hash = await calcFileHash(filePath);
-  log.info(`[Civitai] 文件 [${filePath}] 的 SHA256 为: ${hash}`);
+  log.info(`[Util:CivitaiCrawler] Calculated SHA256 for file [${filePath}]: ${hash}`);
 
   // 2. 查询模型版本信息（by hash）
   let versionData;
   try {
     const resp = await axios.get(`https://civitai.com/api/v1/model-versions/by-hash/${hash}`);
     versionData = resp.data;
-    log.info(`[Civitai] 通过哈希获取到模型版本信息: modelId=${versionData.modelId}`);
+    log.info(`[Util:CivitaiCrawler] Successfully fetched model version info by hash: modelId=${versionData.modelId}`);
     if (!versionData || !versionData.modelId) return null;
   } catch (err) {
-    log.error(`[Civitai] 通过哈希查询模型版本信息失败: ${err.message}`);
+    log.error(`[Util:CivitaiCrawler] Failed to fetch model version info by hash ${hash}: ${err.message}`);
     throw err;
   }
 
@@ -79,9 +79,9 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
       images: v.images && v.images.length > 0 ? v.images.map(img => img.url.startsWith('http') ? img.url : `https://civitai.com${img.url}`) : [],
       downloadUrl: v.downloadUrl,
     }));
-    log.info(`[Civitai] 获取模型主信息成功，共有版本数: ${modelVersions.length}`);
+    log.info(`[Util:CivitaiCrawler] Successfully fetched main model info for modelId=${versionData.modelId}. Total versions: ${modelVersions.length}`);
   } catch (e) {
-    log.warn(`[Civitai] 获取模型主信息或 tags/versions 失败: ${e.message}`);
+    log.warn(`[Util:CivitaiCrawler] Failed to fetch main model info or tags/versions for modelId=${versionData.modelId}: ${e.message}`);
   }
 
   // 4. 结果结构
@@ -105,19 +105,19 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
 if (require.main === module) {
   const filePath = process.argv[2];
   if (!filePath) {
-    log.error('用法: node civitaiInfo.js your_model_file.safetensors');
+    log.error('[Util:CivitaiCrawler] Usage: node civitai-model-info-crawler.js your_model_file.safetensors');
     process.exit(1);
   }
   getCivitaiModelInfoWithTagsAndVersions(filePath)
     .then(info => {
       if (info) {
-        log.info('模型信息:\n' + JSON.stringify(info, null, 2));
+        log.info('[Util:CivitaiCrawler] Model info found:\n' + JSON.stringify(info, null, 2));
       } else {
-        log.warn('未找到该模型信息。');
+        log.warn('[Util:CivitaiCrawler] Model info not found for this file.');
       }
     })
     .catch(err => {
-      log.error('出错: ' + err.message);
+      log.error('[Util:CivitaiCrawler] Error occurred: ' + err.message);
     });
 }
 
