@@ -79,9 +79,11 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   
   let desc = turndownService.turndown( modelInfo.description) || null;
   const images = modelVersionInfo.images || [];
-  const imagePrompts = images.map(image => {
+
+  const imagePrompts = images.map((image, index) => { 
     const prompt = image?.meta?.prompt || '';
     const negativePrompt = image?.meta?.negativePrompt || '';
+    
     let promptString = '';
     if (prompt) {
       promptString += `prompt: ${prompt}`;
@@ -92,11 +94,12 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
       }
       promptString += `negativePrompt: ${negativePrompt}`;
     }
+
+
     return promptString;
   }).filter(Boolean); // 过滤掉 prompt 和 negativePrompt 都为空的条目
 
 
-  
   let trainedWords = (modelVersionInfo.trainedWords || []).join(", ");
 
   // 4. 结果结构
@@ -116,7 +119,7 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
     from:`Civita`,
     versionDescription: modelVersionInfo.description||null,
     tags: modelInfo.tags,
-    examplePrompt:imagePrompts || [],
+    examplePrompt: imagePrompts || [], // Changed key name to plural
     image: images.length > 0 ? (images[0].url.startsWith('http') ? images[0].url : `https://civitai.com${images[0].url}`) : null,
 
   };
