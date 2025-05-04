@@ -79,19 +79,45 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   
   let desc = turndownService.turndown( modelInfo.description) || null;
   const images = modelVersionInfo.images || [];
+  const imagePrompts = images.map(image => {
+    const prompt = image?.meta?.prompt || '';
+    const negativePrompt = image?.meta?.negativePrompt || '';
+    let promptString = '';
+    if (prompt) {
+      promptString += `prompt: ${prompt}`;
+    }
+    if (negativePrompt) {
+      if (promptString) { // 如果 prompt 也存在，则添加换行符
+          promptString += '\n\n';
+      }
+      promptString += `negativePrompt: ${negativePrompt}`;
+    }
+    return promptString;
+  }).filter(Boolean); // 过滤掉 prompt 和 negativePrompt 都为空的条目
+
+
+  
+  let trainedWords = (modelVersionInfo.trainedWords || []).join(", ");
+
   // 4. 结果结构
   return {
-    id : id || null,
     modelId: modelId,
-    modelType: modelInfo.type || null,
+    modelVersionId : id || null,
     modelName:  modelInfo.name || null,
-    versionName: modelVersionInfo.name || null,
+    modelVer: modelVersionInfo.name || null,
+
+    modelType: modelInfo.type || null,
+
     baseModel: modelVersionInfo.baseModel || null,
-    trainedWords: modelVersionInfo.trainedWords || [],
+    triggerWord: trainedWords,
     description: desc || "",
+
+    fromUrl:`https://civitai.com/models/${modelId}?modelVersionId=${modelVersionId}`,
+    from:`Civita`,
     versionDescription: modelVersionInfo.description||null,
-    image: images.length > 0 ? (images[0].url.startsWith('http') ? images[0].url : `https://civitai.com${images[0].url}`) : null,
     tags: modelInfo.tags,
+    examplePrompt:imagePrompts || [],
+    image: images.length > 0 ? (images[0].url.startsWith('http') ? images[0].url : `https://civitai.com${images[0].url}`) : null,
 
   };
 }
