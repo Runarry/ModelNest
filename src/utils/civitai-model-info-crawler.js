@@ -58,40 +58,43 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   log.info(`[Util:CivitaiCrawler] Calculated SHA256 for file [${filePath}]: ${hash}`);
 
   // 2. 查询模型版本信息（by hash）
-  let versionData;
+  let modelId;
+  let id;
   try {
     const resp = await axios.get(`https://civitai.com/api/v1/model-versions/by-hash/${hash}`);
-    versionData = resp.data;
-    log.info(`[Util:CivitaiCrawler] Successfully fetched model version info by hash: modelId=${versionData.modelId}`);
-    if (!versionData || !versionData.modelId) return null;
+    const versionData = resp.data;
+    id = versionData.id;
+    modelId = versionData.modelId;
+    log.info(`[Util:CivitaiCrawler] Successfully fetched model version info by hash: modelId=${modelId}`);
+    if (!versionData.id || !versionData.modelId) return null;
   } catch (err) {
     log.error(`[Util:CivitaiCrawler] Failed to fetch model version info by hash ${hash}: ${err.message}`);
     throw err;
   }
 
   // 3. 主模型信息、标签和所有版本
-  const images = versionData.images || [];
+
   let modelVersionInfo = null;
   let modelInfo = null;
   try {
-    const resp = await axios.get(`https://civitai.com/api/v1/models/${versionData.modelId}`);
+    const resp = await axios.get(`https://civitai.com/api/v1/models/${modelId}`);
     const modelData = resp.data;
     modelInfo = modelData;
 
+    modelVersionInfo = modelData.modelVersions.find(item => item.id === id) || null;
 
-    modelVersionInfo = modelData.modelVersions.find(item => item.id === versionData.id) || null;
-
-    log.info(`[Util:CivitaiCrawler] Successfully fetched main model info for modelId=${versionData.modelId}.`);
+    log.info(`[Util:CivitaiCrawler] Successfully fetched main model info for modelId=${modelId}.`);
   } catch (e) {
-    log.warn(`[Util:CivitaiCrawler] Failed to fetch main model info or tags/versions for modelId=${versionData.modelId}: ${e.message}`);
+    log.warn(`[Util:CivitaiCrawler] Failed to fetch main model info or tags/versions for modelId=${modelId}: ${e.message}`);
   }
   
   let desc = turndownService.turndown( modelInfo.description) || null;
+  const images = modelVersionInfo.images || [];
   // 4. 结果结构
   return {
+    id : id || null,
+    modelId: modelId,
     modelType: modelInfo.type || null,
-    id : modelVersionInfo.id || null,
-    modelId: modelInfo.modelId,
     modelName:  modelInfo.name || null,
     versionName: modelVersionInfo.name || null,
     baseModel: modelVersionInfo.baseModel || null,
