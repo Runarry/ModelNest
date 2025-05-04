@@ -40,17 +40,6 @@ async function calcFileHash(filePath) {
  * 通过模型文件HASH获取Civitai模型详细信息（含tags和所有版本）
  * @param {string} filePath - 模型文件路径
  * @returns {Promise<Object|null>} - 返回模型信息对象，未找到时返回null
- *   {
- *     modelType,     // 模型类型，如 "Checkpoint"、"LORA" 等
- *     modelId,       // 模型ID
- *     modelName,     // 模型名称
- *     baseModel,     // 基础模型
- *     trainedWords,  // 训练关键词数组
- *     description,   // 版本描述
- *     image,         // 封面图片URL
- *     tags,          // 标签数组
- *     modelVersions  // 模型所有版本数组，每项含id/name/description等
- *   }
  */
 async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   // 1. 计算模型文件哈希
