@@ -11,6 +11,9 @@ const crypto = require('crypto');
 const fs = require('fs');
 const axios = require('axios');
 const log = require('electron-log');
+const TurndownService = require('turndown');
+
+const turndownService = new TurndownService();
 
 /**
  * 计算本地文件的 SHA256 哈希
@@ -69,38 +72,36 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   // 3. 主模型信息、标签和所有版本
   const model = versionData.model || {};
   const images = versionData.images || [];
-  let tags = [];
-  let modelVersions = [];
+  let modelVersionInfo = null;
+  let modelInfo = null;
   try {
     const resp = await axios.get(`https://civitai.com/api/v1/models/${versionData.modelId}`);
     const modelData = resp.data;
-    tags = modelData.tags || [];
-    // 格式化所有模型版本数组
-    modelVersions = (modelData.modelVersions || []).map(v => ({
-      id: v.id,
-      name: v.name,
-      baseModel: v.baseModel,
-      description: v.description,
-      trainedWords: v.trainedWords,
-      images: v.images && v.images.length > 0 ? v.images.map(img => img.url.startsWith('http') ? img.url : `https://civitai.com${img.url}`) : [],
-      downloadUrl: v.downloadUrl,
-    }));
-    log.info(`[Util:CivitaiCrawler] Successfully fetched main model info for modelId=${versionData.modelId}. Total versions: ${modelVersions.length}`);
+    modelInfo = modelData;
+
+
+    modelVersionInfo = modelData.modelVersions.find(item => item.id === versionData.id) || null;
+
+    log.info(`[Util:CivitaiCrawler] Successfully fetched main model info for modelId=${versionData.modelId}.`);
   } catch (e) {
     log.warn(`[Util:CivitaiCrawler] Failed to fetch main model info or tags/versions for modelId=${versionData.modelId}: ${e.message}`);
   }
-
+  
+  let desc = turndownService.turndown( modelInfo.description) || null;
   // 4. 结果结构
   return {
-    modelType: model.type || null,
-    modelId: versionData.modelId,
-    modelName: model.name || versionData.name || null,
-    baseModel: versionData.baseModel || null,
-    trainedWords: versionData.trainedWords || [],
-    description: versionData.description || null,
+    modelType: modelInfo.type || null,
+    id : modelVersionInfo.id || null,
+    modelId: modelInfo.modelId,
+    modelName:  modelInfo.name || null,
+    versionName: modelVersionInfo.name || null,
+    baseModel: modelVersionInfo.baseModel || null,
+    trainedWords: modelVersionInfo.trainedWords || [],
+    description: desc || "",
+    versionDescription: modelVersionInfo.description||null,
     image: images.length > 0 ? (images[0].url.startsWith('http') ? images[0].url : `https://civitai.com${images[0].url}`) : null,
-    tags,
-    modelVersions,
+    tags: modelInfo.tags,
+
   };
 }
 

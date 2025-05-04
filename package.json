@@ -13,6 +13,7 @@
     "electron-log": "^5.3.4",
     "electron-updater": "^6.6.2",
     "sharp": "^0.34.1",
+    "turndown": "^7.2.0",
     "webdav": "^5.8.0"
   },
   "devDependencies": {
