@@ -11,6 +11,17 @@ class ModelCrawlerService{
         this.#sourceConfig = sourceConfig;
     }
 
+    async startCrawling(){
+        // todo
+    }
+    stopCrawling(){
+        // todo
+    }
+    getCrawlStatus(){
+        // todo
+    }
+    
+
 
 }
 
