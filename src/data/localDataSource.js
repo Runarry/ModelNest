@@ -2,23 +2,7 @@ const { parseLocalModels, parseModelDetailFromJsonContent } = require('./modelPa
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
-
-// 数据源抽象与实现
-
-class DataSource {
-  constructor(config) {
-    this.config = config;
-  }
-  async listModels(directory = null) { // 添加 directory 参数
-    throw new Error('listModels 未实现');
-  }
-  async readModelDetail(jsonPath) {
-    throw new Error('readModelDetail 未实现');
-  }
-  async listSubdirectories() { // 添加 listSubdirectories 接口
-    throw new Error('listSubdirectories 未实现');
-  }
-}
+const DataSource = require('./baseDataSource'); // 导入新的基类
 
 // 本地数据源实现
 class LocalDataSource extends DataSource {
@@ -133,9 +117,88 @@ class LocalDataSource extends DataSource {
       return {};
     }
   }
+/**
+   * 获取本地图片文件的 Buffer 数据和 MIME 类型。
+   * @param {string} imagePath - 图片文件的完整路径。
+   * @returns {Promise<object|null>} 包含 { path, data, mimeType } 的对象，或 null。
+   */
+  async getImageData(imagePath) {
+    const startTime = Date.now();
+    log.debug(`[LocalDataSource] 开始获取图片数据: ${imagePath}`);
+    if (!imagePath) {
+        log.warn('[LocalDataSource] getImageData 调用时 imagePath 为空');
+        return null;
+    }
+    try {
+      // 检查文件是否存在
+      await fs.promises.access(imagePath);
+      // 读取文件内容
+      const fileData = await fs.promises.readFile(imagePath);
+      const mimeType = `image/${path.extname(imagePath).slice(1).toLowerCase()}`;
+      const duration = Date.now() - startTime;
+      log.debug(`[LocalDataSource] 读取本地图片成功: ${imagePath}, 大小: ${(fileData.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
+      return {
+        path: imagePath, // 虽然接口层可能不再直接用，但保留路径信息可能有用
+        data: fileData,
+        mimeType: mimeType
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      if (error.code === 'ENOENT') {
+        log.warn(`[LocalDataSource] 获取图片数据失败 (文件不存在): ${imagePath}, 耗时: ${duration}ms`);
+      } else {
+        log.error(`[LocalDataSource] 获取图片数据时出错: ${imagePath}, 耗时: ${duration}ms`, error.message, error.stack);
+      }
+      return null; // 返回 null 表示失败
+    }
+  }
+
+  /**
+   * 将 JSON 字符串写入本地文件系统。
+   * @param {string} filePath - 要写入的文件的完整路径。
+   * @param {string} dataToWrite - 要写入的 JSON 字符串数据。
+   * @returns {Promise<void>} 操作完成时解析的 Promise。
+   * @throws {Error} 如果写入失败。
+   */
+  async writeModelJson(filePath, dataToWrite) {
+    const startTime = Date.now();
+    log.info(`[LocalDataSource] 开始写入模型 JSON: ${filePath}`);
+     if (!filePath) {
+        log.error('[LocalDataSource] writeModelJson 调用时 filePath 为空');
+        throw new Error('File path cannot be empty for writing model JSON.');
+    }
+    if (typeof dataToWrite !== 'string') {
+        log.error('[LocalDataSource] writeModelJson 调用时 dataToWrite 不是字符串');
+        throw new Error('Data to write must be a string.');
+    }
+
+    try {
+      // 确保目录存在
+      const dirPath = path.dirname(filePath);
+      try {
+        await fs.promises.access(dirPath);
+      } catch (accessError) {
+        if (accessError.code === 'ENOENT') {
+          log.info(`[LocalDataSource] 目录 ${dirPath} 不存在，正在创建...`);
+          await fs.promises.mkdir(dirPath, { recursive: true });
+        } else {
+          log.error(`[LocalDataSource] 访问目录时出错 ${dirPath}:`, accessError);
+          throw accessError; // 重新抛出访问错误
+        }
+      }
+
+      // 写入文件
+      await fs.promises.writeFile(filePath, dataToWrite, 'utf-8');
+      const duration = Date.now() - startTime;
+      log.info(`[LocalDataSource] 成功写入模型 JSON: ${filePath}, 耗时: ${duration}ms`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      log.error(`[LocalDataSource] 写入模型 JSON 时出错: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
+      throw error; // 重新抛出写入错误
+    }
+  }
 }
 
 module.exports = {
-  DataSource,
   LocalDataSource
 };

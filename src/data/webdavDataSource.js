@@ -1,4 +1,4 @@
-const { DataSource } = require('./localDataSource');
+const DataSource = require('./baseDataSource'); // 导入新的基类
 const { parseModelDetailFromJsonContent, createWebDavModelObject } = require('./modelParser'); // 导入 createWebDavModelObject
 const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
