@@ -33,7 +33,8 @@
     },
     "save": "保存",
     "saveSuccess": "保存成功！",
-    "saveFail": "保存失败: "
+    "saveFail": "保存失败: ",
+    "saving": "保存中..."
   },
   "settings": {
     "title": "设置",

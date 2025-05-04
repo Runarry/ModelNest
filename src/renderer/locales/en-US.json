@@ -33,7 +33,8 @@
     },
     "save": "Save",
     "saveSuccess": "Save successful!",
-    "saveFail": "Save failed: "
+    "saveFail": "Save failed: ",
+    "saving": "Saving..."
   },
   "settings": {
     "title": "Settings",
