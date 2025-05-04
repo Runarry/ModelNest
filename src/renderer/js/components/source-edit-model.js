@@ -18,6 +18,7 @@ let sourceEditUsernameInput;
 let sourceEditPasswordInput;
 let sourceEditCloseBtn;
 let sourceEditCancelBtn;
+let sourceEditReadOnlyCheckbox; // 新增：只读复选框
 // sourceEditSaveBtn is part of the form, handled by submit event
 let sourceEditFeedbackEl; // Feedback element specific to this Model
 
@@ -44,6 +45,7 @@ let _onSaveCallback = null; // Callback to notify settings Model on save
  * @param {string} config.passwordInputId
  * @param {string} config.closeBtnId
  * @param {string} config.cancelBtnId
+ * @param {string} config.readOnlyCheckboxId // 新增：只读复选框 ID
  * @param {string} config.feedbackElementId
  * @param {function} onSaveCallback - Function to call when a source is saved (added/edited).
  */
@@ -63,13 +65,14 @@ export function initSourceEditModel(config, onSaveCallback) {
     sourceEditPasswordInput = document.getElementById(config.passwordInputId);
     sourceEditCloseBtn = document.getElementById(config.closeBtnId);
     sourceEditCancelBtn = document.getElementById(config.cancelBtnId);
+    sourceEditReadOnlyCheckbox = document.getElementById(config.readOnlyCheckboxId); // 获取只读复选框
     sourceEditFeedbackEl = document.getElementById(config.feedbackElementId);
 
     if (!sourceEditModel || !sourceEditForm || !sourceEditTitle || !sourceEditIdInput ||
         !sourceEditNameInput || !sourceEditTypeSelect || !sourceEditLocalFields ||
         !sourceEditPathInput || !sourceEditBrowseBtn || !sourceEditWebdavFields ||
         !sourceEditUrlInput || !sourceEditUsernameInput || !sourceEditPasswordInput ||
-        !sourceEditCloseBtn || !sourceEditCancelBtn || !sourceEditFeedbackEl) {
+        !sourceEditCloseBtn || !sourceEditCancelBtn || !sourceEditReadOnlyCheckbox || !sourceEditFeedbackEl) { // 添加只读复选框检查
         // Task 1: Error Logging
         logMessage('error', "[SourceEditModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
         return;
@@ -130,6 +133,7 @@ export function openSourceEditModel(sourceToEdit = null) {
         sourceEditIdInput.value = sourceToEdit.id;
         sourceEditNameInput.value = sourceToEdit.name;
         sourceEditTypeSelect.value = sourceToEdit.type;
+        sourceEditReadOnlyCheckbox.checked = sourceToEdit.readOnly === true; // 设置只读复选框状态
         if (sourceToEdit.type === 'local') {
             sourceEditPathInput.value = sourceToEdit.path || '';
         } else if (sourceToEdit.type === 'webdav') {
@@ -264,8 +268,9 @@ function handleSourceEditFormSubmit(event) {
         id: sourceId || Date.now().toString(), // Generate new ID if adding
         name: sourceName,
         type: sourceType,
+        readOnly: sourceEditReadOnlyCheckbox.checked, // 从复选框获取只读状态
     };
-    logMessage('debug', `[SourceEditModel] 基本数据: ID=${newSourceData.id}, Name=${newSourceData.name}, Type=${newSourceData.type}`);
+    logMessage('debug', `[SourceEditModel] 基本数据: ID=${newSourceData.id}, Name=${newSourceData.name}, Type=${newSourceData.type}, ReadOnly=${newSourceData.readOnly}`);
 
     // --- Type-Specific Validation and Data ---
     if (sourceType === 'local') {

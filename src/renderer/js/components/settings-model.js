@@ -469,81 +469,96 @@ function populateAboutPane() {
 
 /** Renders the list of model sources based on the `tempModelSources` state into #dataSourceList. */
 function renderSourceListForSettings() {
-    if (!dataSourceListEl) {
-        logMessage('error', "[SettingsModel] renderSourceListForSettings 失败：数据源列表元素 (#dataSourceList) 未初始化");
-        return;
-    }
-    logMessage('debug', "[SettingsModel] 开始渲染数据源列表");
+    try {
+        if (!dataSourceListEl) {
+            logMessage('error', "[SettingsModel] renderSourceListForSettings 失败：数据源列表元素 (#dataSourceList) 未初始化");
+            // 尝试在 settingsContent 区域显示错误提示，避免页面全白
+            if (settingsContent) {
+                settingsContent.innerHTML = `<div class="feedback error" style="display:block;">${t('settings.modelSources.renderError', { message: '数据源列表元素未初始化' })}</div>`;
+            }
+            return;
+        }
+        logMessage('debug', "[SettingsModel] 开始渲染数据源列表");
 
-    clearChildren(dataSourceListEl); // Clear existing list items
+        clearChildren(dataSourceListEl); // Clear existing list items
 
-    if (tempModelSources.length === 0) {
-        dataSourceListEl.innerHTML = `<li class="no-sources-message">${t('settings.modelSources.none')}</li>`;
-        return;
-    }
+        if (tempModelSources.length === 0) {
+            dataSourceListEl.innerHTML = `<li class="no-sources-message">${t('settings.modelSources.none')}</li>`;
+            return;
+        }
 
-    tempModelSources.forEach(source => {
-        const item = document.createElement('li');
-        item.className = 'data-source-item';
-        item.dataset.id = source.id; // Store ID for actions
+        tempModelSources.forEach(source => {
+            const item = document.createElement('li');
+            item.className = 'data-source-item';
+            item.dataset.id = source.id; // Store ID for actions
 
-        const typeText = source.type === 'local' ? t('settings.dataSources.typeLocal') : t('settings.dataSources.typeWebdav'); // Use correct key path
-        const pathOrUrl = source.type === 'local' ? source.path : source.url;
+            const typeText = source.type === 'local' ? t('settings.dataSources.typeLocal') : t('settings.dataSources.typeWebdav'); // Use correct key path
+            const pathOrUrl = source.type === 'local' ? source.path : source.url;
 
-        // Main content of the list item
-        const mainContent = document.createElement('div');
-        mainContent.className = 'source-details-actions'; // Wrapper for easier show/hide
-        mainContent.innerHTML = `
-            <span class="source-name" title="${source.name}">${source.name}</span> <!-- Added title for potential overflow -->
-            <span class="source-type">(${typeText})</span>
-            <span class="source-path" title="${pathOrUrl}">${pathOrUrl}</span>
-            <div class="actions">
-                <button type="button" class="edit-btn btn btn-sm btn-secondary" title="${t('settings.dataSources.edit')}">${t('settings.dataSources.edit')}</button> <!-- Use correct key path -->
-                <button type="button" class="delete-btn btn btn-sm btn-danger" title="${t('settings.dataSources.delete')}">${t('settings.dataSources.delete')}</button> <!-- Use correct key path -->
-            </div>
-        `;
+            // Main content of the list item
+            const mainContent = document.createElement('div');
+            mainContent.className = 'source-details-actions'; // Wrapper for easier show/hide
+            mainContent.innerHTML = `
+                <span class="source-name" title="${source.name}">${source.name}</span> <!-- Added title for potential overflow -->
+                <span class="source-type">(${typeText})</span>
+                <span class="source-path" title="${pathOrUrl}">${pathOrUrl}</span>
+                <div class="actions">
+                    <button type="button" class="edit-btn btn btn-sm btn-secondary" title="${t('settings.dataSources.edit')}">${t('settings.dataSources.edit')}</button> <!-- Use correct key path -->
+                    <button type="button" class="delete-btn btn btn-sm btn-danger" title="${t('settings.dataSources.delete')}">${t('settings.dataSources.delete')}</button> <!-- Use correct key path -->
+                </div>
+            `;
 
-        // Inline edit form (initially hidden)
-        const editForm = document.createElement('div');
-        editForm.className = 'edit-form';
-        editForm.style.display = 'none';
-        // Populate with form fields based on source type - FRAMEWORK ONLY
-        editForm.innerHTML = `
-            <p><strong>${t('settings.dataSources.editing')}: ${source.name}</strong></p>
-            <!-- Actual form fields - Use dataSources path for consistency -->
-            <div class="form-group">
-                <label>${t('settings.dataSources.nameLabel')}:</label> <input type="text" class="edit-name" value="${source.name}">
-            </div>
-             ${source.type === 'local' ? `
-             <div class="form-group">
-                 <label>${t('settings.dataSources.pathLabel')}:</label>
-                 <div class="input-group"> <!-- Added input-group wrapper -->
-                     <input type="text" class="edit-path" value="${source.path}">
-                     <button type="button" class="browse-inline-btn btn btn-secondary" title="${t('settings.dataSources.browse')}">${t('settings.dataSources.browseShort', '...')}</button> <!-- Use btn-secondary like add form -->
+            // Inline edit form (initially hidden)
+            const editForm = document.createElement('div');
+            editForm.className = 'edit-form';
+            editForm.style.display = 'none';
+            // Populate with form fields based on source type - FRAMEWORK ONLY
+            editForm.innerHTML = `
+                <p><strong>${t('settings.dataSources.editing')}: ${source.name}</strong></p>
+                <!-- Actual form fields - Use dataSources path for consistency -->
+                <div class="form-group">
+                    <label>${t('settings.dataSources.nameLabel')}:</label> <input type="text" class="edit-name" value="${source.name}">
+                </div>
+                 ${source.type === 'local' ? `
+                 <div class="form-group">
+                     <label>${t('settings.dataSources.pathLabel')}:</label>
+                     <div class="input-group"> <!-- Added input-group wrapper -->
+                         <input type="text" class="edit-path" value="${source.path}">
+                         <button type="button" class="browse-inline-btn btn btn-secondary" title="${t('settings.dataSources.browse')}">${t('settings.dataSources.browseShort', '...')}</button> <!-- Use btn-secondary like add form -->
+                     </div>
                  </div>
-             </div>
-             ` : `
-             <div class="form-group">
-                 <label>${t('settings.dataSources.urlLabel')}:</label> <input type="text" class="edit-url" value="${source.url}">
-             </div>
-             <div class="form-group">
-                 <label>${t('settings.dataSources.usernameLabel')}:</label> <input type="text" class="edit-username" value="${source.username || ''}">
-             </div>
-              <div class="form-group">
-                 <label>${t('settings.dataSources.passwordLabel')}:</label> <input type="password" class="edit-password" placeholder="${t('settings.dataSources.passwordPlaceholder', 'Enter new password to change')}">
-             </div>
-             `}
-            <div class="inline-actions">
-                <button type="button" class="save-inline-btn btn btn-sm btn-primary" title="${t('settings.save')}">${t('settings.save')}</button>
-                <button type="button" class="cancel-inline-btn btn btn-sm btn-secondary" title="${t('settings.cancel')}">${t('settings.cancel')}</button>
-            </div>
-        `;
+                 ` : `
+                 <div class="form-group">
+                     <label>${t('settings.dataSources.urlLabel')}:</label> <input type="text" class="edit-url" value="${source.url}">
+                 </div>
+                 <div class="form-group">
+                     <label>${t('settings.dataSources.usernameLabel')}:</label> <input type="text" class="edit-username" value="${source.username || ''}">
+                 </div>
+                  <div class="form-group">
+                     <label>${t('settings.dataSources.passwordLabel')}:</label> <input type="password" class="edit-password" placeholder="${t('settings.dataSources.passwordPlaceholder', 'Enter new password to change')}">
+                 </div>
+                 `}
+                <div class="form-group form-check">
+                    <input type="checkbox" class="form-check-input edit-readOnly" ${source.readOnly ? 'checked' : ''}>
+                    <label class="form-check-label" data-i18n-key="settings.modelSources.readOnlyLabel"></label>
+                </div>
+                <div class="inline-actions">
+                    <button type="button" class="save-inline-btn btn btn-sm btn-primary" title="${t('settings.save')}">${t('settings.save')}</button>
+                    <button type="button" class="cancel-inline-btn btn btn-sm btn-secondary" title="${t('settings.cancel')}">${t('settings.cancel')}</button>
+                </div>
+            `;
 
-        item.appendChild(mainContent);
-        item.appendChild(editForm);
-        dataSourceListEl.appendChild(item);
-    });
-     logMessage('debug', "[SettingsModel] 数据源列表渲染完成");
+            item.appendChild(mainContent);
+            item.appendChild(editForm);
+            dataSourceListEl.appendChild(item);
+        });
+        logMessage('debug', "[SettingsModel] 数据源列表渲染完成");
+    } catch (err) {
+        logMessage('error', "[SettingsModel] 渲染数据源列表时发生异常：", err);
+        if (settingsContent) {
+            settingsContent.innerHTML = `<div class="feedback error" style="display:block;">${t('settings.modelSources.renderError', { message: err.message })}</div>`;
+        }
+    }
 }
 
 /** Handles showing the inline edit form for a data source. */
@@ -554,7 +569,13 @@ function handleEditSourceInline(listItem) {
      const mainContent = listItem.querySelector('.source-details-actions');
      const editForm = listItem.querySelector('.edit-form');
      if (mainContent) mainContent.style.display = 'none';
-     if (editForm) editForm.style.display = 'block';
+     if (editForm) {
+         editForm.style.display = 'block';
+         // 修复：显示编辑表单后，立即刷新 i18n，确保只读标签等内容正常显示
+         if (typeof updateUIWithTranslations === 'function') {
+             updateUIWithTranslations(editForm);
+         }
+     }
      // TODO: Potentially fetch fresh data or ensure form fields are correct
 }
 
@@ -599,6 +620,10 @@ function handleSaveSourceInline(listItem) {
         // TODO: Add validation if needed
     }
 
+    // Read readOnly state from checkbox
+    const readOnlyCheckbox = editForm.querySelector('.edit-readOnly');
+    if (readOnlyCheckbox) updatedSource.readOnly = readOnlyCheckbox.checked;
+
     // --- Update temporary state and re-render ---
     logMessage('debug', `[SettingsModel] 更新后的行内数据:`, updatedSource);
     tempModelSources[sourceIndex] = updatedSource;
@@ -606,7 +631,8 @@ function handleSaveSourceInline(listItem) {
 
     // Note: The list re-render will automatically hide the edit form.
     // If a more targeted update is needed later, adjust this.
-    showFeedback(settingsContent.querySelector('#settingsDataSources'), t('settings.modelSources.inlineSaveSuccess'), 'success', 1500); // Show feedback in the pane
+    // 修复：将保存成功提示显示在当前编辑表单内部，避免全局布局异常
+    showFeedback(listItem.querySelector('.edit-form'), t('settings.modelSources.inlineSaveSuccess'), 'success', 1500);
 }
 
 /** Handles canceling the inline edit form. */
@@ -702,6 +728,11 @@ function showAddDataSourceForm() {
             </div>
         </div>
 
+        <div class="form-group form-check">
+            <input type="checkbox" class="form-check-input" id="addSourceReadOnly">
+            <label class="form-check-label" for="addSourceReadOnly" data-i18n-key="settings.modelSources.readOnlyLabel"></label>
+        </div>
+
         <div class="form-actions">
              <div id="addSourceFeedback" class="feedback" style="margin-bottom: 10px;"></div> <!-- Feedback Area -->
             <button type="submit" class="btn btn-primary" data-i18n-key="settings.modelSources.addSource"></button>
@@ -777,10 +808,13 @@ function handleAddDataSourceSubmit(event) {
         return;
     }
 
+    const readOnly = form.querySelector('#addSourceReadOnly').checked;
+
     const newSource = {
         id: crypto.randomUUID(), // Generate a unique ID
         name: name,
         type: type,
+        readOnly: readOnly, // 添加 readOnly 属性
     };
 
     if (type === 'local') {
@@ -1053,6 +1087,11 @@ async function handleLanguageChange(event) {
     const currentLocale = getCurrentLocale();
     logMessage('info', `[UI] 切换语言设置: 从 ${currentLocale} 到 ${newLocale}`);
 
+    // Store the currently active category *before* potential UI changes
+    const activeNav = settingsNav?.querySelector('a.nav-item.active');
+    const activeCategoryBeforeChange = activeNav?.dataset.category;
+    logMessage('debug', `[SettingsModel] Active category before language change: ${activeCategoryBeforeChange}`);
+
     if (newLocale !== currentLocale) {
         setLoading(true); // Show loading indicator
         const generalPaneBefore = settingsContent?.querySelector('#settingsGeneral');
@@ -1089,10 +1128,37 @@ async function handleLanguageChange(event) {
             event.target.value = currentLocale;
         } finally {
             setLoading(false); // Hide loading indicator
+
+            // --- Re-ensure the correct pane is visible after UI update ---
+            if (activeCategoryBeforeChange && settingsContent) {
+                const targetPane = settingsContent.querySelector(`.settings-pane[data-category="${activeCategoryBeforeChange}"]`);
+                if (targetPane) {
+                    // Ensure all panes are hidden first (in case updateUI messed up)
+                    settingsContent.querySelectorAll('.settings-pane').forEach(pane => {
+                        if (pane !== targetPane) { // Don't hide the target pane yet
+                            pane.style.display = 'none';
+                        }
+                    });
+                    // Then ensure the target pane is visible
+                    targetPane.style.display = ''; // Reset to default (usually block or flex)
+                    logMessage('info', `[SettingsModel] 语言切换后，已确保面板 '${activeCategoryBeforeChange}' 可见`);
+                } else {
+                    logMessage('warn', `[SettingsModel] 语言切换后，无法找到目标面板: ${activeCategoryBeforeChange}`);
+                    // Fallback: maybe show the default 'data-sources' pane?
+                    switchSettingsTab('data-sources');
+                }
+            } else {
+                 logMessage('warn', `[SettingsModel] 语言切换后，无法确定先前活动的面板类别`);
+                 // Fallback: show default
+                 switchSettingsTab('data-sources');
+            }
+            // --- End of visibility fix ---
+
             const generalPaneFinal = settingsContent?.querySelector('#settingsGeneral');
             logMessage('debug', `[SettingsModel] handleLanguageChange finally #settingsGeneral display: ${generalPaneFinal?.style.display}, innerHTML: ${generalPaneFinal?.innerHTML?.substring(0,100)}...`);
         }
-        logMessage('debug', `[SettingsModel] handleLanguageChange 结束时 #settingsGeneral display: ${settingsContent?.querySelector('#settingsGeneral')?.style.display}, innerHTML: ${settingsContent?.querySelector('#settingsGeneral')?.innerHTML?.substring(0,100)}...`);
+        // This log might be less relevant now as we explicitly set the display style above
+        // logMessage('debug', `[SettingsModel] handleLanguageChange 结束时 #settingsGeneral display: ${settingsContent?.querySelector('#settingsGeneral')?.style.display}, innerHTML: ${settingsContent?.querySelector('#settingsGeneral')?.innerHTML?.substring(0,100)}...`);
     } else {
         logMessage('debug', '[SettingsModel] 选择的语言与当前语言相同，无需操作');
     }

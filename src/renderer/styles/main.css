@@ -17,6 +17,18 @@
   --secondary-button-border: #d0d0d0;
 }
 
+/* 只读指示器样式 */
+.readonly-indicator {
+  background-color: rgba(255, 149, 0, 0.2); /* 使用warning-color的透明版本 */
+  color: var(--warning-color);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.9em;
+  margin-left: 8px;
+  display: inline-block;
+  vertical-align: middle;
+}
+
 [data-theme="dark"] {
   --primary-color: #4895ef;
   --secondary-color: #4361ee;

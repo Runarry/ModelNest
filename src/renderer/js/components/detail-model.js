@@ -12,6 +12,7 @@ let detailCloseBtn;
 // ===== Module State =====
 let currentModel = null; // Store the model currently being displayed/edited
 let currentSourceId = null; // Store the sourceId needed for image loading/saving
+let currentIsReadOnly = false; // 新增：存储当前模型的只读状态
 
 // ===== Initialization =====
 
@@ -59,8 +60,9 @@ export function initDetailModel(config) {
  * Shows the detail Model with information for the given model.
  * @param {object} model - The model object to display.
  * @param {string} sourceId - The ID of the source the model belongs to.
+ * @param {boolean} isReadOnly - Whether the source is read-only.
  */
-export async function showDetailModel(model, sourceId) {
+export async function showDetailModel(model, sourceId, isReadOnly) {
     const startTime = Date.now();
     logMessage('info', `[DetailModel] 开始显示模型详情: ${model?.name} (Source: ${sourceId})`);
     if (!detailModel) {
@@ -75,7 +77,9 @@ export async function showDetailModel(model, sourceId) {
 
     currentModel = model; // Store the model
     currentSourceId = sourceId; // Store the source ID
-
+    currentIsReadOnly = isReadOnly === true; // Store the read-only status, ensure boolean
+    logMessage('info', `[DetailModel] Setting read-only status to: ${currentIsReadOnly}`);
+    
     detailName.textContent = model.name || '';
 
     // --- Load Image ---
@@ -197,6 +201,7 @@ function renderModelContent(model) {
         </div>
 
         <div class="Model-actions">
+             <span id="readOnlyIndicator" class="readonly-indicator" style="display: none;">${t('readOnlyMode')}</span> <!-- 新增：只读提示 -->
              <span id="detailFeedback" class="Model-feedback"></span>
              <button id="saveDetailBtn" class="btn btn-primary">${t('detail.save')}</button>
         </div>
@@ -207,6 +212,7 @@ function renderModelContent(model) {
     setTimeout(() => {
         attachTabListeners();
         attachSaveListener();
+        applyReadOnlyState(); // 新增：应用只读状态
     }, 0);
 }
 
@@ -293,6 +299,31 @@ function attachTabListeners() {
     });
 }
 
+/** Applies disabled state to inputs and button if the source is read-only. */
+function applyReadOnlyState() {
+    if (!detailModel) return;
+    const isReadOnly = currentIsReadOnly;
+    logMessage('debug', `[DetailModel] Applying read-only state: ${isReadOnly}`);
+
+    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, .description-textarea');
+    const saveBtn = detailModel.querySelector('#saveDetailBtn');
+    const readOnlyIndicator = detailModel.querySelector('#readOnlyIndicator');
+
+    inputs.forEach(input => {
+        input.disabled = isReadOnly;
+    });
+
+    if (saveBtn) {
+        saveBtn.disabled = isReadOnly;
+        saveBtn.style.display = isReadOnly ? 'none' : 'inline-block'; // Hide save button if read-only
+    }
+
+    if (readOnlyIndicator) {
+        readOnlyIndicator.style.display = isReadOnly ? 'inline' : 'none'; // Show indicator if read-only
+    }
+}
+
+
 /** Attaches the event listener to the save button. */
 function attachSaveListener() {
     const saveBtn = detailModel.querySelector('#saveDetailBtn');
@@ -300,6 +331,13 @@ function attachSaveListener() {
 
     if (saveBtn) {
         saveBtn.onclick = async () => {
+            // --- Read-only Check ---
+            if (currentIsReadOnly) {
+                logMessage('warn', `[DetailModel] 保存操作被阻止，因为数据源是只读的 (Model: ${currentModel?.name})`);
+                return; // Do not proceed if read-only
+            }
+            // ---
+
             // Task 4: Click Event Logging
             logMessage('info', `[UI] 点击了详情弹窗的保存按钮 (Model: ${currentModel?.name})`);
 
@@ -384,7 +422,17 @@ function attachSaveListener() {
                 // Task 1: Error Logging
                 logMessage('error', `[DetailModel] API 保存模型失败: ${updatedModelData.name}, 耗时: ${saveDuration}ms`, e.message, e.stack, e);
                 if (feedbackEl) {
-                    feedbackEl.textContent = t('detail.saveFail', { message: e.message });
+                    // --- ReadOnlyError Handling ---
+                    // 检查错误名称是否为我们定义的 ReadOnlyError
+                    // 注意：由于错误可能跨进程传递，直接检查 e.name === 'ReadOnlyError' 可能不可靠。
+                    // 更好的方法是检查错误消息或约定一个特定的错误代码。
+                    // 这里我们暂时依赖错误消息中包含 "read-only" 或 "只读"。
+                    if (e.message && (e.message.includes('read-only') || e.message.includes('只读'))) {
+                         feedbackEl.textContent = t('errors.readOnlyDataSource'); // 使用新的 i18n key
+                    } else {
+                         feedbackEl.textContent = t('detail.saveFail', { message: e.message });
+                    }
+                    // --- End ReadOnlyError Handling ---
                     feedbackEl.className = 'Model-feedback feedback-error';
                 }
                 saveBtn.disabled = false; // Re-enable button on error

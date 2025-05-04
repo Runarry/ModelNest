@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('api', {
   // Listen for config updates from main process
   onConfigUpdated: (callback) => ipcRenderer.on('config-updated', callback),
   openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'), // Add open folder dialog API
+  getAllSourceConfigs: () => ipcRenderer.invoke('getAllSourceConfigs'), // Add getAllSourceConfigs API
 
   // --- Updater API ---
   checkForUpdate: () => ipcRenderer.invoke('updater.checkForUpdate'),

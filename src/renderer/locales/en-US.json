@@ -2,6 +2,7 @@
   "appTitle": "ModelNest Model Management",
   "appName": "ModelNest",
   "loadingModels": "Loading model data...",
+  "noModelsFound": "Model not found.",
   "viewCard": "Card View",
   "viewList": "List View",
   "all": "All",
@@ -9,6 +10,8 @@
   "showLess": "Less",
   "filterAll": "All",
   "uncategorized": "Uncategorized",
+"addModel": "Add Model",
+  "sourceIsReadOnlyCannotAdd": "Source is read-only, cannot add model",
   "tooltip": {
     "toggleTheme": "Toggle Theme",
     "settings": "Settings"
@@ -172,7 +175,12 @@
       "passwordLabel": "Password",
       "passwordPlaceholder": "Enter new password to change",
       "addSource": "Add Source",
-      "saveSource": "Save Source"
+      "saveSource": "Save Source",
+      "readOnlyLabel": "Read-Only"
     }
-  }
+  },
+  "errors": {
+    "readOnlyDataSource": "Operation failed: The data source is read-only."
+  },
+  "readOnlyMode": "Read-Only Mode"
 }

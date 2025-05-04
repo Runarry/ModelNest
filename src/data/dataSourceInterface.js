@@ -1,5 +1,14 @@
 // src/data/dataSourceInterface.js
 const log = require('electron-log');
+
+// Define custom error for read-only operations
+class ReadOnlyError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = 'ReadOnlyError';
+  }
+}
+
 // 导入具体的数据源实现（移至 getDataSourceInstance 内部）
 const { LocalDataSource } = require('./localDataSource');
 const { WebDavDataSource } = require('./webdavDataSource');
@@ -114,6 +123,14 @@ async function writeModelJson(sourceConfig, model, dataToWrite) {
     const filePath = model.jsonPath;
 
     log.info(`[DataSourceInterface] Attempting to write model JSON for sourceId: ${sourceId}, path: ${filePath}`);
+
+    // --- Read-only check START ---
+    if (sourceConfig.readOnly === true) { // Explicitly check for true
+        const errorMsg = `Data source '${sourceConfig.name || sourceId}' is read-only. Write operation denied for path: ${filePath}`;
+        log.warn(`[DataSourceInterface] ${errorMsg}`);
+        throw new ReadOnlyError(errorMsg);
+    }
+    // --- Read-only check END ---
 
     try {
         // 获取数据源实例

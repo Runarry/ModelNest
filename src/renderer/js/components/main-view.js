@@ -1,6 +1,6 @@
 import { clearChildren, setLoading, imageObserver, loadImage } from '../utils/ui-utils.js';
 import { t } from '../core/i18n.js'; // 导入 i18n 函数
-import { logMessage, listModels, listSubdirectories } from '../apiBridge.js'; // 导入 API 桥接
+import { logMessage, listModels, listSubdirectories,getAllSourceConfigs } from '../apiBridge.js'; // 导入 API 桥接
 
 // ===== DOM Element References =====
 // These might be passed during initialization or queried within functions
@@ -18,6 +18,8 @@ let displayMode = 'card'; // 'card' or 'list'
 let currentDirectory = null; // Currently selected directory
 let subdirectories = []; // List of subdirectories for the current source
 let currentSourceId = null; // Keep track of the currently selected source ID
+let allSourceConfigs = []; // 新增：存储所有数据源的完整配置
+let currentSourceConfig = null; // 新增：存储当前选定数据源的配置
 
 // ===== Initialization =====
 
@@ -78,7 +80,37 @@ let _showDetail = (model) => {
 };
 
 
-// ===== Data Loading =====
+// ===== UI Update Functions =====
+
+/**
+ * Updates UI elements related to write actions based on the read-only status.
+ * @param {boolean} isReadOnly - Whether the current source is read-only.
+ */
+function updateWriteActionUI(isReadOnly) {
+    // 假设“添加模型”按钮的 ID 是 'add-model-button'
+    // TODO: 未来可以在这里添加对其他写入操作 UI（如添加、删除、重命名按钮）的控制
+    // 目前没有 'add-model-button'，因此移除相关代码。
+    // 未来可以在这里添加对其他写入操作 UI（如删除、重命名按钮）的控制
+}
+
+// ===== Data Loading & Source Management =====
+
+/**
+ * Fetches all source configurations and stores them.
+ * @returns {Promise<void>}
+ */
+async function fetchAndStoreSourceConfigs() {
+    try {
+        logMessage('info', '[MainView] 开始获取所有数据源配置');
+        // 假设 apiBridge 提供了 getAllSourceConfigs 方法
+        const configs = await getAllSourceConfigs();
+        allSourceConfigs = configs || [];
+        logMessage('info', `[MainView] 获取到 ${allSourceConfigs.length} 个数据源配置`);
+    } catch (error) {
+        logMessage('error', '[MainView] 获取所有数据源配置失败:', error);
+        allSourceConfigs = []; // 出错时清空
+    }
+}
 
 /**
  * Loads models for a given source and optional directory.
@@ -128,13 +160,20 @@ export async function loadModels(sourceId, directory = null) {
 
 /**
  * Renders the source options in the source select dropdown.
- * @param {Array<object>} sourcesData - Array of source objects {id, name, type}.
+ * @param {Array<object>} sourcesData - Array of source objects {id, name, type}. (Note: This might become redundant if we fetch configs separately)
  */
-export function renderSources(sourcesData) {
+export async function renderSources(sourcesData) { // Make async to fetch configs
   if (!sourceSelect) return;
+
+  // --- 获取并存储完整配置 ---
+  await fetchAndStoreSourceConfigs();
+  // 使用 allSourceConfigs 作为数据源，而不是传入的 sourcesData，以确保包含 readOnly 标志
+  const sourcesToRender = allSourceConfigs;
+  // ---
+
   const currentVal = sourceSelect.value; // Preserve selection if possible
   clearChildren(sourceSelect);
-  sourcesData.forEach(src => {
+  sourcesToRender.forEach(src => {
     const option = document.createElement('option');
     option.value = src.id;
     option.textContent = src.name;
@@ -152,7 +191,10 @@ export function renderSources(sourcesData) {
   } else if (sourcesData.length > 0) {
       sourceSelect.value = sourcesData[0].id;
       // Trigger change event manually if selection defaulted to first
-      handleSourceChange();
+      handleSourceChange(); // This will call updateWriteActionUI
+  } else {
+      // No sources available, ensure write actions are disabled
+      updateWriteActionUI(true);
   }
 }
 
@@ -282,9 +324,11 @@ function renderModels() {
     card.addEventListener('click', () => {
         // Task 4: Click Event Logging
         logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
-        // Call the callback provided during initialization
+        // Call the callback provided during initialization, passing the read-only status
         if (_showDetail) {
-            _showDetail(model);
+            const isReadOnly = currentSourceConfig?.readOnly === true; // Get read-only status
+            logMessage('debug', `[MainView] 打开详情，传递 readOnly 状态: ${isReadOnly}`);
+            _showDetail(model, currentSourceId, isReadOnly); // Pass sourceId and isReadOnly
         } else {
             // Task 1: Error Logging (Potential failure point)
             logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
@@ -362,6 +406,19 @@ async function handleSourceChange() {
   const selectedSourceId = sourceSelect.value;
   // Task 4: Click Event Logging (Implicit via change)
   logMessage('info', `[UI] 切换数据源: ${selectedSourceId || '无'} (选择器值: ${sourceSelect.options[sourceSelect.selectedIndex]?.text})`);
+
+  // --- 更新当前数据源配置 ---
+  currentSourceConfig = allSourceConfigs.find(config => config.id === selectedSourceId) || null;
+  if (currentSourceConfig) {
+      logMessage('info', `[MainView] 当前数据源配置已更新: ${currentSourceConfig.name}, ReadOnly: ${currentSourceConfig.readOnly}`);
+  } else if (selectedSourceId) {
+      logMessage('warn', `[MainView] 未找到 ID 为 ${selectedSourceId} 的数据源配置`);
+  }
+  // ---
+  // 更新写入操作相关的 UI 状态
+  updateWriteActionUI(currentSourceConfig?.readOnly ?? false);
+  // ---
+
   if (selectedSourceId) {
     // Reset directory and load models for the new source
     // loadModels already has logging

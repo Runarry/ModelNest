@@ -39,6 +39,7 @@ export const saveModel = api.saveModel;
 export const clearImageCache = api.clearImageCache;
 export const getAppVersion = api.getAppVersion;
 export const getPackageInfo = api.getPackageInfo; // 导出 getPackageInfo
+export const getAllSourceConfigs = api.getAllSourceConfigs;
 // You might also export the entire api object if needed,
 // but exporting individual functions is generally preferred for clarity.
 // export default api;

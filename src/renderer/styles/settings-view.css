@@ -301,9 +301,53 @@
 #addSourceForm .form-actions {
      border-top: 1px solid var(--border-color);
      padding-top: 15px;
-}
+ }
 
-/* Feedback message styling */
+ /* Enhanced Checkbox Styling */
+ .edit-form .form-check,
+ #addSourceForm .form-check {
+     display: flex;
+     flex-direction: row;
+     align-items: center;
+     gap: 10px;
+     margin-bottom: 15px;
+     padding: 8px 12px;
+     border-radius: 6px;
+     transition: background-color 0.2s ease;
+     cursor: pointer;
+ }
+
+ .edit-form .form-check:hover,
+ #addSourceForm .form-check:hover {
+     background-color: var(--hover-bg);
+ }
+
+ .edit-form .form-check input[type="checkbox"],
+ #addSourceForm .form-check input[type="checkbox"] {
+     width: 18px;
+     height: 18px;
+     margin: 0;
+     cursor: pointer;
+     accent-color: var(--primary-color);
+ }
+
+ .edit-form .form-check label,
+ #addSourceForm .form-check label {
+     margin: 0;
+     font-weight: 500;
+     color: var(--text-color);
+     cursor: pointer;
+     user-select: none;
+ }
+
+ .edit-form .form-check input[type="checkbox"]:focus-visible,
+ #addSourceForm .form-check input[type="checkbox"]:focus-visible {
+     outline: 2px solid var(--primary-color);
+     outline-offset: 2px;
+ }
+
+
+ /* Feedback message styling */
 .feedback {
     font-size: 0.9em;
     padding: 8px 10px;

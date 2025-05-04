@@ -55,6 +55,13 @@ class ConfigService {
       // Ensure default keys exist if missing from file
       loadedConfig = { ...deepClone(DEFAULT_CONFIG), ...loadedConfig };
 
+      // Ensure each modelSource has a readOnly property (defaulting to false)
+      if (Array.isArray(loadedConfig.modelSources)) {
+        loadedConfig.modelSources.forEach(source => {
+          source.readOnly = source.readOnly ?? false; // Default to false if undefined or null
+        });
+      }
+
       // Convert relative local paths to absolute paths
       // Migrated from main.js loadConfig
       if (Array.isArray(loadedConfig.modelSources)) {

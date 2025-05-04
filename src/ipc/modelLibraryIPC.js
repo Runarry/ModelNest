@@ -86,6 +86,18 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
     }
   });
 
+// --- Source Config Fetching ---
+  ipcMain.handle('getAllSourceConfigs', async () => {
+    log.info('[IPC] getAllSourceConfigs 请求');
+    try {
+      // 直接调用 DataSourceService 获取所有数据源配置
+      return await services.dataSourceService.getAllSourceConfigs();
+    } catch (error) {
+      log.error('[IPC] 调用 dataSourceService.getAllSourceConfigs 失败:', error.message, error.stack);
+      // 将错误传递给渲染进程
+      throw error;
+    }
+  });
   log.info('[IPC] Model Library IPC Handlers 初始化完成');
 }
 
