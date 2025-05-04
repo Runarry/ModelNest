@@ -73,20 +73,47 @@ body {
 
 /* Top Menu Bar Styles */
 .top-menu-bar {
-  padding: 0.8rem 0; /* Vertical padding */
+  padding: 0.5rem 0; /* 减小垂直内边距 */
   display: flex;
-  align-items: center; /* Align items vertically */
-  justify-content: space-between; /* Title left, settings right */
-  margin-bottom: 1.5rem; /* Add margin below top bar */
-  border-bottom: 1px solid var(--border-color); /* Add separator */
+  flex-direction: column; /* 垂直排列 */
+  gap: 0.8rem; /* 增加行之间的间距 */
+  margin-bottom: 1rem; /* 下方间距 */
+  border-bottom: 1px solid var(--border-color); /* 底部分隔线 */
 }
 
-/* Style for the title within the top bar */
+/* 顶部行样式 */
+.top-row {
+  display: flex;
+  justify-content: space-between; /* 两端对齐 */
+  align-items: center; /* 垂直居中 */
+}
+
+/* 底部行样式 */
+.bottom-row {
+  display: flex;
+  justify-content: space-between; /* 两端对齐 */
+  align-items: center; /* 垂直居中 */
+}
+
+/* 标题样式 */
 .top-menu-bar h1 {
-  margin: 0; /* Remove default margin */
-  font-size: 1.6rem; /* Adjust size if needed */
+  margin: 0; /* 移除默认外边距 */
+  font-size: 1.6rem; /* 字体大小 */
   color: var(--primary-color);
-  /* flex-shrink: 0; No longer needed */
+  flex-shrink: 0; /* 防止收缩 */
+}
+
+/* 模型库选择器样式 */
+.source-selector {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0; /* 防止收缩 */
+}
+
+.top-source-selector #sourceSelect {
+  max-width: 300px;
+  width: auto;
 }
 
 /* Removed styles for .source-selector and .top-bar-label in top bar */
@@ -95,11 +122,25 @@ body {
   /* General style for the select, width/max-width might be set below */
 }
 
+/* 空白填充元素，使筛选区域靠右对齐 */
+.spacer {
+  flex-grow: 1; /* 占据所有可用空间 */
+}
+
+/* 筛选区域样式 */
+.filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-shrink: 0; /* 防止收缩 */
+}
+
+/* 设置按钮样式 */
 .settings-controls {
   display: flex;
-  gap: 0.8rem; /* Spacing between language select and theme button */
+  gap: 0.5rem; /* 按钮之间的间距 */
   align-items: center;
-  /* flex-shrink: 0; No longer needed */
+  flex-shrink: 0; /* 防止收缩 */
 }
 
 /* Main Layout Styles */
@@ -127,15 +168,18 @@ body {
   white-space: nowrap;
 }
 
-/* Styles for the header containing source selector and filters */
-.filter-header {
+/* 视图切换按钮组样式 */
+.view-toggle {
   display: flex;
-  justify-content: space-between; /* Source selector left, filters right */
+  gap: 0.2rem; /* 按钮之间的间距 */
   align-items: center;
-  margin-bottom: 1.5rem; /* Adjusted margin */
-  gap: 1rem; /* Add some gap between left and right sections */
-  /* padding-bottom: 1rem; Removed padding */
-  /* border-bottom: 1px solid var(--border-color); Removed border */
+}
+
+/* 下拉框样式 */
+#filterSelect, #sourceSelect {
+  padding: 0.4rem 0.8rem; /* 内边距 */
+  border-radius: 4px;
+  border: 1px solid var(--border-color);
 }
 
 /* Remove standalone h1 style if not used elsewhere */
@@ -188,29 +232,25 @@ select:hover {
   gap: 1.5rem;
 }
 
-/* Styles for the source selector now inside filter-header */
-.filter-header .source-selector {
+/* Source selector styles now applied to top-source-selector */
+
+/* 隐藏原始位置的筛选区域 */
+.filter-header {
+  display: none;
+}
+
+/* 视图按钮样式 */
+.view-btn {
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
-  gap: 0.5rem; /* Space between label and select */
-}
-
-.filter-header .source-selector #sourceSelect {
-   max-width: 300px; /* Or adjust as needed */
-   width: auto; /* Allow it to shrink if needed */
-}
-
-.filters {
-  display: flex;
-  gap: 0.8rem; /* Reduced gap for better spacing */
-  align-items: center;
-  /* No justification needed here, parent handles it */
-}
-
-.view-toggle {
-  display: flex;
-  gap: 0.5rem;
-  /* margin-left: 0.5rem; Removed margin */
+  justify-content: center;
+  background: var(--card-bg);
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
 }
 
 .view-btn {
@@ -577,6 +617,8 @@ select:hover {
  flex-grow: 1;
  /* min-width: 0; Replaced by specific min-width below */
  min-width: calc(4 * 220px + 3 * 1rem); /* Enforce min width for 4 cards + 3 gaps */
+ position: relative;
+ padding-top: 0; /* 移除顶部内边距 */
 }
 
 /* 响应式调整 */
