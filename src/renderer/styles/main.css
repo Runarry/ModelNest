@@ -228,8 +228,8 @@ select:hover {
 }
 
 #mainSection {
-  display: grid;
-  gap: 1.5rem;
+  /* Removed incorrect grid layout */
+  gap: 1.5rem; /* Keep gap if needed, or remove if not applicable */
 }
 
 /* Source selector styles now applied to top-source-selector */
@@ -566,10 +566,11 @@ select:hover {
 
 /* 目录 Tab 栏样式 */
 .content-layout {
- display: flex;
- height: 100%; /* Take full height of parent (.content-area) */
- width: 100%; /* Take full width of parent (.content-area) */
- /* Removed gap, use margin on directory-tabs instead */
+  display: flex;
+  height: 100%; /* Take full height of parent (.content-area) */
+  width: 100%; /* Take full width of parent (.content-area) */
+  min-width: 0; /* 防止flex布局最小宽度限制影响宽度计算 */
+  /* Removed gap, use margin on directory-tabs instead */
 }
 
 .directory-tabs {
@@ -617,12 +618,13 @@ select:hover {
 }
 
 .content-main {
- flex: 1; /* Take remaining horizontal space */
- /* Removed min-width */
- position: relative;
- padding-top: 0;
- height: 100%; /* Take full height */
- overflow-y: auto; /* Enable vertical scrolling ONLY for this area */
+  flex: 1; /* Take remaining horizontal space */
+  min-width: 0; /* Prevent flex min-width from affecting width calculation */
+  position: relative;
+  padding-top: 0;
+  height: 100%; /* Take full height */
+  overflow-y: auto; /* Enable vertical scrolling ONLY for this area */
+  scrollbar-gutter: stable; /* Reserve space for scrollbar to prevent layout shifts */
 }
 
 /* 响应式调整 */

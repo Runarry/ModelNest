@@ -274,7 +274,7 @@ function renderModels() {
 
     // --- Content (Name, Type) ---
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'model-content';
+    contentDiv.className = 'model-info'; // Corrected class name to match CSS
 
     const nameH3 = document.createElement('h3');
     nameH3.className = 'model-name';
