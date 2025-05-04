@@ -112,7 +112,7 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
     triggerWord: trainedWords,
     description: desc || "",
 
-    fromUrl:`https://civitai.com/models/${modelId}?modelVersionId=${modelVersionId}`,
+    fromUrl:`https://civitai.com/models/${modelId}?modelVersionId=${id}`,
     from:`Civita`,
     versionDescription: modelVersionInfo.description||null,
     tags: modelInfo.tags,
