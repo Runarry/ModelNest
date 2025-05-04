@@ -29,4 +29,4 @@ publish:
   provider: github
   owner: Runarry 
   repo: ModelNest 
-  releaseType: prerelease # 可选: draft, prerelease, release (默认)
+  releaseType: release # 可选: draft, prerelease, release (默认)
