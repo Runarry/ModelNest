@@ -70,7 +70,6 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   }
 
   // 3. 主模型信息、标签和所有版本
-  const model = versionData.model || {};
   const images = versionData.images || [];
   let modelVersionInfo = null;
   let modelInfo = null;
