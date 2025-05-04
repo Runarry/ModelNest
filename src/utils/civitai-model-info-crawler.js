@@ -17,14 +17,20 @@ const log = require('electron-log');
  * @param {string} filePath - 文件路径
  * @returns {Promise<string>} - 计算得到的十六进制哈希字符串
  */
-function calcFileHash(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('data', chunk => hash.update(chunk));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', reject);
-  });
+async function calcFileHash(filePath) {
+  const hash = crypto.createHash('sha256');
+  const stream = fs.createReadStream(filePath);
+  // 使用 for await...of 处理异步流，更简洁
+  try {
+    for await (const chunk of stream) {
+      hash.update(chunk);
+    }
+    return hash.digest('hex');
+  } catch (error) {
+    // 捕获流读取错误
+    console.error('Error calculating file hash:', error);
+    throw error; // 重新抛出错误，以便调用者处理
+  }
 }
 
 /**
