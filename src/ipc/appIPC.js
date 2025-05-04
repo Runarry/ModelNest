@@ -1,6 +1,5 @@
 const { ipcMain, BrowserWindow, app } = require('electron');
 const log = require('electron-log');
-const { clearCache } = require('../common/imageCache');
 /**
  * 初始化应用级别的 IPC Handlers
  * @param {object} services - 包含所有服务的对象
@@ -63,11 +62,14 @@ function initializeAppIPC(services) {
   ipcMain.handle('clear-image-cache', async () => {
     log.info('[IPC] clear-image-cache 请求');
     try {
-      await clearCache();
-      log.info('[IPC] Image cache cleared successfully.');
+      if (!services.imageService) {
+        throw new Error('ImageService 未初始化');
+      }
+      await services.imageService.clearCache();
+      log.info('[IPC] Image cache cleared successfully via ImageService.');
       return { success: true };
     } catch (error) {
-      log.error('[IPC] Failed to clear image cache:', error);
+      log.error('[IPC] Failed to clear image cache via ImageService:', error);
       return { success: false, error: error.message };
     }
   });

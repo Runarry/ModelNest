@@ -160,6 +160,21 @@ class ImageService {
             // throw error;
         }
     }
+
+    /**
+     * 清除图片缓存
+     * @returns {Promise<void>}
+     */
+    async clearCache() {
+        log.info('[ImageService] clearCache called. Clearing image cache...');
+        try {
+            await imageCache.clearCache();
+            log.info('[ImageService] Image cache cleared successfully.');
+        } catch (error) {
+            log.error('[ImageService] Failed to clear image cache:', error);
+            throw error;
+        }
+    }
 }
 
 module.exports = ImageService;
