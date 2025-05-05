@@ -89,6 +89,7 @@ function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, par
     sourceId: sourceId, // 添加 sourceId
     name: base,
     modelType: parsedJsonDetail.modelType || path.extname(modelFileItem.filename).replace('.', '').toUpperCase(),
+    tags: parsedJsonDetail.tags|| [],
     description: parsedJsonDetail.description || '',
     image: imageFileItem ? imageFileItem.filename : '', // 使用 imageFileItem
     file: modelFileItem.filename,
