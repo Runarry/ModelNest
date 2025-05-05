@@ -1,6 +1,15 @@
 // src/renderer/js/components/crawl-status-modal.js
 import { t } from '../core/i18n.js';
-import { logMessage } from '../apiBridge.js';
+import {
+    logMessage,
+    startCrawl,
+    pauseCrawl,
+    resumeCrawl,
+    cancelCrawl,
+    getCrawlStatus, // Although commented out below, import for consistency
+    onCrawlStatusUpdate,
+    removeCrawlStatusUpdateListener
+} from '../apiBridge.js';
 
 export class CrawlStatusModal {
     constructor() {
@@ -137,7 +146,7 @@ export class CrawlStatusModal {
         // 不再主动获取初始状态，依赖 onCrawlStatusUpdate 推送
         // try {
         //     logMessage('debug', '[CrawlStatusModal] Getting initial crawl status...');
-        //     const initialStatus = await window.api.getCrawlStatus();
+        //     const initialStatus = await getCrawlStatus(); // Use apiBridge function
         //     logMessage('info', '[CrawlStatusModal] Initial status received:', initialStatus);
         //     this.updateStatus(initialStatus); // 更新为实际初始状态
         // } catch (error) {
@@ -148,7 +157,7 @@ export class CrawlStatusModal {
 
         // 注册状态更新监听器
         logMessage('debug', '[CrawlStatusModal] Registering status update listener.');
-        window.api.onCrawlStatusUpdate(this.boundUpdateStatus);
+        onCrawlStatusUpdate(this.boundUpdateStatus); // Use apiBridge function
     }
 
     hide() {
@@ -159,10 +168,10 @@ export class CrawlStatusModal {
         // 移除状态更新监听器
         logMessage('debug', '[CrawlStatusModal] Removing status update listener.');
         // 假设 preload.js 暴露了 remove 方法，或者 IPC 能处理重复注册
-        if (window.api.removeCrawlStatusUpdateListener) {
-             window.api.removeCrawlStatusUpdateListener(this.boundUpdateStatus);
+        if (removeCrawlStatusUpdateListener) { // Use apiBridge function
+             removeCrawlStatusUpdateListener(this.boundUpdateStatus); // Use apiBridge function
         } else {
-            logMessage('warn', '[CrawlStatusModal] window.api.removeCrawlStatusUpdateListener not available.');
+            logMessage('warn', '[CrawlStatusModal] removeCrawlStatusUpdateListener not available via apiBridge.');
             // 如果没有移除方法，可能需要确保 onCrawlStatusUpdate 能处理重复监听或在 preload 中管理
         }
     }
@@ -273,9 +282,9 @@ export class CrawlStatusModal {
         this.cancelButton.disabled = false; // 开始后可以取消
 
         // 添加日志，确认传递的参数
-        logMessage('debug', `[CrawlStatusModal] Calling window.api.startCrawl with sourceId: ${this.currentSourceId}, directory: ${this.currentDirectory}`);
+        logMessage('debug', `[CrawlStatusModal] Calling startCrawl via apiBridge with sourceId: ${this.currentSourceId}, directory: ${this.currentDirectory}`);
 
-        window.api.startCrawl(this.currentSourceId, this.currentDirectory).catch(err => {
+        startCrawl(this.currentSourceId, this.currentDirectory).catch(err => { // Use apiBridge function
             logMessage('error', '[CrawlStatusModal] Failed to start crawl:', err);
             // API 调用失败，恢复按钮状态并显示错误
             this.updateStatus({ status: 'ERROR', error: t('crawlModal.error.startFailed') });
@@ -292,13 +301,13 @@ export class CrawlStatusModal {
         this.pauseResumeButton.disabled = true; // 禁用按钮直到状态更新
 
         if (action === 'pause') {
-            window.api.pauseCrawl().catch(err => {
+            pauseCrawl().catch(err => { // Use apiBridge function
                 logMessage('error', '[CrawlStatusModal] Failed to pause crawl:', err);
                 this.updateStatus({ status: 'ERROR', error: t('crawlModal.error.pauseFailed') });
                 this.pauseResumeButton.disabled = false; // 恢复按钮
             });
         } else if (action === 'resume') {
-            window.api.resumeCrawl().catch(err => {
+            resumeCrawl().catch(err => { // Use apiBridge function
                 logMessage('error', '[CrawlStatusModal] Failed to resume crawl:', err);
                  this.updateStatus({ status: 'ERROR', error: t('crawlModal.error.resumeFailed') });
                  this.pauseResumeButton.disabled = false; // 恢复按钮
@@ -314,7 +323,7 @@ export class CrawlStatusModal {
         this.pauseResumeButton.disabled = true;
         this.cancelButton.disabled = true;
 
-        window.api.cancelCrawl()
+        cancelCrawl() // Use apiBridge function
             .then(() => {
                 logMessage('info', '[CrawlStatusModal] Crawl cancelled successfully via API.');
             })
