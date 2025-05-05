@@ -201,7 +201,8 @@
       "start": "Start",
       "pause": "Pause",
       "resume": "Resume",
-      "cancel": "Cancel"
+      "cancel": "Cancel",
+      "close": "Close"
     },
     "error": {
       "getStatusFailed": "Failed to get status",

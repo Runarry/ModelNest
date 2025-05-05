@@ -129,7 +129,7 @@ export class CrawlStatusModal {
         logMessage('info', `[CrawlStatusModal] Showing modal for source: ${sourceId}, directory: ${directory ?? 'root'}`);
         this.currentSourceId = sourceId; // 存储 ID
         this.currentDirectory = directory; // 存储目录
-        this.modalElement.style.display = 'block'; // 或者 'flex'，取决于 CSS
+        this.modalElement.style.display = 'flex'; // 或者 'flex'，取决于 CSS
 
         // 重置到初始状态显示 (Idle)
         this.updateStatus({ status: 'idle', processed: 0, total: 0, currentModel: null, error: null }); // 改为小写 'idle'
@@ -224,7 +224,9 @@ export class CrawlStatusModal {
                 statusText = t('crawlModal.status.finished', { total: totalCount }); // Use correct variable
                 this.startButton.disabled = false; // 完成后可以重新开始
                 this.pauseResumeButton.style.display = 'none';
-                this.cancelButton.disabled = true; // 完成后不能取消
+                this.cancelButton.disabled = false; // 完成后允许点击关闭
+                this.cancelButton.textContent = t('crawlModal.button.close'); // 将按钮文本改为“关闭”
+                this.cancelButton.dataset.i18nKey = 'crawlModal.button.close'; // 更新 i18n key
                 // 可以在几秒后自动关闭，或者让用户手动关闭
                 // setTimeout(() => this.hide(), 3000);
                 break;

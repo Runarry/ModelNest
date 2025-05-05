@@ -858,14 +858,15 @@ select:hover {
   height: 100%;
   overflow: auto; /* Enable scroll if needed */
   background-color: rgba(0, 0, 0, 0.6); /* Black w/ opacity */
-  display: none; /* Hidden by default */
+  /* Use flexbox for centering */
+  display: flex;
   justify-content: center; /* Center horizontally */
   align-items: center; /* Center vertically */
 }
 
 #crawlStatusModal .modal-content {
   background-color: var(--card-bg);
-  margin: auto; /* Center in the viewport/modal */
+  /* margin: auto; /* Removed for flex centering */
   padding: 25px 30px; /* More padding */
   border: 1px solid var(--border-color);
   border-radius: 8px;

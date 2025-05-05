@@ -201,7 +201,8 @@
       "start": "开始",
       "pause": "暂停",
       "resume": "恢复",
-      "cancel": "取消"
+      "cancel": "取消",
+      "close": "关闭"
     },
     "error": {
       "getStatusFailed": "获取状态失败",
