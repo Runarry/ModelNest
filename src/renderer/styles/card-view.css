@@ -124,6 +124,9 @@
   border-radius: 0 0 8px 8px; /* Radius for bottom corners if needed */
   position: relative;
   transition: max-height 0.3s ease-out; /* Smooth transition for expansion */
+  min-width: 180;
+  min-height: 100;
+  align-items: flex-start;
 }
 
 /* Style for hidden tags */
@@ -163,7 +166,7 @@
   border-radius: 10px; /* Adjusted radius */
   font-size: 0.65rem; /* Adjusted font size */
   font-weight: 500;
-  line-height: 1.2;
   white-space: nowrap;
+  align-self: flex-start;
 }
 
