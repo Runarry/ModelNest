@@ -112,7 +112,16 @@
       "clearing": "Clearing cache...",
       "clearSuccess": "Image cache cleared successfully.",
       "clearError": "Failed to clear image cache: {message}",
-      "unknownError": "Unknown error occurred"
+      "unknownError": "Unknown error occurred",
+      "currentSizeLabel": "Current Cache Size:",
+      "calculatingSize": "Calculating...",
+      "sizeError": "Failed to get size",
+      "preferredFormatLabel": "Preferred Cache Format:",
+      "formatOriginal": "Original",
+      "formatJPEG": "JPEG",
+      "formatPNG": "PNG",
+      "formatWebP": "WebP",
+      "formatSaveSuccess": "Cache format saved."
     },
     "updates": {
       "title": "Updates",

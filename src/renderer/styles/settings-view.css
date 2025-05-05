@@ -470,6 +470,33 @@
   box-sizing: border-box;
   font-size: 1em;
 }
+/* Style for the read-only cache size display */
+#currentCacheSizeDisplay {
+  padding: 10px 0; /* Align vertically with inputs/selects */
+  font-weight: 500;
+  color: var(--text-color); /* Use standard text color */
+}
+#currentCacheSizeDisplay.error {
+    color: var(--danger-color); /* Use danger color if there's an error */
+    font-style: italic;
+}
+/* Style for the format select dropdown */
+#imageCacheFormatSelect {
+  width: 150px; /* Match size input width */
+  padding: 10px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background-color: var(--input-bg);
+  color: var(--text-color);
+  box-sizing: border-box;
+  font-size: 1em;
+}
+/* Ensure feedback area for format aligns correctly */
+#imageCacheFormatFeedback {
+    grid-column: 2; /* Align with the select dropdown in the grid */
+    margin-top: -10px; /* Reduce space above feedback */
+    margin-bottom: 10px; /* Add space below feedback */
+}
 #settingsImageCache .control-group {
   display: flex;
   align-items: center;

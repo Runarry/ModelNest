@@ -21,7 +21,7 @@ async function initializeServices() {
   const modelService = new ModelService(dataSourceService);
 
   // 4. Initialize ImageService, injecting DataSourceService
-  const imageService = new ImageService(dataSourceService);
+  const imageService = new ImageService(dataSourceService, configService);
 
   // 5. Initialize UpdateService
   const updateService = new UpdateService();

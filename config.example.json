@@ -21,7 +21,6 @@
   "imageCache": {
     "debug": true,
     "compressQuality": 80,
-    "compressFormat": "jpeg",
     "maxCacheSizeMB": 500
   }
 }

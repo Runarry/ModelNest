@@ -112,7 +112,16 @@
       "clearing": "正在清除缓存...",
       "clearSuccess": "图片缓存已成功清除。",
       "clearError": "清除图片缓存失败：{message}",
-      "unknownError": "发生未知错误"
+      "unknownError": "发生未知错误",
+      "currentSizeLabel": "当前缓存大小:",
+      "calculatingSize": "计算中...",
+      "sizeError": "获取大小失败",
+      "preferredFormatLabel": "首选缓存格式:",
+      "formatOriginal": "原始格式",
+      "formatJPEG": "JPEG",
+      "formatPNG": "PNG",
+      "formatWebP": "WebP",
+      "formatSaveSuccess": "缓存格式已保存。"
     },
     "updates": {
       "title": "更新",

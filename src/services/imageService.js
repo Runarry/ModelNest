@@ -15,11 +15,12 @@ class ImageService {
     /**
      * @param {DataSourceService} dataSourceService Instance of DataSourceService.
      */
-    constructor(dataSourceService) {
+    constructor(dataSourceService, configService) {
         if (!dataSourceService) {
             throw new Error("ImageService requires a DataSourceService instance.");
         }
         this.dataSourceService = dataSourceService;
+        this.configService = configService;
         log.info('[ImageService] Initialized');
     }
 
@@ -44,8 +45,11 @@ class ImageService {
 
             if (cachedBuffer) {
                 // 缓存命中
-                const mimeType = imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg';
-                log.info(`[ImageService] Cache HIT for ${libraryId}/${imageName}. Returning cached buffer.`);
+                // TODO: MIME type determination needs update. imageCache.getCache should ideally return mimeType.
+                // Currently returning a generic type as we cannot reliably determine it from the old compressFormat config.
+                const mimeType = 'application/octet-stream';
+                log.warn(`[ImageService] Cache HIT for ${libraryId}/${imageName}. MIME type determination needs update. Returning generic type.`);
+                log.info(`[ImageService] Returning cached buffer.`);
                 const duration = Date.now() - startTime;
                 log.info(`[ImageService] <<< getImage END (Cache Hit) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
                 return { data: cachedBuffer, mimeType: mimeType };
@@ -85,38 +89,55 @@ class ImageService {
             log.info(`[ImageService] Successfully fetched source image buffer for ${libraryId}/${imageName}. Size: ${(sourceBuffer.length / 1024).toFixed(1)}KB, Original Mime: ${originalMimeType || 'N/A'}`);
 
 
-            // 3. 将原始 Buffer 存入缓存（imageCache.setCache 会进行处理）
-            log.debug(`[ImageService] Attempting imageCache.setCache for key: ${libraryId}/${imageName}, source buffer size: ${sourceBuffer.length} bytes`);
-            try {
-                await imageCache.setCache(libraryId, imageName, sourceBuffer);
-                log.info(`[ImageService] imageCache.setCache call completed successfully for ${libraryId}/${imageName}`);
-            } catch (setCacheError) {
-                log.error(`[ImageService] imageCache.setCache failed for ${libraryId}/${imageName}:`, setCacheError.message, setCacheError.stack);
-                // 即使 setCache 失败，也可能需要决定是否返回原始数据或 null
-                // 这里选择继续尝试读取（万一 setCache 内部部分成功或有其他问题），但记录错误
+            // 3. 获取缓存格式配置，并决定是否缓存
+            let preferredFormat = await this.configService.getSetting('imageCache.preferredFormat'); // 获取首选格式
+            if (!preferredFormat) {
+                preferredFormat = 'Original'; // 默认值
             }
+            log.debug(`[ImageService] Preferred cache format for ${libraryId}/${imageName}: ${preferredFormat}`);
 
-
-            // 4. 再次从缓存获取处理后的图片 Buffer
-            log.debug(`[ImageService] Attempting imageCache.getCache AGAIN for key: ${libraryId}/${imageName} (after setCache)`);
-            const finalBuffer = await imageCache.getCache(libraryId, imageName);
-            log.debug(`[ImageService] imageCache.getCache (after setCache) returned for key: ${libraryId}/${imageName}. Result: ${finalBuffer ? `Buffer(${finalBuffer.length} bytes)` : 'null'}`);
-
-            if (finalBuffer) {
-                const finalMimeType = imageCache.config.compressFormat === 'webp' ? 'image/webp' : 'image/jpeg';
-                log.info(`[ImageService] Successfully retrieved processed buffer from cache after setCache for ${libraryId}/${imageName}.`);
+            // 如果首选格式是 'Original'，则直接返回原始数据，不进行缓存
+            if (preferredFormat === 'Original') {
+                log.info(`[ImageService] Preferred format is 'Original'. Skipping cache for ${libraryId}/${imageName}. Returning source buffer.`);
                 const duration = Date.now() - startTime;
-                log.info(`[ImageService] <<< getImage END (Cache Miss, Processed) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
-                return { data: finalBuffer, mimeType: finalMimeType };
+                log.info(`[ImageService] <<< getImage END (Original Format, No Cache) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
+                return { data: sourceBuffer, mimeType: originalMimeType || 'application/octet-stream' };
             } else {
-                // 如果 setCache 之后 getCache 仍然失败
-                log.error(`[ImageService] CRITICAL: Failed to retrieve image from cache immediately after setCache call for ${libraryId}/${imageName}. This might indicate a write/read issue or setCache failure.`);
-                // 考虑降级：返回原始 buffer？这取决于业务需求
-                // log.warn(`[ImageService] Falling back to returning original source buffer for ${libraryId}/${imageName}`);
-                // return { data: sourceBuffer, mimeType: originalMimeType || 'application/octet-stream' };
-                const duration = Date.now() - startTime;
-                log.error(`[ImageService] <<< getImage END (Failed Post-SetCache Read) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
-                return null; // 或者直接返回 null 表示失败
+                // 否则，尝试将原始 Buffer 存入缓存（imageCache.setCache 会进行处理）
+                log.debug(`[ImageService] Attempting imageCache.setCache for key: ${libraryId}/${imageName}, source buffer size: ${sourceBuffer.length} bytes, preferredFormat: ${preferredFormat}`);
+                try {
+                    // 将获取到的 preferredFormat 传递给 setCache
+                    await imageCache.setCache(libraryId, imageName, sourceBuffer, preferredFormat);
+                    log.info(`[ImageService] imageCache.setCache call completed successfully for ${libraryId}/${imageName}`);
+                } catch (setCacheError) {
+                    log.error(`[ImageService] imageCache.setCache failed for ${libraryId}/${imageName} with format ${preferredFormat}:`, setCacheError.message, setCacheError.stack);
+                    // 即使 setCache 失败，也可能需要决定是否返回原始数据或 null
+                    // 这里选择继续尝试读取（万一 setCache 内部部分成功或有其他问题），但记录错误
+                }
+
+                // 4. 再次从缓存获取处理后的图片 Buffer (无论 setCache 是否报错，都尝试读取)
+                log.debug(`[ImageService] Attempting imageCache.getCache AGAIN for key: ${libraryId}/${imageName} (after setCache attempt)`);
+                const finalBuffer = await imageCache.getCache(libraryId, imageName);
+                log.debug(`[ImageService] imageCache.getCache (after setCache attempt) returned for key: ${libraryId}/${imageName}. Result: ${finalBuffer ? `Buffer(${finalBuffer.length} bytes)` : 'null'}`);
+
+                if (finalBuffer) {
+                    // TODO: MIME type determination needs update. imageCache.getCache should ideally return mimeType.
+                    // Currently returning a generic type.
+                    const finalMimeType = 'application/octet-stream'; // Placeholder
+                    log.warn(`[ImageService] Retrieved processed buffer after setCache attempt for ${libraryId}/${imageName}. MIME type determination needs update. Returning generic type.`);
+                    log.info(`[ImageService] Successfully retrieved processed buffer from cache.`);
+                    const duration = Date.now() - startTime;
+                    log.info(`[ImageService] <<< getImage END (Cache Miss, Processed & Cached) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
+                    return { data: finalBuffer, mimeType: finalMimeType };
+                } else {
+                    // 如果 setCache 之后 getCache 仍然失败
+                    log.error(`[ImageService] CRITICAL: Failed to retrieve image from cache immediately after setCache attempt for ${libraryId}/${imageName}. This might indicate a write/read issue or setCache failure.`);
+                    // 降级：返回原始 buffer
+                    log.warn(`[ImageService] Falling back to returning original source buffer for ${libraryId}/${imageName} due to post-setCache read failure.`);
+                    const duration = Date.now() - startTime;
+                    log.error(`[ImageService] <<< getImage END (Failed Post-SetCache Read, Fallback) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
+                    return { data: sourceBuffer, mimeType: originalMimeType || 'application/octet-stream' };
+                }
             }
 
         } catch (error) {
@@ -130,7 +151,8 @@ class ImageService {
 /**
      * Updates the configuration for the underlying image cache.
      * @param {object} newCacheConfig - The new configuration object for the image cache.
-     * Expected format: { enabled: boolean, maxSizeMb: number, compress: boolean, compressFormat: string, compressQuality: number }
+     * This configuration is passed to `imageCache.setConfig`. Refer to `imageCache.js` for the exact expected format.
+     * It typically includes settings like { enabled: boolean, maxSizeMb: number, preferredFormat: string, compressQuality: number }.
      */
     updateCacheConfig(newCacheConfig) {
         log.info('[ImageService] updateCacheConfig called with new config:', newCacheConfig);

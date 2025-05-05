@@ -11,7 +11,6 @@ const DEFAULT_CONFIG = {
   imageCache: {
     maxCacheSizeMB: 200, // 默认图片缓存大小 (MB)
     compressQuality: 50, // 默认压缩质量
-    compressFormat: 'jpeg' // 默认压缩格式
     // 注意：cacheDir 通常在 imageCache.js 中基于 process.cwd() 设置，不在此处定义
   },
   locale: null, // 添加默认的 locale 配置项
@@ -98,9 +97,6 @@ class ConfigService {
       // 可以选择性地为其他 imageCache 属性添加默认值检查
       if (loadedConfig.imageCache.compressQuality === undefined || loadedConfig.imageCache.compressQuality === null) {
           loadedConfig.imageCache.compressQuality = DEFAULT_CONFIG.imageCache.compressQuality;
-      }
-       if (loadedConfig.imageCache.compressFormat === undefined || loadedConfig.imageCache.compressFormat === null) {
-          loadedConfig.imageCache.compressFormat = DEFAULT_CONFIG.imageCache.compressFormat;
       }
       // --- 结束：确保 imageCache 配置和默认大小 ---
 

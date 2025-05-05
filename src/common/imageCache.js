@@ -17,13 +17,13 @@ const os = require('os');
 const sharp = require('sharp');
 const crypto = require('crypto'); // 添加加密模块用于生成hash
 const log = require('electron-log'); // 导入 electron-log
+// const configService = require('../services/configService'); // 移除对 configService 的直接依赖
 
-// 默认配置
-const defaultConfig = {
+ // 默认配置
+ const defaultConfig = {
     cacheDir: path.join(process.cwd(), 'cache', 'images'),
-    maxCacheSizeMB: 500,
-    compressQuality: 80, // 0-100
-    compressFormat: 'jpeg', // jpeg/webp
+    maxCacheSizeMB: 200,
+    compressQuality: 50, // 0-100
     debug: false, // 是否输出调试日志
     logStats: true // 是否记录统计信息
 };
@@ -134,56 +134,89 @@ async function getCache(libraryId, imageName) {
  * @param {string} libraryId 库 ID
  * @param {string} imageName 图片名称
  * @param {Buffer} sourceBuffer 原始图片 Buffer
+ * @param {string} preferredFormat 期望的缓存格式 ('JPEG', 'PNG', 'WebP', 'Original')
  * @returns {Promise<void>}
  */
-async function setCache(libraryId, imageName, sourceBuffer) {
+async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'Original') { // 添加 preferredFormat 参数，并提供默认值
     const startTime = Date.now();
     const cacheFilePath = getCacheFilePath(libraryId, imageName);
-    log.info(`[ImageCache] >>> setCache START for key: ${libraryId}_${imageName}. Target path: ${cacheFilePath}. Source buffer size: ${sourceBuffer ? sourceBuffer.length : 'null/undefined'}`);
+    log.info(`[ImageCache] >>> setCache START for key: ${libraryId}_${imageName}. Target path: ${cacheFilePath}. Source buffer size: ${sourceBuffer ? sourceBuffer.length : 'null/undefined'}. Preferred format: ${preferredFormat}`);
     if (!sourceBuffer || sourceBuffer.length === 0) {
         log.warn(`[ImageCache] setCache called with empty or invalid sourceBuffer for key: ${libraryId}_${imageName}. Aborting.`);
         return; // Or throw error? For now, just return.
     }
     stats.originalSize += sourceBuffer.length; // 记录原始大小
 
-    let sharpStartTime, sharpEndTime, writeStartTime, writeEndTime;
+    let writeStartTime, writeEndTime;
+    let processedBuffer = sourceBuffer; // 默认使用原始 Buffer
+    let formatUsed = 'Original'; // 默认格式
+    // const preferredFormat = configService.get('imageCache.preferredFormat', 'Original'); // 使用传入的参数，移除对 configService 的调用
+
     try {
         await ensureCacheDirExists(); // 确保目录存在
 
-        // 使用 sharp 处理图片
-        log.debug(`[ImageCache] Starting sharp processing for ${libraryId}_${imageName}`);
-        sharpStartTime = Date.now();
-        const sharpInstance = sharp(sourceBuffer)
-            .rotate() // 自动旋转（基于 EXIF）
-            .resize(1024, 1024, { // 调整大小
-                fit: 'inside',
-                withoutEnlargement: true
-            });
+        if (preferredFormat !== 'Original') {
+            // 只有在需要转换格式时才使用 sharp
+            let sharpStartTime, sharpEndTime;
+            log.debug(`[ImageCache] Starting sharp processing for ${libraryId}_${imageName} to format: ${preferredFormat}`);
+            sharpStartTime = Date.now();
+            try {
+                const sharpInstance = sharp(sourceBuffer)
+                    .rotate() // 自动旋转（基于 EXIF）
+                    .resize(1024, 1024, { // 调整大小
+                        fit: 'inside',
+                        withoutEnlargement: true
+                    });
 
-        let processedBuffer;
-        let formatUsed = config.compressFormat;
-        try {
-            if (config.compressFormat === 'webp') {
-                processedBuffer = await sharpInstance
-                    .webp({ quality: config.compressQuality })
-                    .toBuffer();
-            } else { // 默认 jpeg
-                formatUsed = 'jpeg'; // Explicitly set default
-                processedBuffer = await sharpInstance
-                    .jpeg({ quality: config.compressQuality, progressive: true })
-                    .toBuffer();
+                switch (preferredFormat.toLowerCase()) {
+                    case 'jpeg':
+                    case 'jpg':
+                        processedBuffer = await sharpInstance
+                            .jpeg({ quality: config.compressQuality, progressive: true })
+                            .toBuffer();
+                        formatUsed = 'JPEG';
+                        break;
+                    case 'png':
+                        processedBuffer = await sharpInstance
+                            .png({ quality: config.compressQuality }) // sharp 的 png quality 范围不同，可能需要调整
+                            .toBuffer();
+                        formatUsed = 'PNG';
+                        break;
+                    case 'webp':
+                        processedBuffer = await sharpInstance
+                            .webp({ quality: config.compressQuality })
+                            .toBuffer();
+                        formatUsed = 'WebP';
+                        break;
+                    default:
+                        log.warn(`[ImageCache] Unsupported preferredFormat: ${preferredFormat}. Falling back to Original.`);
+                        processedBuffer = sourceBuffer; // 格式不支持，回退到原始格式
+                        formatUsed = 'Original';
+                        break;
+                }
+                sharpEndTime = Date.now();
+                if (formatUsed !== 'Original') {
+                    log.info(`[ImageCache] Sharp processing SUCCESS for ${libraryId}_${imageName}. Format: ${formatUsed}, Quality: ${config.compressQuality}. Duration: ${sharpEndTime - sharpStartTime}ms. Processed size: ${processedBuffer.length}`);
+                } else {
+                     log.info(`[ImageCache] Using Original format for ${libraryId}_${imageName}.`);
+                }
+
+            } catch (sharpError) {
+                sharpEndTime = Date.now();
+                log.error(`[ImageCache] Sharp processing FAILED for ${libraryId}_${imageName} to format ${preferredFormat}. Duration: ${sharpEndTime - sharpStartTime}ms. Falling back to Original.`, sharpError.message, sharpError.stack);
+                // 转换失败，使用原始 Buffer
+                processedBuffer = sourceBuffer;
+                formatUsed = 'Original (Fallback)';
+                // 不再抛出错误，而是尝试保存原始文件
+                // throw sharpError;
             }
-            sharpEndTime = Date.now();
-            log.info(`[ImageCache] Sharp processing SUCCESS for ${libraryId}_${imageName}. Format: ${formatUsed}, Quality: ${config.compressQuality}. Duration: ${sharpEndTime - sharpStartTime}ms. Processed size: ${processedBuffer.length}`);
-        } catch (sharpError) {
-            sharpEndTime = Date.now();
-            log.error(`[ImageCache] Sharp processing FAILED for ${libraryId}_${imageName}. Duration: ${sharpEndTime - sharpStartTime}ms`, sharpError.message, sharpError.stack);
-            throw sharpError; // Re-throw to be caught by outer catch
+        } else {
+             log.info(`[ImageCache] Preferred format is Original, skipping sharp processing for ${libraryId}_${imageName}.`);
         }
 
 
-        // 写入处理后的 Buffer 到缓存文件
-        log.debug(`[ImageCache] Attempting fs.promises.writeFile to: ${cacheFilePath}`);
+        // 写入 Buffer (可能是原始的，也可能是处理过的) 到缓存文件
+        log.debug(`[ImageCache] Attempting fs.promises.writeFile to: ${cacheFilePath} (Format: ${formatUsed})`);
         writeStartTime = Date.now();
         await fs.promises.writeFile(cacheFilePath, processedBuffer);
         writeEndTime = Date.now();
@@ -323,8 +356,9 @@ module.exports = {
         ...stats,
         cacheHitRate: stats.totalRequests > 0 ? (stats.cacheHits / stats.totalRequests * 100).toFixed(1) + '%' : '0%',
         spaceSaved: stats.originalSize > 0 && stats.compressedSize > 0 ? ((1 - stats.compressedSize / stats.originalSize) * 100).toFixed(1) + '%' : '0%',
-        currentCacheSizeMB: getCurrentCacheSizeMB() // 添加获取当前缓存大小的函数（如果需要）
-    })
+        // currentCacheSizeMB: getCurrentCacheSizeMB() // 不再在这里调用，避免潜在的性能问题
+    }),
+    getCurrentCacheSizeMB // 直接导出函数
 };
 
 // 辅助函数：获取当前缓存目录大小 (可选)

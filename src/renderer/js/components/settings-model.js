@@ -323,48 +323,153 @@ function populateImageCachePane() {
     if (!pane || !currentConfigData) return;
     const cacheConfig = currentConfigData.imageCache || currentConfigData.defaults?.imageCache || {}; // Use defaults if available
 
-    // Assuming IDs from HTML: imageCacheSizeLimit, clearImageCacheBtn, clearCacheStatus
+    // --- Cache Size Limit ---
     const sizeInput = pane.querySelector('#imageCacheSizeLimit');
-    clearImageCacheBtn = pane.querySelector('#clearImageCacheBtn'); // Assign to module variable
-    clearCacheStatusEl = pane.querySelector('#clearCacheStatus'); // Assign to module variable
-
     if (sizeInput) {
         sizeInput.value = cacheConfig.maxCacheSizeMB ?? 500; // Default to 500MB if not set
     } else {
         logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheSizeLimit 输入框");
     }
 
-    // Clear status message initially
+    // --- Current Cache Size Display ---
+    const cacheSizeDisplay = pane.querySelector('#currentCacheSizeDisplay');
+    if (cacheSizeDisplay) {
+        cacheSizeDisplay.textContent = t('settings.imageCache.calculatingSize'); // Initial text
+        window.api.getImageCacheSize()
+            .then(sizeMB => {
+                if (sizeMB === 'Error') {
+                    cacheSizeDisplay.textContent = t('settings.imageCache.sizeError');
+                    cacheSizeDisplay.classList.add('error'); // Add error class for styling
+                } else {
+                    cacheSizeDisplay.textContent = t('settings.imageCache.currentSizeLabel', { size: sizeMB });
+                    cacheSizeDisplay.classList.remove('error');
+                }
+            })
+            .catch(error => {
+                logMessage('error', "[SettingsModel] 获取缓存大小失败:", error);
+                cacheSizeDisplay.textContent = t('settings.imageCache.sizeError');
+                cacheSizeDisplay.classList.add('error');
+            });
+    } else {
+        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #currentCacheSizeDisplay 元素");
+    }
+
+    // --- Preferred Cache Format ---
+    const formatSelect = pane.querySelector('#imageCacheFormatSelect');
+    if (formatSelect) {
+        // Populate options if needed (should be done in HTML ideally)
+        if (formatSelect.options.length < 4) { // Basic check
+             clearChildren(formatSelect); // Clear existing options if any
+             const formats = ['Original', 'JPEG', 'PNG', 'WebP'];
+             formats.forEach(format => {
+                 const option = document.createElement('option');
+                 option.value = format;
+                 // Use specific keys if available, otherwise just the format name
+                 option.textContent = t(`settings.imageCache.format${format}`, {}, format); // Fallback to format name
+                 formatSelect.appendChild(option);
+             });
+        }
+        // Set current value
+        formatSelect.value = cacheConfig.preferredFormat || 'Original'; // Default to Original
+    } else {
+        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheFormatSelect 下拉菜单");
+    }
+
+    // --- Clear Cache Button & Status ---
+    clearImageCacheBtn = pane.querySelector('#clearImageCacheBtn'); // Assign to module variable
+    clearCacheStatusEl = pane.querySelector('#clearCacheStatus'); // Assign to module variable
     if (clearCacheStatusEl) {
         clearCacheStatusEl.textContent = '';
         clearCacheStatusEl.className = 'status-message'; // Reset class
     }
 
-    // Attach listener (will be re-attached if pane re-populated, handled in setupImageCacheSection)
+    // Attach listeners (including the new format select listener)
     setupImageCacheSection();
 }
 
 /** Sets up event listeners for the Image Cache pane. */
 function setupImageCacheSection() {
+    const pane = settingsContent?.querySelector('#settingsImageCache');
+    if (!pane) {
+         logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：面板未找到");
+         return;
+    }
+
+    // --- Clear Cache Button ---
+    clearImageCacheBtn = pane.querySelector('#clearImageCacheBtn');
     if (clearImageCacheBtn) {
         clearImageCacheBtn.removeEventListener('click', handleClearImageCache); // Prevent duplicates
         clearImageCacheBtn.addEventListener('click', handleClearImageCache);
         logMessage('debug', "[SettingsModel] 已附加清除缓存按钮的事件监听器");
     } else {
-        // Try to find it again if it wasn't found during initial populate
-        const pane = settingsContent?.querySelector('#settingsImageCache');
-        clearImageCacheBtn = pane?.querySelector('#clearImageCacheBtn');
-        if (clearImageCacheBtn) {
-             clearImageCacheBtn.removeEventListener('click', handleClearImageCache);
-             clearImageCacheBtn.addEventListener('click', handleClearImageCache);
-             logMessage('debug', "[SettingsModel] 重新查找并附加了清除缓存按钮的事件监听器");
-        } else {
-            logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：清除按钮未找到");
-        }
-} // Closing brace for setupImageCacheSection
+        logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：清除按钮未找到");
+    }
 
-     // The check for clearCacheStatusEl will be moved inside setupImageCacheSection
+    // --- Format Select Dropdown ---
+    const formatSelect = pane.querySelector('#imageCacheFormatSelect');
+    const formatFeedbackArea = pane.querySelector('#imageCacheFormatFeedback'); // Specific feedback area for format
+    if (formatSelect) {
+        formatSelect.removeEventListener('change', handleFormatChange); // Prevent duplicates
+        formatSelect.addEventListener('change', handleFormatChange);
+        logMessage('debug', "[SettingsModel] 已附加缓存格式选择下拉菜单的事件监听器");
+    } else {
+         logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：格式选择下拉菜单未找到");
+    }
+
+    // Ensure status element reference is updated
+    clearCacheStatusEl = pane.querySelector('#clearCacheStatus');
 }
+
+
+/** Handles the change event for the image cache format select dropdown. */
+async function handleFormatChange(event) {
+    const newFormat = event.target.value;
+    const selectElement = event.target;
+    const feedbackArea = selectElement.closest('.form-group').querySelector('.feedback-area'); // Find feedback area near the select
+
+    logMessage('info', `[UI] 图片缓存格式更改为: ${newFormat}`);
+
+    if (!currentConfigData) {
+        logMessage('error', "[SettingsModel] 无法保存格式更改：当前配置数据不可用");
+        if (feedbackArea) showFeedback(feedbackArea, t('settings.saveError', { message: '配置数据丢失' }), 'error');
+        return;
+    }
+
+    // Disable select while saving
+    selectElement.disabled = true;
+    if (feedbackArea) clearFeedback(feedbackArea);
+
+    try {
+        // Create the update object, merging with existing imageCache settings
+        const updatedImageCacheConfig = {
+            ...(currentConfigData.imageCache || {}), // Keep existing settings like maxCacheSizeMB
+            preferredFormat: newFormat
+        };
+
+        // Merge into the full config object
+        const fullConfigToSend = {
+            ...currentConfigData,
+            imageCache: updatedImageCacheConfig
+        };
+
+        logMessage('info', `[SettingsModel] 调用 API 保存图片缓存格式: ${newFormat}`, fullConfigToSend);
+        await saveConfig(fullConfigToSend);
+
+        // Update local config state
+        currentConfigData = fullConfigToSend;
+        logMessage('info', `[SettingsModel] 图片缓存格式保存成功: ${newFormat}`);
+        if (feedbackArea) showFeedback(feedbackArea, t('settings.imageCache.formatSaveSuccess'), 'success', 1500);
+
+    } catch (error) {
+        logMessage('error', `[SettingsModel] 保存图片缓存格式失败: ${newFormat}`, error.message, error.stack);
+        if (feedbackArea) showFeedback(feedbackArea, t('settings.saveError', { message: error.message }), 'error');
+        // Revert dropdown selection on error?
+        selectElement.value = currentConfigData.imageCache?.preferredFormat || 'Original';
+    } finally {
+        selectElement.disabled = false;
+    }
+}
+
 
 function populateUpdatesPane() {
     logMessage('debug', "[SettingsModel] 填充更新面板");
@@ -947,23 +1052,34 @@ async function handleSaveSection(category, paneElement) {
     }
     logMessage('info', `[SettingsModel] 开始保存分区: ${category}`);
     const saveButton = paneElement.querySelector('.settings-save-section');
-    // Find the dedicated feedback area within the pane
-    // Use specific ID for data-sources, class for others
+    // Find the dedicated feedback area within the pane using specific IDs where possible
     let feedbackArea;
     if (category === 'data-sources') {
         feedbackArea = paneElement.querySelector('#dataSourceFeedbackArea');
     } else if (category === 'general') {
-        // Use the specific ID for the general feedback area
         feedbackArea = paneElement.querySelector('#generalFeedbackArea');
+    } else if (category === 'file-recognition') { // Be explicit for known panes
+        feedbackArea = paneElement.querySelector('#fileRecognitionFeedbackArea');
+    } else if (category === 'image-cache') { // Explicitly target the correct ID
+        feedbackArea = paneElement.querySelector('#imageCacheFeedbackArea'); // <-- Use the specific ID
     } else {
-        // Fallback for other potential sections, though ideally each should have a specific ID
+        // Fallback for truly unknown sections, though unlikely
         feedbackArea = paneElement.querySelector('.feedback-area');
+        if (!feedbackArea) { // Add a specific log if fallback fails
+             logMessage('warn', `[SettingsModel] 未能为未知分区 ${category} 找到通用的 .feedback-area`);
+        }
     }
     const startTime = Date.now();
 
-    // Check if feedback area exists (now more robust for data-sources)
+    // Check if feedback area exists (now more robust and with specific error message)
     if (!feedbackArea) {
-        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：未找到 .feedback-area 元素。`);
+        // Construct a more specific error message based on the category
+        const expectedId = category === 'data-sources' ? '#dataSourceFeedbackArea' :
+                           category === 'general' ? '#generalFeedbackArea' :
+                           category === 'file-recognition' ? '#fileRecognitionFeedbackArea' :
+                           category === 'image-cache' ? '#imageCacheFeedbackArea' :
+                           '.feedback-area (fallback)'; // Default message part
+        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：未找到预期的反馈元素 (${expectedId})。`);
         // Optionally show an alert or log, but don't proceed with saving if feedback area is crucial
         // For now, just log and return to prevent further errors using a null feedbackArea
         return;
@@ -1019,8 +1135,9 @@ async function handleSaveSection(category, paneElement) {
                     validationFailed = true;
                 } else {
                     configUpdate.imageCache.maxCacheSizeMB = size;
+                    // preferredFormat is now saved via handleFormatChange, no need to read/save here
                 }
-                logMessage('debug', `[SettingsModel] 保存图片缓存设置:`, configUpdate.imageCache);
+                logMessage('debug', `[SettingsModel] 保存图片缓存设置 (仅大小):`, configUpdate.imageCache);
                 break;
             // Updates and About typically don't have save buttons
             default:

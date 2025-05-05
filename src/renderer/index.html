@@ -185,14 +185,33 @@
                 <label for="imageCacheSizeLimit" data-i18n-key="settings.imageCache.sizeLimitLabel"></label>
                 <input type="number" id="imageCacheSizeLimit" min="0" data-i18n-placeholder-key="settings.imageCache.sizeLimitPlaceholder" placeholder="e.g., 500">
               </div>
+              <!-- New: Display Current Cache Size -->
+              <div class="form-group">
+                  <label data-i18n-key="settings.imageCache.currentSizeLabel"></label>
+                  <span id="currentCacheSizeDisplay" class="read-only-value">...</span> <!-- Read-only display -->
+              </div>
+              <!-- New: Preferred Cache Format -->
+              <div class="form-group">
+                  <label for="imageCacheFormatSelect" data-i18n-key="settings.imageCache.preferredFormatLabel"></label>
+                  <select id="imageCacheFormatSelect">
+                      <!-- Options will be populated by JS or can be hardcoded here -->
+                      <option value="Original" data-i18n-key="settings.imageCache.formatOriginal">Original</option>
+                      <option value="JPEG" data-i18n-key="settings.imageCache.formatJPEG">JPEG</option>
+                      <option value="PNG" data-i18n-key="settings.imageCache.formatPNG">PNG</option>
+                      <option value="WebP" data-i18n-key="settings.imageCache.formatWebP">WebP</option>
+                  </select>
+                  <div class="feedback-area" id="imageCacheFormatFeedback" style="margin-top: 5px;"></div> <!-- Feedback area for format change -->
+              </div>
+              <!-- Existing: Clear Cache -->
               <div class="form-group">
                 <label data-i18n-key="settings.imageCache.clearCacheLabel"></label>
-                <div class="control-group"> <!-- New wrapper div -->
+                <div class="control-group"> <!-- Wrapper div -->
                   <button type="button" id="clearImageCacheBtn" class="btn btn-secondary" data-i18n-key="settings.imageCache.clearButton"></button>
                   <span id="clearCacheStatus" class="status-message"></span>
                 </div>
               </div>
-              <div class="feedback-area" id="imageCacheFeedbackArea"></div> <!-- Added feedback area -->
+              <!-- Existing: General Feedback Area for Save Button -->
+              <div class="feedback-area" id="imageCacheFeedbackArea"></div>
               <div class="settings-actions">
                  <button type="button" class="btn btn-primary settings-save-section" data-category="image-cache" data-i18n-key="settings.save"></button>
               </div>
