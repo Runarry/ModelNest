@@ -11,7 +11,8 @@ files:
 
 icon: assets/icon.png
 
-asar: true
+asar:
+  smartUnpack: true
 afterPack: ./scripts/remove-locales.js
 win:
   target:
