@@ -10,9 +10,33 @@ import {
     quitAndInstall,
     getAppVersion, // <-- 添加获取应用版本
     clearImageCache, // <-- 添加清除图片缓存 (假设存在)
-    getPackageInfo // <-- 添加 getPackageInfo 导入
+    getPackageInfo, // <-- 添加 getPackageInfo 导入
+    getImageCacheSize
 } from '../apiBridge.js';
 
+// ===== Helper Functions =====
+
+/**
+ * Formats bytes into a human-readable string (KB, MB, GB).
+ * @param {number} bytes - The number of bytes.
+ * @param {number} [decimals=2] - The number of decimal places.
+ * @returns {string} Formatted string.
+ */
+function formatBytes(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    if (isNaN(parseInt(bytes))) return 'N/A'; // Handle non-numeric input
+
+    const k = 1024;
+    const dm = decimals < 0 ? 0 : decimals;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB', 'EB', 'ZB', 'YB'];
+
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    // Ensure index is within bounds
+    const unitIndex = i < sizes.length ? i : sizes.length - 1;
+
+    return parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) + ' ' + sizes[unitIndex];
+}
 // ===== DOM Element References =====
 let settingsModel;
 let settingsBtn; // The button that opens the settings Model
@@ -331,18 +355,36 @@ function populateImageCachePane() {
         logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheSizeLimit 输入框");
     }
 
+    // --- Compression Quality ---
+    const qualityInput = pane.querySelector('#imageCacheCompressQuality');
+    const qualityValueDisplay = pane.querySelector('#imageCacheCompressQualityValue');
+    if (qualityInput && qualityValueDisplay) {
+        const quality = cacheConfig.compressQuality ?? 80; // Default to 80 if not set
+        qualityInput.value = quality;
+        qualityValueDisplay.textContent = quality; // Display initial value
+        // Add listener to update display when slider changes
+        qualityInput.removeEventListener('input', handleQualitySliderChange); // Prevent duplicates
+        qualityInput.addEventListener('input', handleQualitySliderChange);
+    } else {
+        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheCompressQuality 或 #imageCacheCompressQualityValue");
+    }
+
     // --- Current Cache Size Display ---
     const cacheSizeDisplay = pane.querySelector('#currentCacheSizeDisplay');
     if (cacheSizeDisplay) {
         cacheSizeDisplay.textContent = t('settings.imageCache.calculatingSize'); // Initial text
-        window.api.getImageCacheSize()
-            .then(sizeMB => {
-                if (sizeMB === 'Error') {
-                    cacheSizeDisplay.textContent = t('settings.imageCache.sizeError');
-                    cacheSizeDisplay.classList.add('error'); // Add error class for styling
-                } else {
-                    cacheSizeDisplay.textContent = t('settings.imageCache.currentSizeLabel', { size: sizeMB });
+        cacheSizeDisplay.classList.remove('error'); // Reset error state
+        getImageCacheSize() // This now returns bytes
+            .then(sizeBytes => {
+                // Check if the returned value is a valid number
+                if (typeof sizeBytes === 'number' && !isNaN(sizeBytes)) {
+                    cacheSizeDisplay.textContent = t('settings.imageCache.currentSizeLabel', { size: formatBytes(sizeBytes) }); // Use formatBytes
                     cacheSizeDisplay.classList.remove('error');
+                } else {
+                    // Handle cases where the API might return non-numeric or error states (though it should return 0 on error now)
+                    logMessage('warn', `[SettingsModel] getImageCacheSize 返回了无效值: ${sizeBytes}`);
+                    cacheSizeDisplay.textContent = t('settings.imageCache.sizeError');
+                    cacheSizeDisplay.classList.add('error');
                 }
             })
             .catch(error => {
@@ -354,7 +396,7 @@ function populateImageCachePane() {
         logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #currentCacheSizeDisplay 元素");
     }
 
-    // --- Preferred Cache Format ---
+    // --- Preferred Cache Format --- (Keep this section as is)
     const formatSelect = pane.querySelector('#imageCacheFormatSelect');
     if (formatSelect) {
         // Populate options if needed (should be done in HTML ideally)
@@ -418,6 +460,14 @@ function setupImageCacheSection() {
 
     // Ensure status element reference is updated
     clearCacheStatusEl = pane.querySelector('#clearCacheStatus');
+}
+
+/** Handles the input event for the compression quality slider. */
+function handleQualitySliderChange(event) {
+    const qualityValueDisplay = event.target.parentElement.querySelector('#imageCacheCompressQualityValue');
+    if (qualityValueDisplay) {
+        qualityValueDisplay.textContent = event.target.value;
+    }
 }
 
 
@@ -1124,20 +1174,39 @@ async function handleSaveSection(category, paneElement) {
                 break;
             case 'image-cache':
                 configUpdate.imageCache = { ...(currentConfigData.imageCache || {}) }; // Start with existing cache settings
-                const sizeInput = paneElement.querySelector('#imageCacheSizeLimit'); // Corrected ID
-                const size = parseInt(sizeInput?.value || '500', 10); // Default 500
+                const sizeInput = paneElement.querySelector('#imageCacheSizeLimit');
+                const qualityInput = paneElement.querySelector('#imageCacheCompressQuality');
 
+                const size = parseInt(sizeInput?.value || '500', 10);
+                const quality = parseInt(qualityInput?.value || '80', 10);
+
+                // Validate Size
                 if (isNaN(size) || size < 0) {
-                    const errorMsg = t('settings.validation.sizeError'); // Assuming this key exists in locales
-                    logMessage('error', `[SettingsModel] 保存图片缓存失败：验证错误 - ${errorMsg}`);
-                    showFeedback(feedbackArea, errorMsg, 'error'); // Use the found feedbackArea
+                    const errorMsg = t('settings.validation.sizeError');
+                    logMessage('error', `[SettingsModel] 保存图片缓存失败：大小验证错误 - ${errorMsg}`);
+                    showFeedback(feedbackArea, errorMsg, 'error');
                     sizeInput?.focus();
                     validationFailed = true;
-                } else {
-                    configUpdate.imageCache.maxCacheSizeMB = size;
-                    // preferredFormat is now saved via handleFormatChange, no need to read/save here
                 }
-                logMessage('debug', `[SettingsModel] 保存图片缓存设置 (仅大小):`, configUpdate.imageCache);
+
+                // Validate Quality
+                if (isNaN(quality) || quality < 0 || quality > 100) {
+                    const errorMsg = t('settings.validation.qualityError'); // Need to add this key to locales
+                    logMessage('error', `[SettingsModel] 保存图片缓存失败：质量验证错误 - ${errorMsg}`);
+                    // Show feedback only if size validation passed or focus quality input
+                    if (!validationFailed) {
+                        showFeedback(feedbackArea, errorMsg, 'error');
+                        qualityInput?.focus();
+                    }
+                    validationFailed = true;
+                }
+
+                if (!validationFailed) {
+                    configUpdate.imageCache.maxCacheSizeMB = size;
+                    configUpdate.imageCache.compressQuality = quality;
+                    // preferredFormat is saved separately via handleFormatChange
+                }
+                logMessage('debug', `[SettingsModel] 保存图片缓存设置 (大小和质量):`, configUpdate.imageCache);
                 break;
             // Updates and About typically don't have save buttons
             default:

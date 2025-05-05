@@ -10,7 +10,7 @@ const DEFAULT_CONFIG = {
   supportedExtensions: [],
   imageCache: {
     maxCacheSizeMB: 200, // 默认图片缓存大小 (MB)
-    compressQuality: 50, // 默认压缩质量
+    compressQuality: 80, // 默认压缩质量 (修改为 80)
     // 注意：cacheDir 通常在 imageCache.js 中基于 process.cwd() 设置，不在此处定义
   },
   locale: null, // 添加默认的 locale 配置项

@@ -107,12 +107,13 @@ function initializeAppIPC(services) {
   ipcMain.handle('get-image-cache-size', async () => {
     log.info('[IPC] get-image-cache-size 请求');
     try {
-      const sizeMB = await imageCache.getCurrentCacheSizeMB();
-      log.info(`[IPC] 当前图片缓存大小: ${sizeMB} MB`);
-      // 返回 MB 数值 (可能是字符串 '0.00' 或 'Error')
-      return sizeMB;
+      // 调用新的函数获取字节数
+      const sizeBytes = await imageCache.getCurrentCacheSizeBytes();
+      log.info(`[IPC] 当前图片缓存大小: ${sizeBytes} Bytes`);
+      // 返回字节数 (number)
+      return sizeBytes;
     } catch (error) {
-      log.error('[IPC] 调用 imageCache.getCurrentCacheSizeMB 失败:', error);
+      log.error('[IPC] 调用 imageCache.getCurrentCacheSizeBytes 失败:', error);
       // 将错误传递给渲染进程
       throw error; // 或者返回一个特定的错误状态
     }

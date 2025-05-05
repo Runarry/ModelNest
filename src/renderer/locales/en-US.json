@@ -121,7 +121,8 @@
       "formatJPEG": "JPEG",
       "formatPNG": "PNG",
       "formatWebP": "WebP",
-      "formatSaveSuccess": "Cache format saved."
+      "formatSaveSuccess": "Cache format saved.",
+      "compressQualityLabel": "Compression Quality (0-100):"
     },
     "updates": {
       "title": "Updates",
@@ -165,6 +166,7 @@
       "urlInvalid": "Invalid WebDAV URL: {message}",
       "urlSchemeInvalid": "URL must start with http:// or https://",
       "sizeError": "Cache size limit must be a non-negative number.",
+      "qualityError": "Compression quality must be between 0 and 100.",
       "failed": "Validation failed"
     },
     "modelSources": {

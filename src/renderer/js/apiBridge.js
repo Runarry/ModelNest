@@ -134,3 +134,5 @@ export const onCrawlStatusUpdate = api.onCrawlStatusUpdate;
  * Directly exports the function from the exposed API.
  */
 export const removeCrawlStatusUpdateListener = api.removeCrawlStatusUpdateListener;
+
+export const getImageCacheSize = api.getImageCacheSize;

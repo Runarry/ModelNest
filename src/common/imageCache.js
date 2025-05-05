@@ -358,31 +358,46 @@ module.exports = {
         spaceSaved: stats.originalSize > 0 && stats.compressedSize > 0 ? ((1 - stats.compressedSize / stats.originalSize) * 100).toFixed(1) + '%' : '0%',
         // currentCacheSizeMB: getCurrentCacheSizeMB() // 不再在这里调用，避免潜在的性能问题
     }),
-    getCurrentCacheSizeMB // 直接导出函数
+    getCurrentCacheSizeBytes // 导出新函数名
 };
 
 // 辅助函数：获取当前缓存目录大小 (可选)
 // 注意：这个函数可能比较耗时，谨慎使用
-async function getCurrentCacheSizeMB() {
+/**
+ * 获取当前缓存目录的总大小（字节）
+ * @returns {Promise<number>} 缓存总大小（字节），如果目录不存在或出错则返回 0
+ */
+async function getCurrentCacheSizeBytes() {
+    let totalSize = 0;
     try {
+        // 尝试访问，如果不存在会抛出 ENOENT
         await fs.promises.access(config.cacheDir);
-        const fileNames = await fs.promises.readdir(config.cacheDir);
-        let totalSize = 0;
-        for (const fileName of fileNames) {
-            const filePath = path.join(config.cacheDir, fileName);
-            try {
-                const fileStats = await fs.promises.stat(filePath);
-                totalSize += fileStats.size;
-            } catch (statError) {
-                 if (statError.code !== 'ENOENT') {
-                    log.warn(`[ImageCache] 获取文件状态失败 (getCurrentCacheSizeMB): ${filePath}`, statError.message);
-                 }
+        const fileNames = await fs.promises.readdir(config.cacheDir, { withFileTypes: true }); // 使用 withFileTypes 提高效率
+
+        for (const dirent of fileNames) {
+            // 只计算文件大小，忽略子目录（虽然此缓存设计中不应有子目录）
+            if (dirent.isFile()) {
+                const filePath = path.join(config.cacheDir, dirent.name);
+                try {
+                    const fileStats = await fs.promises.stat(filePath);
+                    totalSize += fileStats.size;
+                } catch (statError) {
+                    // 如果文件在读取目录和获取状态之间被删除，则忽略
+                    if (statError.code !== 'ENOENT') {
+                        log.warn(`[ImageCache] 获取文件状态失败 (getCurrentCacheSizeBytes): ${filePath}`, statError.message);
+                    }
+                }
             }
         }
-        return (totalSize / (1024 * 1024)).toFixed(2);
     } catch (error) {
-        if (error.code === 'ENOENT') return '0.00';
-        log.error(`[ImageCache] 获取当前缓存大小时出错:`, error.message);
-        return 'Error';
+        if (error.code === 'ENOENT') {
+            log.info(`[ImageCache] 缓存目录不存在，大小计为 0: ${config.cacheDir}`);
+            // 目录不存在，大小为 0，不是错误
+        } else {
+            log.error(`[ImageCache] 获取当前缓存大小时出错: ${config.cacheDir}`, error.message);
+            // 其他错误，返回 0 并记录日志
+        }
+        return 0; // 返回数字 0 而不是字符串 'Error' 或 '0.00'
     }
+    return totalSize; // 返回总字节数
 }

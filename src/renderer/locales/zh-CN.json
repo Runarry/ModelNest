@@ -121,7 +121,8 @@
       "formatJPEG": "JPEG",
       "formatPNG": "PNG",
       "formatWebP": "WebP",
-      "formatSaveSuccess": "缓存格式已保存。"
+      "formatSaveSuccess": "缓存格式已保存。",
+      "compressQualityLabel": "压缩质量 (0-100):"
     },
     "updates": {
       "title": "更新",
@@ -165,6 +166,7 @@
       "urlInvalid": "无效的 WebDAV URL：{message}",
       "urlSchemeInvalid": "URL 必须以 http:// 或 https:// 开头",
       "sizeError": "缓存大小限制必须是非负数。",
+      "qualityError": "压缩质量必须介于 0 和 100 之间。",
       "failed": "验证失败"
     },
     "modelSources": {

@@ -185,6 +185,14 @@
                 <label for="imageCacheSizeLimit" data-i18n-key="settings.imageCache.sizeLimitLabel"></label>
                 <input type="number" id="imageCacheSizeLimit" min="0" data-i18n-placeholder-key="settings.imageCache.sizeLimitPlaceholder" placeholder="e.g., 500">
               </div>
+              <!-- New: Compression Quality Slider -->
+              <div class="form-group">
+                  <label for="imageCacheCompressQuality" data-i18n-key="settings.imageCache.compressQualityLabel"></label>
+                  <div>
+                    <input type="range" id="imageCacheCompressQuality" min="0" max="100" step="1">
+                    <span id="imageCacheCompressQualityValue" class="range-value">80</span> <!-- Display current value -->
+                  </div> 
+              </div>
               <!-- New: Display Current Cache Size -->
               <div class="form-group">
                   <label data-i18n-key="settings.imageCache.currentSizeLabel"></label>
