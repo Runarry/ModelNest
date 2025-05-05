@@ -11,8 +11,8 @@ import {
     getAppVersion, // <-- 添加获取应用版本
     clearImageCache, // <-- 添加清除图片缓存 (假设存在)
     getPackageInfo, // <-- 添加 getPackageInfo 导入
-    getImageCacheSize,
-    getProcessVersions // <-- 添加 getProcessVersions 导入
+    getImageCacheSize
+    // getProcessVersions is no longer needed here
 } from '../apiBridge.js';
 
 // ===== Helper Functions =====
@@ -553,10 +553,11 @@ async function populateAboutPane() { // Make function async
     const licenseEl = pane.querySelector('#package-license');
     const projectAddressEl = pane.querySelector('#project-address');
     const feedbackEmailEl = pane.querySelector('#feedback-email');
-    const electronVersionEl = pane.querySelector('#electron-version');
-    const nodeVersionEl = pane.querySelector('#node-version');
-    const chromeVersionEl = pane.querySelector('#chrome-version');
-    const v8VersionEl = pane.querySelector('#v8-version');
+    // Remove tech stack element references
+    // const electronVersionEl = pane.querySelector('#electron-version');
+    // const nodeVersionEl = pane.querySelector('#node-version');
+    // const chromeVersionEl = pane.querySelector('#chrome-version');
+    // const v8VersionEl = pane.querySelector('#v8-version');
     const appVersionDisplay = pane.querySelector('#appVersionDisplay');
     const checkUpdatesBtn = pane.querySelector('#checkUpdatesBtn');
 
@@ -569,21 +570,22 @@ async function populateAboutPane() { // Make function async
     setLoadingText(licenseEl);
     setLoadingText(projectAddressEl);
     setLoadingText(feedbackEmailEl);
-    setLoadingText(electronVersionEl);
-    setLoadingText(nodeVersionEl);
-    setLoadingText(chromeVersionEl);
-    setLoadingText(v8VersionEl);
+    // Remove tech stack loading text
+    // setLoadingText(electronVersionEl);
+    // setLoadingText(nodeVersionEl);
+    // setLoadingText(chromeVersionEl);
+    // setLoadingText(v8VersionEl);
     setLoadingText(appVersionDisplay);
 
     try {
-        // --- 并行获取所有信息 ---
-        const [packageInfo, processVersions, appVersion] = await Promise.all([
+        // --- 并行获取信息 (移除 processVersions) ---
+        const [packageInfo, appVersion] = await Promise.all([
             getPackageInfo(),
-            getProcessVersions(),
+            // getProcessVersions(), // Removed
             getAppVersion()
         ]);
         logMessage('info', "[SettingsModel] 获取到的 packageInfo:", packageInfo);
-        logMessage('info', "[SettingsModel] 获取到的 processVersions:", processVersions);
+        // logMessage('info', "[SettingsModel] 获取到的 processVersions:", processVersions); // Removed
         logMessage('info', "[SettingsModel] 获取到的 appVersion:", appVersion);
 
         // --- 填充 Package Info ---
@@ -629,23 +631,6 @@ async function populateAboutPane() { // Make function async
             setErrorText(feedbackEmailEl);
         }
 
-        // --- 填充 Process Versions ---
-        if (processVersions) {
-            if (electronVersionEl) electronVersionEl.textContent = processVersions.electron || t('settings.about.valueMissing');
-            if (nodeVersionEl) nodeVersionEl.textContent = processVersions.node || t('settings.about.valueMissing');
-            if (chromeVersionEl) chromeVersionEl.textContent = processVersions.chrome || t('settings.about.valueMissing');
-            if (v8VersionEl) v8VersionEl.textContent = processVersions.v8 || t('settings.about.valueMissing');
-            logMessage('info', "[SettingsModel] process.versions 信息已成功显示");
-        } else {
-            logMessage('warn', "[SettingsModel] getProcessVersions 返回了 null 或 undefined");
-            // Set error text for version fields
-            const setErrorText = (el) => { if (el) el.textContent = t('settings.about.loadError'); };
-            setErrorText(electronVersionEl);
-            setErrorText(nodeVersionEl);
-            setErrorText(chromeVersionEl);
-            setErrorText(v8VersionEl);
-        }
-
         // --- 填充 App Version ---
         if (appVersionDisplay) {
             appVersionDisplay.textContent = appVersion || t('settings.updates.versionUnknown');
@@ -663,10 +648,11 @@ async function populateAboutPane() { // Make function async
         setErrorText(licenseEl);
         setErrorText(projectAddressEl);
         setErrorText(feedbackEmailEl);
-        setErrorText(electronVersionEl);
-        setErrorText(nodeVersionEl);
-        setErrorText(chromeVersionEl);
-        setErrorText(v8VersionEl);
+        // Remove tech stack error text
+        // setErrorText(electronVersionEl);
+        // setErrorText(nodeVersionEl);
+        // setErrorText(chromeVersionEl);
+        // setErrorText(v8VersionEl);
         setErrorText(appVersionDisplay);
     }
 

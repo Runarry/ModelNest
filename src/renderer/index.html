@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-CN" data-theme="light">
+
 <head>
   <meta charset="UTF-8">
   <title>ModelNest</title>
@@ -7,28 +8,40 @@
   <link rel="stylesheet" href="styles/main.css">
   <link rel="stylesheet" href="styles/card-view.css">
   <link rel="stylesheet" href="styles/list-view.css">
-<link rel="stylesheet" href="styles/settings-view.css">
-<!-- Font Awesome for lock icon -->
-<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <link rel="stylesheet" href="styles/settings-view.css">
+  <!-- Font Awesome for lock icon -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
+
 <body>
   <div id="app">
     <nav class="top-menu-bar">
       <!-- 第一行：标题和设置按钮 -->
       <div class="top-row">
         <h1 id="appTitle" data-i18n-key="appTitle"></h1>
-        
+
         <!-- 设置按钮 -->
         <div class="settings-controls">
           <button id="themeToggleBtn" class="view-btn">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-moon"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path></svg>
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="feather feather-moon">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+            </svg>
           </button>
-          <button id="settingsBtn" class="view-btn" >
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-settings"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+          <button id="settingsBtn" class="view-btn">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="feather feather-settings">
+              <circle cx="12" cy="12" r="3"></circle>
+              <path
+                d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V15a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z">
+              </path>
+            </svg>
           </button>
         </div>
       </div>
-      
+
       <!-- 第二行：模型选择器和筛选区域 -->
       <div class="bottom-row">
         <!-- 模型库选择器 -->
@@ -39,23 +52,44 @@
             <i class="fas fa-lock"></i>
             <span data-i18n-key="readOnlyMode">只读</span>
           </span>
-          <button id="crawl-info-button" class="view-btn" style="display: none;" data-i18n-title-key="main.button.crawlInfoTitle">
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
+          <button id="crawl-info-button" class="view-btn" style="display: none;"
+            data-i18n-title-key="main.button.crawlInfoTitle">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+              stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+              class="feather feather-refresh-cw">
+              <polyline points="23 4 23 10 17 10"></polyline>
+              <polyline points="1 20 1 14 7 14"></polyline>
+              <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+            </svg>
           </button>
         </div>
-        
+
         <!-- 右侧空白填充 -->
         <div class="spacer"></div>
-        
+
         <!-- 筛选区域 -->
         <div class="filter-controls">
           <select id="filterSelect"></select>
           <div class="view-toggle">
             <button id="cardViewBtn" class="view-btn active" title="" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <rect x="3" y="3" width="7" height="7"></rect>
+                <rect x="14" y="3" width="7" height="7"></rect>
+                <rect x="14" y="14" width="7" height="7"></rect>
+                <rect x="3" y="14" width="7" height="7"></rect>
+              </svg>
             </button>
             <button id="listViewBtn" class="view-btn" title="" type="button">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="8" y1="6" x2="21" y2="6"></line><line x1="8" y1="12" x2="21" y2="12"></line><line x1="8" y1="18" x2="21" y2="18"></line><line x1="3" y1="6" x2="3.01" y2="6"></line><line x1="3" y1="12" x2="3.01" y2="12"></line><line x1="3" y1="18" x2="3.01" y2="18"></line></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                stroke-linecap="round" stroke-linejoin="round">
+                <line x1="8" y1="6" x2="21" y2="6"></line>
+                <line x1="8" y1="12" x2="21" y2="12"></line>
+                <line x1="8" y1="18" x2="21" y2="18"></line>
+                <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                <line x1="3" y1="18" x2="3.01" y2="18"></line>
+              </svg>
             </button>
           </div>
         </div>
@@ -76,13 +110,13 @@
           <div class="content-main">
             <!-- 筛选区域已移至顶部菜单栏 -->
 
-        <div id="loading">
-          <div class="loading-spinner"></div>
-          <span id="loadingModels"  data-i18n-key="loadingModels"></span>
-        </div>
+            <div id="loading">
+              <div class="loading-spinner"></div>
+              <span id="loadingModels" data-i18n-key="loadingModels"></span>
+            </div>
 
-        <section id="mainSection">
-          <ul id="modelList"></ul>
+            <section id="mainSection">
+              <ul id="modelList"></ul>
             </section>
           </div>
         </div>
@@ -102,16 +136,22 @@
     <div id="settingsModel" class="Model">
       <div class="Model-content settings-Model-content"> <!-- Added specific class for sizing -->
         <button id="settingsClose" class="Model-close">&times;</button>
-        <h2 id="settingsTitle" class="Model-title" data-i18n-key="settings.title"></h2> <!-- id="settingsTitle" already exists -->
+        <h2 id="settingsTitle" class="Model-title" data-i18n-key="settings.title"></h2>
+        <!-- id="settingsTitle" already exists -->
         <div class="settings-container"> <!-- New container for two-column layout -->
           <nav class="settings-nav">
             <ul>
               <!-- Using data-category for JS targeting and i18n keys -->
-              <li><a href="#" class="nav-item active" data-category="data-sources"><span data-i18n-key="settings.nav.dataSources"></span></a></li>
-              <li><a href="#" class="nav-item" data-category="general"><span data-i18n-key="settings.nav.general"></span></a></li>
-              <li><a href="#" class="nav-item" data-category="file-recognition"><span data-i18n-key="settings.nav.fileRecognition"></span></a></li>
-              <li><a href="#" class="nav-item" data-category="image-cache"><span data-i18n-key="settings.nav.imageCache"></span></a></li>
-              <li><a href="#" class="nav-item" data-category="about"><span data-i18n-key="settings.nav.about"></span></a></li>
+              <li><a href="#" class="nav-item active" data-category="data-sources"><span
+                    data-i18n-key="settings.nav.dataSources"></span></a></li>
+              <li><a href="#" class="nav-item" data-category="general"><span
+                    data-i18n-key="settings.nav.general"></span></a></li>
+              <li><a href="#" class="nav-item" data-category="file-recognition"><span
+                    data-i18n-key="settings.nav.fileRecognition"></span></a></li>
+              <li><a href="#" class="nav-item" data-category="image-cache"><span
+                    data-i18n-key="settings.nav.imageCache"></span></a></li>
+              <li><a href="#" class="nav-item" data-category="about"><span
+                    data-i18n-key="settings.nav.about"></span></a></li>
             </ul>
           </nav>
           <div class="settings-content">
@@ -119,34 +159,39 @@
             <div class="settings-pane" data-category="data-sources" id="settingsDataSources">
               <h3 data-i18n-key="settings.dataSources.title"></h3>
               <div class="data-source-list-container">
-                 <p data-i18n-key="settings.dataSources.description"></p>
-                 <ul id="dataSourceList">
-                    <!-- Example Item (will be dynamically populated) -->
-                    <li class="data-source-item" data-id="example-id-1">
-                        <span class="source-name">Example Local Source</span>
-                        <span class="source-type">(Local)</span>
-                        <div class="actions">
-                            <button class="edit-btn btn btn-sm btn-secondary" data-i18n-key="settings.dataSources.edit"></button>
-                            <button class="delete-btn btn btn-sm btn-danger" data-i18n-key="settings.dataSources.delete"></button>
-                        </div>
-                        <div class="edit-form" style="display: none;">
-                            <!-- Inline edit form placeholder -->
-                            <!-- Example content removed, form structure likely generated by JS -->
-                            <button class="save-inline-btn btn btn-sm btn-primary" data-i18n-key="settings.save"></button>
-                            <button class="cancel-inline-btn btn btn-sm btn-secondary" data-i18n-key="settings.cancel"></button>
-                        </div>
-                    </li>
-                 </ul>
+                <p data-i18n-key="settings.dataSources.description"></p>
+                <ul id="dataSourceList">
+                  <!-- Example Item (will be dynamically populated) -->
+                  <li class="data-source-item" data-id="example-id-1">
+                    <span class="source-name">Example Local Source</span>
+                    <span class="source-type">(Local)</span>
+                    <div class="actions">
+                      <button class="edit-btn btn btn-sm btn-secondary"
+                        data-i18n-key="settings.dataSources.edit"></button>
+                      <button class="delete-btn btn btn-sm btn-danger"
+                        data-i18n-key="settings.dataSources.delete"></button>
+                    </div>
+                    <div class="edit-form" style="display: none;">
+                      <!-- Inline edit form placeholder -->
+                      <!-- Example content removed, form structure likely generated by JS -->
+                      <button class="save-inline-btn btn btn-sm btn-primary" data-i18n-key="settings.save"></button>
+                      <button class="cancel-inline-btn btn btn-sm btn-secondary"
+                        data-i18n-key="settings.cancel"></button>
+                    </div>
+                  </li>
+                </ul>
               </div>
               <div id="dataSourceFeedbackArea" class="feedback-area"></div>
               <button id="addDataSourceBtn" class="btn btn-primary" data-i18n-key="settings.dataSources.add"></button>
               <!-- Container for the Add Data Source Form (initially hidden) -->
-              <div id="addDataSourceFormContainer" style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
-                  <!-- Add form content will be injected here by JS -->
+              <div id="addDataSourceFormContainer"
+                style="display: none; margin-top: 15px; border-top: 1px solid var(--border-color); padding-top: 15px;">
+                <!-- Add form content will be injected here by JS -->
               </div>
               <!-- Section-specific save button -->
               <div class="settings-actions">
-                 <button type="button" class="btn btn-primary settings-save-section" data-category="data-sources" data-i18n-key="settings.save"></button> <!-- Added data-category for consistency -->
+                <button type="button" class="btn btn-primary settings-save-section" data-category="data-sources"
+                  data-i18n-key="settings.save"></button> <!-- Added data-category for consistency -->
               </div>
             </div>
             <!-- General Content Pane -->
@@ -163,19 +208,24 @@
               <!-- Theme toggle is handled globally, maybe add a note here if needed -->
               <div class="feedback-area" id="generalFeedbackArea"></div> <!-- Added feedback area -->
               <div class="settings-actions">
-                 <button type="button" class="btn btn-primary settings-save-section" data-category="general" data-i18n-key="settings.save"></button>
+                <button type="button" class="btn btn-primary settings-save-section" data-category="general"
+                  data-i18n-key="settings.save"></button>
               </div>
             </div>
             <!-- File Recognition Content Pane -->
-            <div class="settings-pane" data-category="file-recognition" id="settingsFileRecognition" style="display: none;">
+            <div class="settings-pane" data-category="file-recognition" id="settingsFileRecognition"
+              style="display: none;">
               <h3 data-i18n-key="settings.fileRecognition.title"></h3>
               <div class="form-group">
                 <label for="supportedFileExtensions" data-i18n-key="settings.fileRecognition.extensionsLabel"></label>
-                <textarea id="supportedFileExtensions" rows="3" data-i18n-placeholder-key="settings.fileRecognition.extensionsPlaceholder" placeholder=".json, .yaml, .txt"></textarea>
+                <textarea id="supportedFileExtensions" rows="3"
+                  data-i18n-placeholder-key="settings.fileRecognition.extensionsPlaceholder"
+                  placeholder=".json, .yaml, .txt"></textarea>
               </div>
               <div class="feedback-area" id="fileRecognitionFeedbackArea"></div> <!-- Added feedback area -->
               <div class="settings-actions">
-                 <button type="button" class="btn btn-primary settings-save-section" data-category="file-recognition" data-i18n-key="settings.save"></button>
+                <button type="button" class="btn btn-primary settings-save-section" data-category="file-recognition"
+                  data-i18n-key="settings.save"></button>
               </div>
             </div>
             <!-- Image Cache Content Pane -->
@@ -183,45 +233,49 @@
               <h3 data-i18n-key="settings.imageCache.title"></h3>
               <div class="form-group">
                 <label for="imageCacheSizeLimit" data-i18n-key="settings.imageCache.sizeLimitLabel"></label>
-                <input type="number" id="imageCacheSizeLimit" min="0" data-i18n-placeholder-key="settings.imageCache.sizeLimitPlaceholder" placeholder="e.g., 500">
+                <input type="number" id="imageCacheSizeLimit" min="0"
+                  data-i18n-placeholder-key="settings.imageCache.sizeLimitPlaceholder" placeholder="e.g., 500">
               </div>
               <!-- New: Compression Quality Slider -->
               <div class="form-group">
-                  <label for="imageCacheCompressQuality" data-i18n-key="settings.imageCache.compressQualityLabel"></label>
-                  <div>
-                    <input type="range" id="imageCacheCompressQuality" min="0" max="100" step="1">
-                    <span id="imageCacheCompressQualityValue" class="range-value">80</span> <!-- Display current value -->
-                  </div> 
+                <label for="imageCacheCompressQuality" data-i18n-key="settings.imageCache.compressQualityLabel"></label>
+                <div>
+                  <input type="range" id="imageCacheCompressQuality" min="0" max="100" step="1">
+                  <span id="imageCacheCompressQualityValue" class="range-value">80</span> <!-- Display current value -->
+                </div>
               </div>
               <!-- New: Display Current Cache Size -->
               <div class="form-group">
-                  <label data-i18n-key="settings.imageCache.currentSizeLabel"></label>
-                  <span id="currentCacheSizeDisplay" class="read-only-value">...</span> <!-- Read-only display -->
+                <label data-i18n-key="settings.imageCache.currentSizeLabel"></label>
+                <span id="currentCacheSizeDisplay" class="read-only-value">...</span> <!-- Read-only display -->
               </div>
               <!-- New: Preferred Cache Format -->
               <div class="form-group">
-                  <label for="imageCacheFormatSelect" data-i18n-key="settings.imageCache.preferredFormatLabel"></label>
-                  <select id="imageCacheFormatSelect">
-                      <!-- Options will be populated by JS or can be hardcoded here -->
-                      <option value="Original" data-i18n-key="settings.imageCache.formatOriginal">Original</option>
-                      <option value="JPEG" data-i18n-key="settings.imageCache.formatJPEG">JPEG</option>
-                      <option value="PNG" data-i18n-key="settings.imageCache.formatPNG">PNG</option>
-                      <option value="WebP" data-i18n-key="settings.imageCache.formatWebP">WebP</option>
-                  </select>
-                  <div class="feedback-area" id="imageCacheFormatFeedback" style="margin-top: 5px;"></div> <!-- Feedback area for format change -->
+                <label for="imageCacheFormatSelect" data-i18n-key="settings.imageCache.preferredFormatLabel"></label>
+                <select id="imageCacheFormatSelect">
+                  <!-- Options will be populated by JS or can be hardcoded here -->
+                  <option value="Original" data-i18n-key="settings.imageCache.formatOriginal">Original</option>
+                  <option value="JPEG" data-i18n-key="settings.imageCache.formatJPEG">JPEG</option>
+                  <option value="PNG" data-i18n-key="settings.imageCache.formatPNG">PNG</option>
+                  <option value="WebP" data-i18n-key="settings.imageCache.formatWebP">WebP</option>
+                </select>
+                <div class="feedback-area" id="imageCacheFormatFeedback" style="margin-top: 5px;"></div>
+                <!-- Feedback area for format change -->
               </div>
               <!-- Existing: Clear Cache -->
               <div class="form-group">
                 <label data-i18n-key="settings.imageCache.clearCacheLabel"></label>
                 <div class="control-group"> <!-- Wrapper div -->
-                  <button type="button" id="clearImageCacheBtn" class="btn btn-secondary" data-i18n-key="settings.imageCache.clearButton"></button>
+                  <button type="button" id="clearImageCacheBtn" class="btn btn-secondary"
+                    data-i18n-key="settings.imageCache.clearButton"></button>
                   <span id="clearCacheStatus" class="status-message"></span>
                 </div>
               </div>
               <!-- Existing: General Feedback Area for Save Button -->
               <div class="feedback-area" id="imageCacheFeedbackArea"></div>
               <div class="settings-actions">
-                 <button type="button" class="btn btn-primary settings-save-section" data-category="image-cache" data-i18n-key="settings.save"></button>
+                <button type="button" class="btn btn-primary settings-save-section" data-category="image-cache"
+                  data-i18n-key="settings.save"></button>
               </div>
             </div>
             <!-- Updates Content Pane -->
@@ -232,96 +286,104 @@
                 <div class="package-details">
                   <p><span data-i18n-key="settings.about.nameLabel"></span> <span id="package-name"></span></p>
                   <p><span data-i18n-key="settings.about.versionLabel"></span> <span id="package-version"></span></p>
-                  <p><span data-i18n-key="settings.about.descriptionLabel"></span> <span id="package-description"></span></p>
+                  <p><span data-i18n-key="settings.about.descriptionLabel"></span> <span
+                      id="package-description"></span></p>
                   <p><span data-i18n-key="settings.about.authorLabel"></span> <span id="package-author"></span></p>
                   <p><span data-i18n-key="settings.about.licenseLabel"></span> <span id="package-license"></span></p>
                 </div>
               </div>
-<div class="about-section">
-                  <h5 data-i18n-key="settings.about.linksTitle">Links</h5>
-                  <p><strong data-i18n-key="settings.about.projectAddressLabel">Project Repository:</strong> <a id="project-address" href="#" target="_blank" rel="noopener noreferrer"></a></p>
-                  <p><strong data-i18n-key="settings.about.feedbackEmailLabel">Feedback Email:</strong> <a id="feedback-email" href="#"></a></p>
-              </div>
               <div class="about-section">
-                  <h5 data-i18n-key="settings.about.techStackTitle">Technology Stack</h5>
-                  <p><strong data-i18n-key="settings.about.electronVersionLabel">Electron:</strong> <span id="electron-version"></span></p>
-                  <p><strong data-i18n-key="settings.about.nodeVersionLabel">Node.js:</strong> <span id="node-version"></span></p>
-                  <p><strong data-i18n-key="settings.about.chromeVersionLabel">Chromium:</strong> <span id="chrome-version"></span></p>
-                  <p><strong data-i18n-key="settings.about.v8VersionLabel">V8:</strong> <span id="v8-version"></span></p>
+                <h4 data-i18n-key="settings.about.linksTitle">Links</h4>
+                <p><span data-i18n-key="settings.about.projectAddressLabel">Project Repository:</span> <a
+                    id="project-address" href="#" target="_blank" rel="noopener noreferrer"></a></p>
+                <p><span data-i18n-key="settings.about.feedbackEmailLabel">Feedback Email:</span> <a id="feedback-email"
+                    href="#"></a></p>
               </div>
+              <!-- Removed Technology Stack Section -->
               <div class="update-section">
                 <h4 data-i18n-key="settings.about.updates">Updates</h4>
                 <div class="form-group">
-                  <p id="currentVersionInfo"><span data-i18n-key="settings.updates.currentVersion"></span> <span id="appVersionDisplay" data-i18n-key="settings.updates.loading">Loading...</span></p>
+                  <p id="currentVersionInfo"><span data-i18n-key="settings.updates.currentVersion"></span> <span
+                      id="appVersionDisplay" data-i18n-key="settings.updates.loading">Loading...</span></p>
                 </div>
                 <div class="form-group">
-                  <button type="button" id="checkUpdatesBtn" class="btn btn-secondary" data-i18n-key="settings.updates.checkButton"></button>
+                  <button type="button" id="checkUpdatesBtn" class="btn btn-secondary"
+                    data-i18n-key="settings.updates.checkButton"></button>
                   <p id="updateStatusInfo" class="status-message"></p>
                 </div>
               </div>
             </div>
-            </div>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Add/Edit Source Model -->
-    <div id="sourceEditModel" class="Model">
-      <div class="Model-content source-edit-Model-content">
-        <button id="sourceEditClose" class="Model-close">&times;</button>
-        <h2 id="sourceEditTitle" class="Model-title">Add/Edit Model Source</h2> <!-- id="sourceEditTitle" already exists - text set by JS -->
-        <form id="sourceEditForm">
-          <input type="hidden" id="sourceEditId"> <!-- Hidden field for editing existing source ID -->
-
-          <div class="form-group">
-            <label for="sourceEditName" id="labelSourceEditName" data-i18n-key="settings.modelSources.nameLabel"></label>
-            <input type="text" id="sourceEditName" required>
-          </div>
-
-          <div class="form-group">
-            <label for="sourceEditType" id="labelSourceEditType" data-i18n-key="settings.modelSources.typeLabel"></label>
-            <select id="sourceEditType" required>
-              <option value="local" id="optionSourceEditTypeLocal" data-i18n-key="settings.modelSources.typeLocal"></option>
-              <option value="webdav" id="optionSourceEditTypeWebdav" data-i18n-key="settings.modelSources.typeWebdav"></option>
-            </select>
-          </div>
-
-          <!-- Fields for Local Type -->
-          <div id="sourceEditLocalFields" class="form-group source-type-fields">
-            <label for="sourceEditPath" id="labelSourceEditPath" data-i18n-key="settings.modelSources.pathLabel"></label>
-            <div class="input-group">
-              <input type="text" id="sourceEditPath" required>
-              <button type="button" id="sourceEditBrowseBtn" class="btn btn-secondary" data-i18n-key="settings.modelSources.browse"></button> <!-- id="sourceEditBrowseBtn" already exists -->
-            </div>
-          </div>
-
-          <!-- Fields for WebDAV Type -->
-          <div id="sourceEditWebdavFields" class="form-group source-type-fields" style="display: none;">
-            <div class="form-group">
-              <label for="sourceEditUrl" id="labelSourceEditUrl" data-i18n-key="settings.modelSources.urlLabel"></label>
-              <input type="url" id="sourceEditUrl" required>
-            </div>
-            <div class="form-group">
-              <label for="sourceEditUsername" id="labelSourceEditUsername" data-i18n-key="settings.modelSources.usernameLabel"></label>
-              <input type="text" id="sourceEditUsername">
-            </div>
-            <div class="form-group">
-              <label for="sourceEditPassword" id="labelSourceEditPassword" data-i18n-key="settings.modelSources.passwordLabel"></label>
-              <input type="password" id="sourceEditPassword">
-            </div>
-          </div>
-
-        </form>
-        <div id="sourceEditFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
-        <div class="Model-actions">
-          <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary" data-i18n-key="settings.cancel"></button> <!-- Already type="button" -->
-          <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm" data-i18n-key="settings.modelSources.saveSource"></button> <!-- type="submit" is correct here -->
         </div>
       </div>
     </div>
   </div>
 
+  <!-- Add/Edit Source Model -->
+  <div id="sourceEditModel" class="Model">
+    <div class="Model-content source-edit-Model-content">
+      <button id="sourceEditClose" class="Model-close">&times;</button>
+      <h2 id="sourceEditTitle" class="Model-title">Add/Edit Model Source</h2>
+      <!-- id="sourceEditTitle" already exists - text set by JS -->
+      <form id="sourceEditForm">
+        <input type="hidden" id="sourceEditId"> <!-- Hidden field for editing existing source ID -->
+
+        <div class="form-group">
+          <label for="sourceEditName" id="labelSourceEditName" data-i18n-key="settings.modelSources.nameLabel"></label>
+          <input type="text" id="sourceEditName" required>
+        </div>
+
+        <div class="form-group">
+          <label for="sourceEditType" id="labelSourceEditType" data-i18n-key="settings.modelSources.typeLabel"></label>
+          <select id="sourceEditType" required>
+            <option value="local" id="optionSourceEditTypeLocal" data-i18n-key="settings.modelSources.typeLocal">
+            </option>
+            <option value="webdav" id="optionSourceEditTypeWebdav" data-i18n-key="settings.modelSources.typeWebdav">
+            </option>
+          </select>
+        </div>
+
+        <!-- Fields for Local Type -->
+        <div id="sourceEditLocalFields" class="form-group source-type-fields">
+          <label for="sourceEditPath" id="labelSourceEditPath" data-i18n-key="settings.modelSources.pathLabel"></label>
+          <div class="input-group">
+            <input type="text" id="sourceEditPath" required>
+            <button type="button" id="sourceEditBrowseBtn" class="btn btn-secondary"
+              data-i18n-key="settings.modelSources.browse"></button> <!-- id="sourceEditBrowseBtn" already exists -->
+          </div>
+        </div>
+
+        <!-- Fields for WebDAV Type -->
+        <div id="sourceEditWebdavFields" class="form-group source-type-fields" style="display: none;">
+          <div class="form-group">
+            <label for="sourceEditUrl" id="labelSourceEditUrl" data-i18n-key="settings.modelSources.urlLabel"></label>
+            <input type="url" id="sourceEditUrl" required>
+          </div>
+          <div class="form-group">
+            <label for="sourceEditUsername" id="labelSourceEditUsername"
+              data-i18n-key="settings.modelSources.usernameLabel"></label>
+            <input type="text" id="sourceEditUsername">
+          </div>
+          <div class="form-group">
+            <label for="sourceEditPassword" id="labelSourceEditPassword"
+              data-i18n-key="settings.modelSources.passwordLabel"></label>
+            <input type="password" id="sourceEditPassword">
+          </div>
+        </div>
+
+      </form>
+      <div id="sourceEditFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
+      <div class="Model-actions">
+        <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary"
+          data-i18n-key="settings.cancel"></button> <!-- Already type="button" -->
+        <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm"
+          data-i18n-key="settings.modelSources.saveSource"></button> <!-- type="submit" is correct here -->
+      </div>
+    </div>
+  </div>
+  </div>
+
   <script type="module" src="./main.js"></script>
 </body>
+
 </html>
