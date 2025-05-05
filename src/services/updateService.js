@@ -49,6 +49,7 @@ class UpdateService {
     log.info('[UpdateService] Initializing...');
 
     autoUpdater.on('checking-for-update', () => {
+      log.info('[UpdateService] Event: checking-for-update');
       log.info('[UpdateService] Checking for update...');
       this.sendStatusToRenderer({ status: 'checking' });
     });
@@ -88,13 +89,15 @@ class UpdateService {
    * @description 检查是否有可用更新。
    */
   checkForUpdates() {
+    log.info('[UpdateService] >>> Starting checkForUpdates method.');
     log.info('[UpdateService] Executing checkForUpdates...');
     try {
       // 注意：如果 webContents 未设置，检查更新仍然会进行，但状态无法发送到 UI
       if (!this.webContents) {
-          log.warn('[UpdateService] checkForUpdates called, but webContents is not set. Status updates might not reach the UI.');
+        log.warn('[UpdateService] checkForUpdates called, but webContents is not set. Status updates might not reach the UI.');
       }
       autoUpdater.checkForUpdates();
+      log.info('[UpdateService] >>> Calling autoUpdater.checkForUpdates()...');
     } catch (error) {
       log.error('[UpdateService] Error calling checkForUpdates:', error);
       this.sendStatusToRenderer({ status: 'error', info: `Failed to check for updates: ${error.message}` });
@@ -115,6 +118,6 @@ class UpdateService {
   }
 }
 
-// 导出单例或类，根据项目架构决定
+
 // 这里导出类，由服务注册中心管理实例
 module.exports = UpdateService;

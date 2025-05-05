@@ -1525,15 +1525,16 @@ function handleUpdateButtonClick() {
  */
 function handleUpdateStatus(status, ...args) {
      // Ensure elements are available using the correct IDs
-    const currentUpdateStatusInfoEl = settingsContent?.querySelector('#settingsUpdates #updateStatusInfo');
-    const currentCheckUpdatesBtn = settingsContent?.querySelector('#settingsUpdates #checkUpdatesBtn');
+    const currentUpdateStatusInfoEl = settingsContent?.querySelector('#settingsAbout #updateStatusInfo');
+    const currentCheckUpdatesBtn = settingsContent?.querySelector('#settingsAbout #checkUpdatesBtn');
 
     if (!currentUpdateStatusInfoEl || !currentCheckUpdatesBtn) {
         logMessage('warn', `[SettingsModel] 无法处理更新状态 '${status}'：更新面板的 UI 元素 (#updateStatusInfo 或 #checkUpdatesBtn) 不可用`);
         // If the pane isn't visible, we might not want to log an error, just ignore.
         return;
     }
-    logMessage('info', `[SettingsModel] 收到更新状态: ${status}`, args);
+    // Log the entire status object for better debugging
+    logMessage('info', `[SettingsModel] 收到更新状态对象:`, status, args);
 
     // Use the current references
     updateStatusInfoEl = currentUpdateStatusInfoEl; // Update module-level reference
@@ -1543,7 +1544,8 @@ function handleUpdateStatus(status, ...args) {
     checkUpdatesBtn.disabled = false;
     checkUpdatesBtn.textContent = t('settings.updates.checkButton'); // Use correct key
 
-    switch (status) {
+    // Access the status string from the status object
+    switch (status.status) {
         case 'checking':
             updateStatusInfoEl.textContent = t('settings.updates.statusChecking'); // Use correct key
             checkUpdatesBtn.disabled = true;
@@ -1574,7 +1576,8 @@ function handleUpdateStatus(status, ...args) {
             updateStatusInfoEl.textContent = t('settings.updates.statusError', { message: errorMessage }); // Use correct key
             break;
         default:
-            logMessage('warn', `[SettingsModel] 未处理的更新状态: ${status}`);
+            // Log the entire status object for better debugging
+            logMessage('warn', `[SettingsModel] 未处理的更新状态对象:`, status);
             // updateStatusInfoEl.textContent = t('settings.updates.statusIdle'); // Optional reset
             break;
     }
