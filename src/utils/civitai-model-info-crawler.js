@@ -78,6 +78,8 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   }
   
   let desc = turndownService.turndown( modelInfo.description) || null;
+  let versionDescription = turndownService.turndown( modelVersionInfo.description) || null;
+
   const images = modelVersionInfo.images || [];
 
   let trainedWords = (modelVersionInfo.trainedWords || []).join(", ");
@@ -97,7 +99,7 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
 
     fromUrl:`https://civitai.com/models/${modelId}?modelVersionId=${id}`,
     from:`Civita`,
-    versionDescription: modelVersionInfo.description||null,
+    versionDescription: versionDescription,
     tags: modelInfo.tags,
     images: images, // Ensure images is always an array (possibly empty)
 
