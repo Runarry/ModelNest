@@ -1,7 +1,6 @@
 appId: com.banazzle.modelnest
 productName: ModelNest
 files:
-  - 'node_modules/**'
   - 'src/**'
   - 'src/**/**'
 
@@ -10,7 +9,7 @@ files:
   - 'preload.js'
   - 'package.json'
 
-
+icon: assets/icon.png
 
 asar: true
 win:
