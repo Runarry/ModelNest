@@ -15,6 +15,7 @@ asar:
   smartUnpack: true
 afterPack: ./scripts/remove-locales.js
 win:
+  artifactName: ${productName}-${version}.${ext}
   target:
     - target: nsis
       arch:
