@@ -84,7 +84,8 @@ export async function showDetailModel(model, sourceId, isReadOnly) {
 
     // --- Load Image ---
     detailImage.src = ''; // Clear previous image
-    detailImage.style.display = 'none'; // Hide initially
+    // Keep image hidden initially, its display will be controlled by tab logic
+    detailImage.style.display = 'none';
     if (model.image) {
         // Use ui-utils loadImage, passing the img element and necessary data
         detailImage.setAttribute('data-image-path', model.image);
@@ -174,6 +175,7 @@ function renderModelContent(model) {
           <button class="tab-btn active" data-tab="basic">${t('detail.tabs.basic')}</button>
           <button class="tab-btn" data-tab="description">${t('detail.tabs.description')}</button>
           <button class="tab-btn" data-tab="extra">${t('detail.tabs.extra')}</button>
+          <button class="tab-btn" data-tab="image">${t('detail.tabs.image')}</button> <!-- Added Image Tab -->
         </div>
 
         <div class="tab-content active" id="basic-tab">
@@ -200,6 +202,13 @@ function renderModelContent(model) {
           </div>
         </div>
 
+        <!-- Added Image Tab Content Pane -->
+        <div class="tab-content" id="image-tab">
+          <div class="detail-info image-container">
+            <!-- Image will be moved here dynamically -->
+          </div>
+        </div>
+
         <div class="Model-actions">
              <span id="readOnlyIndicator" class="readonly-indicator" style="display: none;">${t('readOnlyMode')}</span> <!-- 新增：只读提示 -->
              <span id="detailFeedback" class="Model-feedback"></span>
@@ -210,9 +219,18 @@ function renderModelContent(model) {
 
     // Use setTimeout to ensure elements are in the DOM before attaching listeners
     setTimeout(() => {
-        attachTabListeners();
+        // Move the existing detailImage element into the image tab
+        const imageTabContent = detailDescriptionContainer.querySelector('#image-tab .image-container');
+        if (imageTabContent && detailImage) {
+            imageTabContent.appendChild(detailImage);
+            // Ensure image is visible only if this tab is active initially (handled by attachTabListeners)
+        } else {
+            logMessage('warn', '[DetailModel] Could not find image tab container or detailImage element to move.');
+        }
+
+        attachTabListeners(); // Attach listeners AFTER moving the image
         attachSaveListener();
-        applyReadOnlyState(); // 新增：应用只读状态
+        applyReadOnlyState(); // Apply read-only state
     }, 0);
 }
 
@@ -284,16 +302,34 @@ function attachTabListeners() {
 
             // Remove active class from all buttons and content
             detailModel.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            detailModel.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            detailModel.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+                // Hide image if it's inside this content area and not the image tab itself
+                const img = content.querySelector('#detailImage');
+                if (img && content.id !== 'image-tab') {
+                    img.style.display = 'none';
+                }
+            });
 
             // Add active class to the clicked button and corresponding content
             button.classList.add('active');
             const contentToShow = detailModel.querySelector(`#${tabId}-tab`);
             if (contentToShow) {
                 contentToShow.classList.add('active');
+                // Special handling for image tab visibility
+                if (tabId === 'image' && detailImage) {
+                    detailImage.style.display = 'block'; // Show image only when image tab is active
+                } else if (detailImage) {
+                     // Ensure image is hidden if another tab is selected
+                     // This check might be redundant due to the loop above, but ensures correctness
+                     const imageInOtherTab = detailModel.querySelector(`.tab-content:not(#image-tab) #detailImage`);
+                     if (!imageInOtherTab) { // Only hide if it's not supposed to be shown in another (incorrectly placed) tab
+                         detailImage.style.display = 'none';
+                     }
+                }
             } else {
-                 // Task 1: Error Logging (Potential failure point if HTML structure is wrong)
-                 logMessage('error', `[DetailModel] 找不到与标签按钮 "${tabId}" 对应的标签内容元素 (#${tabId}-tab)`);
+                 // Task 1: Error Logging
+                 logMessage('error', `[DetailModel] Could not find content element for tab: #${tabId}-tab`);
             }
         });
     });

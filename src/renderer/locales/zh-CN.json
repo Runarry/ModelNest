@@ -33,7 +33,8 @@
     "tabs": {
       "basic": "基础信息",
       "description": "描述",
-      "extra": "额外信息"
+      "extra": "额外信息",
+      "image": "图片"
     },
     "save": "保存",
     "saveSuccess": "保存成功！",

@@ -33,7 +33,8 @@
     "tabs": {
       "basic": "Basic Info",
       "description": "Description",
-      "extra": "Extra Info"
+      "extra": "Extra Info",
+      "image": "Image"
     },
     "save": "Save",
     "saveSuccess": "Save successful!",
