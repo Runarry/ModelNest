@@ -99,7 +99,7 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
     from:`Civita`,
     versionDescription: modelVersionInfo.description||null,
     tags: modelInfo.tags,
-    images: images || null,
+    images: images, // Ensure images is always an array (possibly empty)
 
   };
 }
