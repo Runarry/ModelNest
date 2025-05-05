@@ -17,9 +17,23 @@ const os = require('os');
 const sharp = require('sharp');
 const crypto = require('crypto'); // 添加加密模块用于生成hash
 const log = require('electron-log'); // 导入 electron-log
-// const configService = require('../services/configService'); // 移除对 configService 的直接依赖
 
- // 默认配置
+// MIME 类型与扩展名映射
+const mimeToExt = {
+    'image/jpeg': '.jpg',
+    'image/png': '.png',
+    'image/webp': '.webp',
+    'image/gif': '.gif',
+    'image/bmp': '.bmp',
+    'image/tiff': '.tiff',
+    // 可以根据需要添加更多类型
+};
+
+const extToMime = Object.fromEntries(Object.entries(mimeToExt).map(([mime, ext]) => [ext, mime]));
+
+const defaultExt = '.bin'; // 未知或不支持的类型的默认扩展名
+
+// 默认配置
  const defaultConfig = {
     cacheDir: path.join(process.cwd(), 'cache', 'images'),
     maxCacheSizeMB: 200,
@@ -62,9 +76,12 @@ function getCacheFilePath(libraryId, imageName) {
     // 可以考虑根据 hash 创建子目录分散文件，例如 hash 的前两位
     // const subDir = hash.substring(0, 2);
     // const cacheDirWithSub = path.join(config.cacheDir, subDir);
-    // return path.join(cacheDirWithSub, hash); // 暂时不加后缀，直接存 Buffer
-    return path.join(config.cacheDir, hash); // 直接存储 hash 命名的文件
+    // return path.join(cacheDirWithSub, hash);
+    // 返回不带扩展名的基础路径，扩展名将在 setCache 和 getCache 中处理
+    return path.join(config.cacheDir, hash);
 }
+
+// 移除 getCacheMetaFilePath 函数
 
 /**
  * 确保缓存目录存在
@@ -92,65 +109,91 @@ async function ensureCacheDirExists() {
 
 
 /**
- * 从缓存中获取图片 Buffer
+ * 从缓存中获取图片 Buffer，通过文件扩展名推断 MIME 类型
  * @param {string} libraryId 库 ID
  * @param {string} imageName 图片名称
- * @returns {Promise<Buffer | null>} 缓存的 Buffer 或 null
+ * @returns {Promise<{data: Buffer, mimeType: string | null} | null>} 包含 Buffer 和 mimeType 的对象，或 null
  */
 async function getCache(libraryId, imageName) {
     const startTime = Date.now();
     stats.totalRequests++;
-    const cacheFilePath = getCacheFilePath(libraryId, imageName);
-    log.debug(`[ImageCache] >>> getCache START for key: ${libraryId}_${imageName}. Calculated cacheFilePath: ${cacheFilePath}`);
+    const baseCachePath = getCacheFilePath(libraryId, imageName); // 获取不带扩展名的基础路径
+    const baseName = path.basename(baseCachePath);
+    log.debug(`[ImageCache] >>> getCache START for key: ${libraryId}_${imageName}. Base path: ${baseCachePath}`);
 
     try {
         await ensureCacheDirExists(); // 确保目录存在
-        log.debug(`[ImageCache] Attempting fs.promises.readFile for: ${cacheFilePath}`);
-        const cacheBuffer = await fs.promises.readFile(cacheFilePath);
-        log.info(`[ImageCache] fs.promises.readFile SUCCESS for: ${cacheFilePath}. Buffer size: ${cacheBuffer.length}`);
-        // 更新访问时间 (异步，不阻塞返回)
-        fs.promises.utimes(cacheFilePath, new Date(), new Date()).catch(utimeError => {
-            log.warn(`[ImageCache] Failed to update access time for cache file: ${cacheFilePath}`, utimeError.message);
+
+        // 读取缓存目录查找匹配的文件
+        const files = await fs.promises.readdir(config.cacheDir);
+        const matchingFiles = files.filter(f => f.startsWith(baseName));
+
+        if (matchingFiles.length === 0) {
+            log.info(`[ImageCache] Cache MISS: No file found starting with ${baseName} for key ${libraryId}_${imageName}`);
+            const duration = Date.now() - startTime;
+            log.debug(`[ImageCache] <<< getCache END (Miss) for key: ${libraryId}_${imageName}. Duration: ${duration}ms`);
+            return null;
+        }
+
+        // 通常应该只有一个匹配项，但以防万一，取第一个
+        const foundFileName = matchingFiles[0];
+        const foundFilePath = path.join(config.cacheDir, foundFileName);
+        log.debug(`[ImageCache] Found matching cache file: ${foundFilePath}`);
+
+        // 读取找到的缓存文件
+        const cacheBuffer = await fs.promises.readFile(foundFilePath);
+        log.info(`[ImageCache] fs.promises.readFile SUCCESS for: ${foundFilePath}. Buffer size: ${cacheBuffer.length}`);
+
+        // 从扩展名推断 MIME 类型
+        const extension = path.extname(foundFileName).toLowerCase();
+        const mimeType = extToMime[extension] || null; // 如果扩展名不在映射中，则为 null
+        log.info(`[ImageCache] Inferred MimeType from extension '${extension}': ${mimeType}`);
+
+        // 更新访问时间 (异步，不阻塞返回) - 只更新找到的数据文件
+        const updateTime = new Date();
+        fs.promises.utimes(foundFilePath, updateTime, updateTime).catch(utimeError => {
+            log.warn(`[ImageCache] Failed to update access time for cache file: ${foundFilePath}`, utimeError.message);
         });
+
         stats.cacheHits++;
         const duration = Date.now() - startTime;
-        log.info(`[ImageCache] Cache HIT for: ${libraryId}_${imageName}. Path: ${path.basename(cacheFilePath)}, Size: ${(cacheBuffer.length / 1024).toFixed(1)}KB. Duration: ${duration}ms`);
+        log.info(`[ImageCache] Cache HIT for: ${libraryId}_${imageName}. Path: ${foundFileName}, Size: ${(cacheBuffer.length / 1024).toFixed(1)}KB, MimeType: ${mimeType}. Duration: ${duration}ms`);
         log.debug(`[ImageCache] <<< getCache END (Hit) for key: ${libraryId}_${imageName}`);
-        return cacheBuffer;
+        return { data: cacheBuffer, mimeType: mimeType }; // 返回包含 Buffer 和推断出的 mimeType 的对象
+
     } catch (error) {
-        if (error.code === 'ENOENT') {
-            log.info(`[ImageCache] Cache MISS (ENOENT): File not found at ${cacheFilePath} for key ${libraryId}_${imageName}`);
-        } else {
-            log.error(`[ImageCache] Error reading cache file: ${cacheFilePath} for key ${libraryId}_${imageName}`, error.message, error.stack);
-        }
+        // 处理读取目录或文件时的错误
+        log.error(`[ImageCache] Error during getCache for key ${libraryId}_${imageName} (base path: ${baseCachePath})`, error.message, error.stack);
         const duration = Date.now() - startTime;
-        log.debug(`[ImageCache] <<< getCache END (Miss or Error) for key: ${libraryId}_${imageName}. Duration: ${duration}ms`);
-        return null; // 文件不存在或读取错误，返回 null
+        log.debug(`[ImageCache] <<< getCache END (Error) for key: ${libraryId}_${imageName}. Duration: ${duration}ms`);
+        return null; // 发生错误，返回 null
     }
 }
 
 /**
- * 将图片 Buffer 处理后存入缓存
+ * 将图片 Buffer 处理后存入缓存，文件名包含基于 MIME 类型的扩展名
  * @param {string} libraryId 库 ID
  * @param {string} imageName 图片名称
  * @param {Buffer} sourceBuffer 原始图片 Buffer
  * @param {string} preferredFormat 期望的缓存格式 ('JPEG', 'PNG', 'WebP', 'Original')
+ * @param {string | null} originalMimeType 原始图片的 MIME 类型 (必须提供以确定原始扩展名)
  * @returns {Promise<void>}
  */
-async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'Original') { // 添加 preferredFormat 参数，并提供默认值
+async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'Original', originalMimeType = null) {
     const startTime = Date.now();
-    const cacheFilePath = getCacheFilePath(libraryId, imageName);
-    log.info(`[ImageCache] >>> setCache START for key: ${libraryId}_${imageName}. Target path: ${cacheFilePath}. Source buffer size: ${sourceBuffer ? sourceBuffer.length : 'null/undefined'}. Preferred format: ${preferredFormat}`);
+    const baseCachePath = getCacheFilePath(libraryId, imageName); // 获取不带扩展名的基础路径
+    log.info(`[ImageCache] >>> setCache START for key: ${libraryId}_${imageName}. Base path: ${baseCachePath}. Source buffer size: ${sourceBuffer ? sourceBuffer.length : 'null/undefined'}. Preferred format: ${preferredFormat}. Original MimeType: ${originalMimeType}`);
+
     if (!sourceBuffer || sourceBuffer.length === 0) {
         log.warn(`[ImageCache] setCache called with empty or invalid sourceBuffer for key: ${libraryId}_${imageName}. Aborting.`);
-        return; // Or throw error? For now, just return.
+        return;
     }
     stats.originalSize += sourceBuffer.length; // 记录原始大小
 
     let writeStartTime, writeEndTime;
     let processedBuffer = sourceBuffer; // 默认使用原始 Buffer
     let formatUsed = 'Original'; // 默认格式
-    // const preferredFormat = configService.get('imageCache.preferredFormat', 'Original'); // 使用传入的参数，移除对 configService 的调用
+    let finalMimeType = originalMimeType; // 最终写入元数据的 MIME 类型
 
     try {
         await ensureCacheDirExists(); // 确保目录存在
@@ -175,23 +218,27 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
                             .jpeg({ quality: config.compressQuality, progressive: true })
                             .toBuffer();
                         formatUsed = 'JPEG';
+                        finalMimeType = 'image/jpeg'; // 更新 MIME 类型
                         break;
                     case 'png':
                         processedBuffer = await sharpInstance
                             .png({ quality: config.compressQuality }) // sharp 的 png quality 范围不同，可能需要调整
                             .toBuffer();
                         formatUsed = 'PNG';
+                        finalMimeType = 'image/png'; // 更新 MIME 类型
                         break;
                     case 'webp':
                         processedBuffer = await sharpInstance
                             .webp({ quality: config.compressQuality })
                             .toBuffer();
                         formatUsed = 'WebP';
+                        finalMimeType = 'image/webp'; // 更新 MIME 类型
                         break;
                     default:
                         log.warn(`[ImageCache] Unsupported preferredFormat: ${preferredFormat}. Falling back to Original.`);
                         processedBuffer = sourceBuffer; // 格式不支持，回退到原始格式
                         formatUsed = 'Original';
+                        finalMimeType = originalMimeType; // 保持原始 MIME 类型
                         break;
                 }
                 sharpEndTime = Date.now();
@@ -207,27 +254,50 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
                 // 转换失败，使用原始 Buffer
                 processedBuffer = sourceBuffer;
                 formatUsed = 'Original (Fallback)';
+                finalMimeType = originalMimeType; // 保持原始 MIME 类型
                 // 不再抛出错误，而是尝试保存原始文件
                 // throw sharpError;
             }
         } else {
              log.info(`[ImageCache] Preferred format is Original, skipping sharp processing for ${libraryId}_${imageName}.`);
+             finalMimeType = originalMimeType; // 确认使用原始 MIME 类型
         }
 
 
-        // 写入 Buffer (可能是原始的，也可能是处理过的) 到缓存文件
-        log.debug(`[ImageCache] Attempting fs.promises.writeFile to: ${cacheFilePath} (Format: ${formatUsed})`);
+        // 确定最终的文件扩展名
+        const finalExtension = mimeToExt[finalMimeType] || defaultExt;
+        const finalCachePath = baseCachePath + finalExtension; // 拼接完整路径
+
+        // 在写入前，删除可能存在的同名但不同扩展名的旧缓存文件
+        try {
+            const files = await fs.promises.readdir(config.cacheDir);
+            const baseName = path.basename(baseCachePath);
+            const oldFiles = files.filter(f => f.startsWith(baseName) && path.join(config.cacheDir, f) !== finalCachePath);
+            for (const oldFile of oldFiles) {
+                const oldFilePath = path.join(config.cacheDir, oldFile);
+                log.warn(`[ImageCache] Deleting old cache file with different extension: ${oldFilePath}`);
+                await fs.promises.unlink(oldFilePath);
+            }
+        } catch (readdirError) {
+             log.warn(`[ImageCache] Error reading cache directory while checking for old files:`, readdirError.message);
+             // 继续尝试写入
+        }
+
+        // 写入 Buffer 到带扩展名的缓存文件
+        log.debug(`[ImageCache] Attempting fs.promises.writeFile to: ${finalCachePath} (Format: ${formatUsed}, Mime: ${finalMimeType})`);
         writeStartTime = Date.now();
-        await fs.promises.writeFile(cacheFilePath, processedBuffer);
+        await fs.promises.writeFile(finalCachePath, processedBuffer);
         writeEndTime = Date.now();
-        log.info(`[ImageCache] fs.promises.writeFile SUCCESS for: ${cacheFilePath}. Duration: ${writeEndTime - writeStartTime}ms`);
+        log.info(`[ImageCache] fs.promises.writeFile SUCCESS for: ${finalCachePath}. Duration: ${writeEndTime - writeStartTime}ms`);
         stats.compressedSize += processedBuffer.length; // 记录压缩后大小
 
+        // 移除写入元数据文件的逻辑
+
         const totalDuration = Date.now() - startTime;
-        log.info(`[ImageCache] Image processed and cached successfully: ${libraryId}_${imageName} -> ${path.basename(cacheFilePath)}. Size: ${(sourceBuffer.length / 1024).toFixed(1)}KB -> ${(processedBuffer.length / 1024).toFixed(1)}KB. Total Duration: ${totalDuration}ms`);
+        log.info(`[ImageCache] Image processed and cached successfully: ${libraryId}_${imageName} -> ${path.basename(finalCachePath)}. Size: ${(sourceBuffer.length / 1024).toFixed(1)}KB -> ${(processedBuffer.length / 1024).toFixed(1)}KB. MimeType: ${finalMimeType}. Total Duration: ${totalDuration}ms`);
         log.debug(`[ImageCache] <<< setCache END (Success) for key: ${libraryId}_${imageName}`);
 
-        // 检查并清理缓存 (异步，不阻塞)
+        // 检查并清理缓存 (异步，不阻塞) - 清理逻辑也需要调整
         checkAndCleanCache().catch(cleanError => {
             log.error(`[ImageCache] Background cache cleanup failed:`, cleanError.message, cleanError.stack);
         });
@@ -235,19 +305,26 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
     } catch (error) {
         const totalDuration = Date.now() - startTime;
         log.error(`[ImageCache] FAILED to process or write cache for key ${libraryId}_${imageName} to ${cacheFilePath}. Total Duration: ${totalDuration}ms`, error.message, error.stack);
-        // 尝试删除可能不完整的缓存文件
-        try {
-            log.warn(`[ImageCache] Attempting to delete potentially incomplete cache file: ${cacheFilePath}`);
-            await fs.promises.unlink(cacheFilePath);
-            log.warn(`[ImageCache] Successfully deleted potentially incomplete cache file: ${cacheFilePath}`);
-        } catch (unlinkError) {
-            if (unlinkError.code !== 'ENOENT') { // Don't warn if file doesn't exist
-                log.warn(`[ImageCache] Failed to delete potentially incomplete cache file: ${cacheFilePath}`, unlinkError.message);
+        // 尝试删除可能不完整的缓存文件（现在带扩展名）
+        // 由于写入前会尝试删除旧文件，这里主要处理写入过程中断的情况
+        // finalCachePath 可能未定义如果错误发生在确定扩展名之前，但这种情况很少
+        if (finalCachePath) {
+            try {
+                log.warn(`[ImageCache] Attempting to delete potentially incomplete cache file: ${finalCachePath}`);
+                await fs.promises.unlink(finalCachePath);
+                log.warn(`[ImageCache] Successfully deleted potentially incomplete cache file: ${finalCachePath}`);
+            } catch (unlinkError) {
+                if (unlinkError.code !== 'ENOENT') { // Don't warn if file doesn't exist
+                    log.warn(`[ImageCache] Failed to delete potentially incomplete cache file: ${finalCachePath}`, unlinkError.message);
+                }
             }
+        } else {
+             log.warn(`[ImageCache] Cannot determine finalCachePath to delete on failure for key ${libraryId}_${imageName}.`);
         }
+        // 移除删除 meta 文件的尝试
         log.debug(`[ImageCache] <<< setCache END (Failure) for key: ${libraryId}_${imageName}`);
         // 重新抛出错误，让 imageService 知道缓存失败
-        throw error;
+        throw error; // 保持抛出错误
     }
 }
 
@@ -258,10 +335,20 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
  */
 async function clearCache() {
     if (fs.existsSync(config.cacheDir)) {
+        log.info(`[ImageCache] Clearing all cache files in ${config.cacheDir}`);
         const files = await fs.promises.readdir(config.cacheDir);
-        await Promise.all(files.map(file =>
-            fs.promises.unlink(path.join(config.cacheDir, file))
-        ));
+        const unlinkPromises = files.map(file => {
+            const filePath = path.join(config.cacheDir, file);
+            log.debug(`[ImageCache] Deleting cache file: ${filePath}`);
+            return fs.promises.unlink(filePath).catch(err => {
+                 // Log error but continue deleting others
+                 log.error(`[ImageCache] Failed to delete file during clearCache: ${filePath}`, err.message);
+            });
+        });
+        await Promise.all(unlinkPromises);
+        log.info(`[ImageCache] Cache clear complete. Deleted ${files.length} items.`);
+    } else {
+        log.info(`[ImageCache] Cache directory ${config.cacheDir} does not exist, nothing to clear.`);
     }
     stats.cacheHits = 0;
     stats.totalRequests = 0;
@@ -297,6 +384,7 @@ async function checkAndCleanCache() {
                     size: fileStats.size,
                     atime: fileStats.atimeMs, // Access time
                     mtime: fileStats.mtimeMs // Modification time
+                    // 移除 isMeta 标记
                 });
             } catch (statError) {
                 // Handle error if stat fails (e.g., file deleted concurrently)
@@ -312,32 +400,51 @@ async function checkAndCleanCache() {
     }
 
 
-    const totalSizeMB = files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024);
-    if (totalSizeMB <= config.maxCacheSizeMB) return;
+    // 计算所有文件的总大小
+    const totalCacheSizeMB = files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024);
+    log.info(`[ImageCache] Checking cache size. Current total size: ${totalCacheSizeMB.toFixed(2)}MB. Max allowed: ${config.maxCacheSizeMB}MB.`);
+
+    if (totalCacheSizeMB <= config.maxCacheSizeMB) {
+        log.debug(`[ImageCache] Cache size within limit. No cleanup needed.`);
+        return;
+    }
 
     // 2. 按修改时间排序 (最旧的在前)
-    files.sort((a, b) => a.mtime - b.mtime); // 使用 mtime 替代 atime
+    files.sort((a, b) => a.mtime - b.mtime);
 
     // 3. 清理最旧的文件直到满足大小限制
-    let removedSize = 0;
+    let currentSizeMB = totalCacheSizeMB;
+    let removedSizeMB = 0;
+    let removedFilesCount = 0;
     const targetSizeMB = config.maxCacheSizeMB * 0.9; // 清理到90%容量
+    log.info(`[ImageCache] Cache size exceeds limit. Starting cleanup. Target size: ${targetSizeMB.toFixed(2)}MB.`);
+
     for (const file of files) {
-        if (totalSizeMB - removedSize <= targetSizeMB) break;
+        if (currentSizeMB <= targetSizeMB) break; // 达到目标大小，停止清理
+
+        // 直接删除文件，不再区分数据和元数据
+        const filePath = file.path;
+
         try {
-            await fs.promises.unlink(file.path); // Use async unlink
-            removedSize += file.size / (1024 * 1024);
+            log.debug(`[ImageCache] Cleaning up cache file: ${filePath} (Size: ${(file.size / 1024).toFixed(1)}KB, Modified: ${new Date(file.mtime).toISOString()})`);
+            await fs.promises.unlink(filePath); // 删除文件
+            removedSizeMB += file.size / (1024 * 1024);
+            currentSizeMB -= file.size / (1024 * 1024);
+            removedFilesCount++;
+            // 移除删除对应 meta 文件的逻辑
         } catch (unlinkError) {
              if (unlinkError.code !== 'ENOENT') { // Don't log error if file already gone
-                console.error(`删除缓存文件失败: ${file.path}`, unlinkError);
+                log.error(`[ImageCache] Failed to delete cache file during cleanup: ${filePath}`, unlinkError.message);
              }
+             // 如果删除失败，我们可能无法准确减少 currentSizeMB，但这应该很少见
         }
     }
 
     stats.lastCleanTime = new Date();
-    const logMsg = `[ImageCache] 缓存清理完成: 原大小 ${totalSizeMB.toFixed(2)}MB, 清理了 ${removedSize.toFixed(2)}MB`;
-    if (config.debug) console.log(logMsg);
+    const logMsg = `[ImageCache] Cache cleanup finished. Original total size: ${totalCacheSizeMB.toFixed(2)}MB. Removed ${removedFilesCount} files, freeing approx ${removedSizeMB.toFixed(2)}MB. Current total size: ${currentSizeMB.toFixed(2)}MB.`;
+    log.info(logMsg); // Use info level for cleanup summary
 
-    // 添加统计方法
+    // 统计方法保持不变
     module.exports.getStats = () => ({
         ...stats,
         cacheHitRate: stats.totalRequests > 0 ? (stats.cacheHits / stats.totalRequests * 100).toFixed(1) + '%' : '0%',
