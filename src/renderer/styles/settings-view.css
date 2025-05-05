@@ -449,11 +449,12 @@
 
 /* --- Styles for Image Cache Pane --- */
 #settingsImageCache .form-group {
-  margin-bottom: 20px;
+  margin-bottom: 25px;
   display: grid;
   grid-template-columns: 180px 1fr;
   align-items: center;
-  gap: 15px;
+  gap: 5px;
+  justify-items: start;
 }
 #settingsImageCache label {
   font-weight: 500;
