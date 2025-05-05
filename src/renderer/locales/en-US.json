@@ -157,7 +157,16 @@
       "developer": "Developer:",
       "linksTitle": "Links:",
       "githubLink": "GitHub Repository",
-      "websiteLink": "Official Website"
+      "websiteLink": "Official Website",
+      "projectAddressLabel": "Project Repository:",
+      "feedbackEmailLabel": "Feedback Email:",
+      "techStackTitle": "Technology Stack",
+      "electronVersionLabel": "Electron:",
+      "nodeVersionLabel": "Node.js:",
+      "chromeVersionLabel": "Chromium:",
+      "v8VersionLabel": "V8:",
+      "valueMissing": "(Not available)",
+      "loadError": "Error loading info"
     },
     "validation": {
       "nameRequired": "Source name cannot be empty.",

@@ -11,7 +11,8 @@ import {
     getAppVersion, // <-- 添加获取应用版本
     clearImageCache, // <-- 添加清除图片缓存 (假设存在)
     getPackageInfo, // <-- 添加 getPackageInfo 导入
-    getImageCacheSize
+    getImageCacheSize,
+    getProcessVersions // <-- 添加 getProcessVersions 导入
 } from '../apiBridge.js';
 
 // ===== Helper Functions =====
@@ -539,84 +540,145 @@ function populateUpdatesPane() {
     // Button listener and status element are handled by setupUpdateSection
 }
 
-function populateAboutPane() {
+async function populateAboutPane() { // Make function async
     logMessage('debug', "[SettingsModel] 填充关于面板");
     const pane = settingsContent.querySelector('#settingsAbout');
     if (!pane) return;
 
-    // 获取并显示 package.json 信息 (直接调用导入的函数)
-    getPackageInfo() // 使用从 apiBridge 导入的函数
-        .then(info => {
-            if (info) { // 确保 info 对象存在
-                const nameEl = document.getElementById('package-name');
-                const versionEl = document.getElementById('package-version');
-                const descEl = document.getElementById('package-description');
-                const authorEl = document.getElementById('package-author');
-                const licenseEl = document.getElementById('package-license');
+    // --- 获取元素引用 ---
+    const nameEl = pane.querySelector('#package-name');
+    const versionEl = pane.querySelector('#package-version');
+    const descEl = pane.querySelector('#package-description');
+    const authorEl = pane.querySelector('#package-author');
+    const licenseEl = pane.querySelector('#package-license');
+    const projectAddressEl = pane.querySelector('#project-address');
+    const feedbackEmailEl = pane.querySelector('#feedback-email');
+    const electronVersionEl = pane.querySelector('#electron-version');
+    const nodeVersionEl = pane.querySelector('#node-version');
+    const chromeVersionEl = pane.querySelector('#chrome-version');
+    const v8VersionEl = pane.querySelector('#v8-version');
+    const appVersionDisplay = pane.querySelector('#appVersionDisplay');
+    const checkUpdatesBtn = pane.querySelector('#checkUpdatesBtn');
 
-                if (nameEl) nameEl.textContent = info.name || t('settings.about.valueMissing'); // 添加回退文本
-                if (versionEl) versionEl.textContent = info.version || t('settings.about.valueMissing');
-                if (descEl) descEl.textContent = info.description || t('settings.about.valueMissing');
-                if (authorEl) authorEl.textContent = info.author || t('settings.about.valueMissing');
-                if (licenseEl) licenseEl.textContent = info.license || t('settings.about.valueMissing');
-                logMessage('info', "[SettingsModel] package.json 信息已成功显示");
-            } else {
-                 logMessage('warn', "[SettingsModel] getPackageInfo 返回了 null 或 undefined");
-                 // Optionally display an error message in the UI for missing info
+    // --- 设置初始加载状态 (可选) ---
+    const setLoadingText = (el) => { if (el) el.textContent = t('settings.updates.loading'); };
+    setLoadingText(nameEl);
+    setLoadingText(versionEl);
+    setLoadingText(descEl);
+    setLoadingText(authorEl);
+    setLoadingText(licenseEl);
+    setLoadingText(projectAddressEl);
+    setLoadingText(feedbackEmailEl);
+    setLoadingText(electronVersionEl);
+    setLoadingText(nodeVersionEl);
+    setLoadingText(chromeVersionEl);
+    setLoadingText(v8VersionEl);
+    setLoadingText(appVersionDisplay);
+
+    try {
+        // --- 并行获取所有信息 ---
+        const [packageInfo, processVersions, appVersion] = await Promise.all([
+            getPackageInfo(),
+            getProcessVersions(),
+            getAppVersion()
+        ]);
+        logMessage('info', "[SettingsModel] 获取到的 packageInfo:", packageInfo);
+        logMessage('info', "[SettingsModel] 获取到的 processVersions:", processVersions);
+        logMessage('info', "[SettingsModel] 获取到的 appVersion:", appVersion);
+
+        // --- 填充 Package Info ---
+        if (packageInfo) {
+            if (nameEl) nameEl.textContent = packageInfo.name || t('settings.about.valueMissing');
+            if (versionEl) versionEl.textContent = packageInfo.version || t('settings.about.valueMissing');
+            if (descEl) descEl.textContent = packageInfo.description || t('settings.about.valueMissing');
+            if (authorEl) authorEl.textContent = packageInfo.author || t('settings.about.valueMissing');
+            if (licenseEl) licenseEl.textContent = packageInfo.license || t('settings.about.valueMissing');
+
+            // 填充项目地址和反馈邮箱
+            if (projectAddressEl) {
+                let repoUrl = packageInfo.repository?.url || '';
+                // 清理 URL: 移除 .git 后缀, 替换 git+ 前缀
+                repoUrl = repoUrl.replace(/\.git$/, '').replace(/^git\+/, '');
+                if (repoUrl) {
+                    projectAddressEl.textContent = repoUrl;
+                    projectAddressEl.href = repoUrl;
+                } else {
+                    projectAddressEl.textContent = t('settings.about.valueMissing');
+                    projectAddressEl.removeAttribute('href');
+                }
             }
-        })
-        .catch(error => {
-            logMessage('error', "[SettingsModel] 调用 getPackageInfo 失败:", error);
-            // Optionally display an error message in the UI
-            const nameEl = document.getElementById('package-name'); // Example: Show error in one field
-            if (nameEl) nameEl.textContent = t('settings.about.loadError');
-        });
-
-
-    // 显示应用版本信息
-    // Initial query to check if the element structure exists
-    const initialVersionDisplay = pane.querySelector('#appVersionDisplay');
-    if (initialVersionDisplay) {
-        // Set initial text to loading or keep existing if needed
-        // initialVersionDisplay.textContent = t('settings.updates.statusLoading'); // Optional: Set loading text here
-
-        getAppVersion().then(version => {
-            // Re-query the element *inside* the callback to ensure it's available
-            const currentVersionDisplay = pane.querySelector('#appVersionDisplay');
-            if (currentVersionDisplay) {
-                currentVersionDisplay.textContent = version || t('settings.updates.versionUnknown');
-                logMessage('debug', `[SettingsModel] 应用版本已更新为: ${currentVersionDisplay.textContent}`);
-            } else {
-                logMessage('warn', "[SettingsModel] 在 getAppVersion 回调中未找到 #appVersionDisplay 元素");
+            if (feedbackEmailEl) {
+                const email = packageInfo.bugs?.email || '';
+                if (email) {
+                    feedbackEmailEl.textContent = email;
+                    feedbackEmailEl.href = `mailto:${email}`;
+                } else {
+                    feedbackEmailEl.textContent = t('settings.about.valueMissing');
+                    feedbackEmailEl.removeAttribute('href');
+                }
             }
-        }).catch(err => {
-            logMessage('error', "[SettingsModel] 获取应用版本失败:", err);
-            // Re-query the element *inside* the callback before showing error
-            const currentVersionDisplay = pane.querySelector('#appVersionDisplay');
-            if (currentVersionDisplay) {
-                currentVersionDisplay.textContent = t('settings.updates.versionError');
-            } else {
-                 logMessage('warn', "[SettingsModel] 在 getAppVersion 错误回调中未找到 #appVersionDisplay 元素");
-            }
-        });
-    } else {
-         logMessage('warn', "[SettingsModel] 未找到 #appVersionDisplay 元素用于显示版本");
+            logMessage('info', "[SettingsModel] package.json 信息已成功显示 (包括链接)");
+        } else {
+            logMessage('warn', "[SettingsModel] getPackageInfo 返回了 null 或 undefined");
+            // Set error text for package info fields
+            const setErrorText = (el) => { if (el) el.textContent = t('settings.about.loadError'); };
+            setErrorText(nameEl);
+            setErrorText(versionEl);
+            // ... set error for other package fields ...
+            setErrorText(projectAddressEl);
+            setErrorText(feedbackEmailEl);
+        }
+
+        // --- 填充 Process Versions ---
+        if (processVersions) {
+            if (electronVersionEl) electronVersionEl.textContent = processVersions.electron || t('settings.about.valueMissing');
+            if (nodeVersionEl) nodeVersionEl.textContent = processVersions.node || t('settings.about.valueMissing');
+            if (chromeVersionEl) chromeVersionEl.textContent = processVersions.chrome || t('settings.about.valueMissing');
+            if (v8VersionEl) v8VersionEl.textContent = processVersions.v8 || t('settings.about.valueMissing');
+            logMessage('info', "[SettingsModel] process.versions 信息已成功显示");
+        } else {
+            logMessage('warn', "[SettingsModel] getProcessVersions 返回了 null 或 undefined");
+            // Set error text for version fields
+            const setErrorText = (el) => { if (el) el.textContent = t('settings.about.loadError'); };
+            setErrorText(electronVersionEl);
+            setErrorText(nodeVersionEl);
+            setErrorText(chromeVersionEl);
+            setErrorText(v8VersionEl);
+        }
+
+        // --- 填充 App Version ---
+        if (appVersionDisplay) {
+            appVersionDisplay.textContent = appVersion || t('settings.updates.versionUnknown');
+            logMessage('info', `[SettingsModel] 应用版本已更新为: ${appVersionDisplay.textContent}`);
+        }
+
+    } catch (error) {
+        logMessage('error', "[SettingsModel] 填充关于面板时获取信息失败:", error);
+        // Set error text for all fields if any promise fails
+        const setErrorText = (el) => { if (el) el.textContent = t('settings.about.loadError'); };
+        setErrorText(nameEl);
+        setErrorText(versionEl);
+        setErrorText(descEl);
+        setErrorText(authorEl);
+        setErrorText(licenseEl);
+        setErrorText(projectAddressEl);
+        setErrorText(feedbackEmailEl);
+        setErrorText(electronVersionEl);
+        setErrorText(nodeVersionEl);
+        setErrorText(chromeVersionEl);
+        setErrorText(v8VersionEl);
+        setErrorText(appVersionDisplay);
     }
 
-    // 设置更新按钮事件监听
-    const checkUpdatesBtn = pane.querySelector('#checkUpdatesBtn');
+    // --- 设置更新按钮和状态监听 (保持不变) ---
     if (checkUpdatesBtn) {
         checkUpdatesBtn.removeEventListener('click', handleUpdateButtonClick);
         checkUpdatesBtn.addEventListener('click', handleUpdateButtonClick);
     }
-
-    // 注册更新状态监听
     if (unsubscribeUpdateStatus) {
         unsubscribeUpdateStatus();
     }
     unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus);
-
-    // getPackageInfo() 调用已移到上面处理
 }
 
 // Removed populateLanguageSetting function as its logic is merged into populateGeneralPane

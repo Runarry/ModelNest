@@ -136,3 +136,4 @@ export const onCrawlStatusUpdate = api.onCrawlStatusUpdate;
 export const removeCrawlStatusUpdateListener = api.removeCrawlStatusUpdateListener;
 
 export const getImageCacheSize = api.getImageCacheSize;
+export const getProcessVersions = api.getProcessVersions; // 添加 getProcessVersions

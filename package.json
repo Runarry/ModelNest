@@ -22,5 +22,12 @@
     "electron-builder": "^26.0.15"
   },
   "author": "Banazzle",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Runarry/ModelNest.git"
+  },
+  "bugs": {
+    "email": "sleep.rotten.banana@gmail.com"
+  },
   "license": "MIT"
 }

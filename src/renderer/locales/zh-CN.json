@@ -157,7 +157,16 @@
       "developer": "开发者:",
       "linksTitle": "链接:",
       "githubLink": "GitHub 仓库",
-      "websiteLink": "官方网站"
+      "websiteLink": "官方网站",
+      "projectAddressLabel": "项目仓库:",
+      "feedbackEmailLabel": "反馈邮箱:",
+      "techStackTitle": "技术栈",
+      "electronVersionLabel": "Electron:",
+      "nodeVersionLabel": "Node.js:",
+      "chromeVersionLabel": "Chromium:",
+      "v8VersionLabel": "V8:",
+      "valueMissing": "(不可用)",
+      "loadError": "加载信息出错"
     },
     "validation": {
       "nameRequired": "数据源名称不能为空。",

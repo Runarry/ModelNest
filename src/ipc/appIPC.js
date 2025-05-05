@@ -94,9 +94,11 @@ function initializeAppIPC(services) {
     log.info('[IPC] get-package-info 请求');
     try {
       const packageInfo = require('../../package.json');
-      const { name, version, description, author, license } = packageInfo;
+      // Include repository and bugs in the destructuring
+      const { name, version, description, author, license, repository, bugs } = packageInfo;
       log.info('[IPC] 获取package.json信息成功');
-      return { name, version, description, author, license };
+      // Return the additional fields
+      return { name, version, description, author, license, repository, bugs };
     } catch (error) {
       log.error('[IPC] 获取package.json信息失败:', error);
       throw error;
@@ -116,6 +118,19 @@ function initializeAppIPC(services) {
       log.error('[IPC] 调用 imageCache.getCurrentCacheSizeBytes 失败:', error);
       // 将错误传递给渲染进程
       throw error; // 或者返回一个特定的错误状态
+    }
+  });
+
+  // 获取 process.versions 信息
+  ipcMain.handle('get-process-versions', () => {
+    log.info('[IPC] get-process-versions 请求');
+    try {
+      // 直接返回 Node.js 提供的 process.versions 对象
+      log.info('[IPC] 返回 process.versions 信息:', process.versions);
+      return process.versions;
+    } catch (error) {
+      log.error('[IPC] 获取 process.versions 失败:', error);
+      throw error; // 或者返回 null
     }
   });
 
