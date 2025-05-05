@@ -12,6 +12,7 @@ files:
 icon: assets/icon.png
 
 asar: true
+afterPack: ./scripts/remove-locales.js
 win:
   target:
     - target: nsis
