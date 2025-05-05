@@ -81,19 +81,57 @@ function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier = '字符
 
 
 // 新增：为 WebDAV 数据源创建模型对象
-function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, parsedJsonDetail, sourceId) {
+/**
+ * Helper function to get the relative path from an absolute path and a base path.
+ * Ensures the base path ends with '/' and the relative path starts with '/'.
+ * Exported for use by webdavDataSource.
+ * @param {string} absolutePath The full path from the WebDAV client.
+ * @param {string} basePath The resolved base path (subDirectory root).
+ * @returns {string} The path relative to the base path, starting with '/'.
+ */
+function _getRelativePath(absolutePath, basePath) {
+    if (!absolutePath) return '';
+    // Ensure base path ends with a slash for correct prefix removal
+    const baseWithSlash = basePath.endsWith('/') ? basePath : `${basePath}/`;
+    // Check if the absolute path starts with the base path
+    if (absolutePath.startsWith(baseWithSlash)) {
+        // Remove the base path prefix
+        let relative = absolutePath.substring(baseWithSlash.length);
+        // Ensure the relative path starts with a slash
+        return relative.startsWith('/') ? relative : `/${relative}`;
+    } else if (absolutePath === basePath.replace(/\/$/, '')) {
+        // Handle case where absolutePath is the base directory itself (without trailing slash)
+        return '/';
+    } else {
+        // If it doesn't start with the base path (shouldn't happen with correct usage),
+        // return the original path or log a warning.
+        log.warn(`[modelParser] Absolute path "${absolutePath}" does not start with expected base path "${baseWithSlash}". Returning original.`);
+        // Fallback: try to return path relative to the root if possible
+        return absolutePath.startsWith('/') ? absolutePath : `/${absolutePath}`;
+    }
+}
+
+// 新增：为 WebDAV 数据源创建模型对象
+function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, parsedJsonDetail, sourceId, resolvedBasePath) {
   // 从 webdavDataSource.js 移动过来的逻辑，并适配参数
-  const base = path.basename(modelFileItem.filename, path.extname(modelFileItem.filename));
+  const resolvedModelPath = modelFileItem.filename;
+  const relativeModelPath = _getRelativePath(resolvedModelPath, resolvedBasePath);
+  const base = path.posix.basename(relativeModelPath, path.posix.extname(relativeModelPath)); // Use relative path for basename
+
+  const relativeImagePath = imageFileItem ? _getRelativePath(imageFileItem.filename, resolvedBasePath) : '';
+  const relativeJsonPath = jsonFileItem ? _getRelativePath(jsonFileItem.filename, resolvedBasePath) : '';
+
   const modelObj = {
-    id: `${sourceId}::${modelFileItem.filename}`, // 添加唯一 ID
+    // Use relative path for ID to ensure consistency across different mounts/subdirs
+    id: `${sourceId}::${relativeModelPath}`,
     sourceId: sourceId, // 添加 sourceId
     name: base,
-    modelType: parsedJsonDetail.modelType || path.extname(modelFileItem.filename).replace('.', '').toUpperCase(),
+    modelType: parsedJsonDetail.modelType || path.posix.extname(relativeModelPath).replace('.', '').toUpperCase(),
     tags: parsedJsonDetail.tags|| [],
     description: parsedJsonDetail.description || '',
-    image: imageFileItem ? imageFileItem.filename : '', // 使用 imageFileItem
-    file: modelFileItem.filename,
-    jsonPath: jsonFileItem ? jsonFileItem.filename : '', // 使用 jsonFileItem
+    image: relativeImagePath, // 使用相对路径
+    file: relativeModelPath, // 使用相对路径
+    jsonPath: relativeJsonPath, // 使用相对路径
     triggerWord: parsedJsonDetail.triggerWord || '',
     size: modelFileItem.size, // 使用 modelFileItem
     lastModified: new Date(modelFileItem.lastmod), // 使用 modelFileItem
@@ -126,5 +164,6 @@ module.exports = {
   parseLocalModels,
   parseModelDetailFromJsonContent, // 导出新函数
   createWebDavModelObject, // 导出新创建的函数
-  prepareModelDataForSaving // 导出用于保存模型数据的函数
+  prepareModelDataForSaving, // 导出用于保存模型数据的函数
+  _getRelativePath // 导出辅助函数
 };

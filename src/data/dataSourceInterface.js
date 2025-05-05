@@ -30,11 +30,15 @@ function compareDataSourceConfigs(config1, config2) {
         // 对于 local 类型，比较 path
         return config1.path === config2.path;
     } else if (config1.type === 'webdav') {
-        // 对于 webdav 类型，比较 url, username, password, basePath
+        // 对于 webdav 类型，比较 url, username, password, subDirectory
+        // 将 undefined, null, '' 视为空路径进行比较
+        const subDir1 = config1.subDirectory || '';
+        const subDir2 = config2.subDirectory || '';
+
         return config1.url === config2.url &&
                config1.username === config2.username &&
                config1.password === config2.password &&
-               (config1.basePath || '/') === (config2.basePath || '/'); // 处理 basePath 可能未定义的情况，默认为 '/'
+               subDir1 === subDir2; // 比较处理过的 subDirectory
     }
     // 对于未知类型，保守地认为不同
     log.warn(`[DataSourceInterface] compareDataSourceConfigs encountered unknown type: ${config1.type}`);

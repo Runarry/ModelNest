@@ -10,7 +10,7 @@
   "showLess": "Less",
   "filterAll": "All",
   "uncategorized": "Uncategorized",
-"addModel": "Add Model",
+  "addModel": "Add Model",
   "sourceIsReadOnlyCannotAdd": "Source is read-only, cannot add model",
   "tooltip": {
     "toggleTheme": "Toggle Theme",
@@ -95,7 +95,6 @@
       "language": {
         "enUS": "English",
         "zhCN": "简体中文"
-
       },
       "changeSuccess": "Language changed to {lang}.",
       "changeError": "Failed to change language: {message}"
@@ -174,7 +173,9 @@
       "urlSchemeInvalid": "URL must start with http:// or https://",
       "sizeError": "Cache size limit must be a non-negative number.",
       "qualityError": "Compression quality must be between 0 and 100.",
-      "failed": "Validation failed"
+      "failed": "Validation failed",
+      "subdirectoryInvalidFormat": "Subdirectory must start with / if provided.",
+      "webdavSubdirectoryValidationError": "WebDAV Subdirectory Validation Failed: {message}"
     },
     "modelSources": {
       "none": "No model sources configured yet.",
@@ -194,6 +195,10 @@
       "usernameLabel": "Username",
       "passwordLabel": "Password",
       "passwordPlaceholder": "Enter new password to change",
+      "webdav": {
+        "subdirectoryLabel": "Subdirectory (Optional)",
+        "subdirectoryHint": "Specify a subdirectory on the server as root, must start with /"
+      },
       "addSource": "Add Source",
       "saveSource": "Save Source",
       "readOnlyLabel": "Read-Only"

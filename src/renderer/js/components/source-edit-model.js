@@ -16,6 +16,7 @@ let sourceEditWebdavFields;
 let sourceEditUrlInput;
 let sourceEditUsernameInput;
 let sourceEditPasswordInput;
+let sourceEditSubdirectoryInput;
 let sourceEditCloseBtn;
 let sourceEditCancelBtn;
 let sourceEditReadOnlyCheckbox; // 新增：只读复选框
@@ -43,6 +44,7 @@ let _onSaveCallback = null; // Callback to notify settings Model on save
  * @param {string} config.urlInputId
  * @param {string} config.usernameInputId
  * @param {string} config.passwordInputId
+ * @param {string} config.subdirectoryInputId // 新增：WebDAV 子目录输入框 ID
  * @param {string} config.closeBtnId
  * @param {string} config.cancelBtnId
  * @param {string} config.readOnlyCheckboxId // 新增：只读复选框 ID
@@ -63,6 +65,7 @@ export function initSourceEditModel(config, onSaveCallback) {
     sourceEditUrlInput = document.getElementById(config.urlInputId);
     sourceEditUsernameInput = document.getElementById(config.usernameInputId);
     sourceEditPasswordInput = document.getElementById(config.passwordInputId);
+    sourceEditSubdirectoryInput = document.getElementById(config.subdirectoryInputId); // 获取子目录输入框
     sourceEditCloseBtn = document.getElementById(config.closeBtnId);
     sourceEditCancelBtn = document.getElementById(config.cancelBtnId);
     sourceEditReadOnlyCheckbox = document.getElementById(config.readOnlyCheckboxId); // 获取只读复选框
@@ -71,7 +74,7 @@ export function initSourceEditModel(config, onSaveCallback) {
     if (!sourceEditModel || !sourceEditForm || !sourceEditTitle || !sourceEditIdInput ||
         !sourceEditNameInput || !sourceEditTypeSelect || !sourceEditLocalFields ||
         !sourceEditPathInput || !sourceEditBrowseBtn || !sourceEditWebdavFields ||
-        !sourceEditUrlInput || !sourceEditUsernameInput || !sourceEditPasswordInput ||
+        !sourceEditUrlInput || !sourceEditUsernameInput || !sourceEditPasswordInput || !sourceEditSubdirectoryInput || // 添加子目录输入框检查
         !sourceEditCloseBtn || !sourceEditCancelBtn || !sourceEditReadOnlyCheckbox || !sourceEditFeedbackEl) { // 添加只读复选框检查
         // Task 1: Error Logging
         logMessage('error', "[SourceEditModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
@@ -140,6 +143,7 @@ export function openSourceEditModel(sourceToEdit = null) {
             sourceEditUrlInput.value = sourceToEdit.url || '';
             sourceEditUsernameInput.value = sourceToEdit.username || '';
             sourceEditPasswordInput.value = sourceToEdit.password || ''; // Be cautious with passwords
+            sourceEditSubdirectoryInput.value = sourceToEdit.subDirectory || ''; // 填充子目录
         }
         handleSourceTypeChange(); // Update visible fields based on loaded type
     } else {
@@ -309,7 +313,22 @@ function handleSourceEditFormSubmit(event) {
         newSourceData.url = urlValue;
         newSourceData.username = sourceEditUsernameInput.value.trim();
         newSourceData.password = sourceEditPasswordInput.value; // Get password value (don't trim)
-        logMessage('debug', `[SourceEditModel] WebDAV URL: ${urlValue}, Username: ${newSourceData.username}`);
+        const subDirectoryValue = sourceEditSubdirectoryInput.value.trim();
+        if (subDirectoryValue && !subDirectoryValue.startsWith('/')) {
+            // Task 1: Error Logging (Validation)
+            const errorMsg = t('settings.validation.subdirectoryInvalidFormat');
+            logMessage('warn', `[SourceEditModel] 验证失败 (webdav): ${errorMsg} - ${subDirectoryValue}`);
+            showFeedback(sourceEditFeedbackEl, errorMsg, 'error');
+            sourceEditSubdirectoryInput.focus();
+            return;
+        }
+        if (subDirectoryValue) {
+            newSourceData.subDirectory = subDirectoryValue;
+        } else {
+            // Ensure subDirectory is not present or is undefined if empty
+            delete newSourceData.subDirectory;
+        }
+        logMessage('debug', `[SourceEditModel] WebDAV URL: ${urlValue}, Username: ${newSourceData.username}, SubDirectory: ${newSourceData.subDirectory}`);
     } else {
          // Task 1: Error Logging (Should not happen)
         const errorMsg = t('settings.validation.typeRequired');

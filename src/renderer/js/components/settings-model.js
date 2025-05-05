@@ -741,6 +741,11 @@ function renderSourceListForSettings() {
                   <div class="form-group">
                      <label>${t('settings.dataSources.passwordLabel')}:</label> <input type="password" class="edit-password" placeholder="${t('settings.dataSources.passwordPlaceholder', 'Enter new password to change')}">
                  </div>
+                 <div class="form-group">
+                     <label>${t('settings.modelSources.webdav.subdirectoryLabel', 'Subdirectory (Optional)')}:</label>
+                     <input type="text" class="edit-subdirectory" value="${source.subDirectory || ''}" placeholder="/optional/path/on/server">
+                     <small>${t('settings.modelSources.webdav.subdirectoryHint', 'Specify a subdirectory on the server as root, must start with /')}</small>
+                 </div>
                  `}
                 <div class="form-group form-check">
                     <input type="checkbox" class="form-check-input edit-readOnly" ${source.readOnly ? 'checked' : ''}>
@@ -821,7 +826,23 @@ function handleSaveSourceInline(listItem) {
              // delete updatedSource.password; // Or ensure it remains undefined/null if that's the convention
              updatedSource.password = originalSource.password; // Explicitly keep original
         }
-        // TODO: Add validation if needed
+        const subdirectoryInput = editForm.querySelector('.edit-subdirectory');
+        if (subdirectoryInput) {
+            const subDirectoryValue = subdirectoryInput.value.trim();
+            if (subDirectoryValue && !subDirectoryValue.startsWith('/')) {
+                // TODO: Show validation error within the inline form
+                logMessage('error', `[SettingsModel] 行内保存验证失败 (WebDAV): 子目录必须以 / 开头 - ${subDirectoryValue}`);
+                alert(t('settings.validation.subdirectoryInvalidFormat')); // Simple alert for now
+                subdirectoryInput.focus();
+                return; // Stop saving
+            }
+            if (subDirectoryValue) {
+                updatedSource.subDirectory = subDirectoryValue;
+            } else {
+                delete updatedSource.subDirectory; // Remove if empty
+            }
+        }
+        // TODO: Add other WebDAV validation if needed (e.g., URL format)
     }
 
     // Read readOnly state from checkbox
@@ -930,6 +951,11 @@ function showAddDataSourceForm() {
                 <label for="addSourcePassword" data-i18n-key="settings.modelSources.passwordLabel"></label>
                 <input type="password" id="addSourcePassword">
             </div>
+            <div class="form-group">
+                <label for="addSourceSubdirectory" data-i18n-key="settings.modelSources.webdav.subdirectoryLabel">Subdirectory (Optional):</label>
+                <input type="text" id="addSourceSubdirectory" placeholder="/optional/path/on/server">
+                <small data-i18n-key="settings.modelSources.webdav.subdirectoryHint">Specify a subdirectory on the server as root, must start with /</small>
+            </div>
         </div>
 
         <div class="form-group form-check">
@@ -955,6 +981,7 @@ function showAddDataSourceForm() {
     const webdavFields = form.querySelector('#addSourceWebdavFields');
     const pathInput = form.querySelector('#addSourcePath');
     const urlInput = form.querySelector('#addSourceUrl');
+    const subdirectoryField = webdavFields.querySelector('#addSourceSubdirectory').closest('.form-group'); // Find the subdirectory form group
 
     typeSelect.addEventListener('change', (event) => {
         const isLocal = event.target.value === 'local';
@@ -963,11 +990,21 @@ function showAddDataSourceForm() {
         // Toggle required attribute based on visibility
         pathInput.required = isLocal;
         urlInput.required = !isLocal;
-         logMessage('debug', `[SettingsModel] 添加表单类型切换为: ${event.target.value}`);
+        // Subdirectory field is never required, just shown/hidden
+        if (subdirectoryField) {
+            subdirectoryField.style.display = isLocal ? 'none' : ''; // Show only for WebDAV
+        }
+        logMessage('debug', `[SettingsModel] 添加表单类型切换为: ${event.target.value}`);
     });
     // Initial setup based on default selection
-    pathInput.required = typeSelect.value === 'local';
-    urlInput.required = typeSelect.value !== 'local';
+    const initialIsLocal = typeSelect.value === 'local';
+    localFields.style.display = initialIsLocal ? '' : 'none';
+    webdavFields.style.display = initialIsLocal ? 'none' : '';
+    pathInput.required = initialIsLocal;
+    urlInput.required = !initialIsLocal;
+    if (subdirectoryField) {
+        subdirectoryField.style.display = initialIsLocal ? 'none' : ''; // Hide initially if local is default
+    }
 
 
     // Browse button click
@@ -1055,6 +1092,18 @@ function handleAddDataSourceSubmit(event) {
         newSource.url = url;
         if (username) newSource.username = username;
         if (password) newSource.password = password; // Only add password if provided
+
+        const subdirectoryInput = form.querySelector('#addSourceSubdirectory');
+        const subDirectoryValue = subdirectoryInput.value.trim();
+        if (subDirectoryValue && !subDirectoryValue.startsWith('/')) {
+            showFeedback(feedbackArea, t('settings.validation.subdirectoryInvalidFormat'), 'error');
+            subdirectoryInput.focus();
+            return;
+        }
+        if (subDirectoryValue) {
+            newSource.subDirectory = subDirectoryValue;
+        }
+        // No need to delete if empty, as it wasn't added in the first place
     }
 
     logMessage('info', "[SettingsModel] 创建新的数据源对象:", newSource);

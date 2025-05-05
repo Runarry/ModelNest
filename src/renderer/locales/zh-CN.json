@@ -176,6 +176,8 @@
       "qualityError": "压缩质量必须介于 0 和 100 之间。",
       "failed": "验证失败"
     },
+"subdirectoryInvalidFormat": "如果提供子目录，则必须以 / 开头。",
+      "webdavSubdirectoryValidationError": "WebDAV 子目录验证失败：{message}",
     "modelSources": {
       "none": "尚未配置模型源。",
       "deleteConfirm": "您确定要删除模型源 '{name}' 吗？",
@@ -194,6 +196,10 @@
       "usernameLabel": "用户名",
       "passwordLabel": "密码",
       "passwordPlaceholder": "输入新密码以更改",
+"webdav": {
+        "subdirectoryLabel": "子目录 (可选)",
+        "subdirectoryHint": "指定服务器上的子目录作为根目录，必须以 / 开头"
+      },
       "addSource": "添加模型源",
       "saveSource": "保存模型源",
       "readOnlyLabel": "只读"
