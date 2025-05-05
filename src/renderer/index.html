@@ -320,67 +320,7 @@
   </div>
 
   <!-- Add/Edit Source Model -->
-  <div id="sourceEditModel" class="Model">
-    <div class="Model-content source-edit-Model-content">
-      <button id="sourceEditClose" class="Model-close">&times;</button>
-      <h2 id="sourceEditTitle" class="Model-title">Add/Edit Model Source</h2>
-      <!-- id="sourceEditTitle" already exists - text set by JS -->
-      <form id="sourceEditForm">
-        <input type="hidden" id="sourceEditId"> <!-- Hidden field for editing existing source ID -->
 
-        <div class="form-group">
-          <label for="sourceEditName" id="labelSourceEditName" data-i18n-key="settings.modelSources.nameLabel"></label>
-          <input type="text" id="sourceEditName" required>
-        </div>
-
-        <div class="form-group">
-          <label for="sourceEditType" id="labelSourceEditType" data-i18n-key="settings.modelSources.typeLabel"></label>
-          <select id="sourceEditType" required>
-            <option value="local" id="optionSourceEditTypeLocal" data-i18n-key="settings.modelSources.typeLocal">
-            </option>
-            <option value="webdav" id="optionSourceEditTypeWebdav" data-i18n-key="settings.modelSources.typeWebdav">
-            </option>
-          </select>
-        </div>
-
-        <!-- Fields for Local Type -->
-        <div id="sourceEditLocalFields" class="form-group source-type-fields">
-          <label for="sourceEditPath" id="labelSourceEditPath" data-i18n-key="settings.modelSources.pathLabel"></label>
-          <div class="input-group">
-            <input type="text" id="sourceEditPath" required>
-            <button type="button" id="sourceEditBrowseBtn" class="btn btn-secondary"
-              data-i18n-key="settings.modelSources.browse"></button> <!-- id="sourceEditBrowseBtn" already exists -->
-          </div>
-        </div>
-
-        <!-- Fields for WebDAV Type -->
-        <div id="sourceEditWebdavFields" class="form-group source-type-fields" style="display: none;">
-          <div class="form-group">
-            <label for="sourceEditUrl" id="labelSourceEditUrl" data-i18n-key="settings.modelSources.urlLabel"></label>
-            <input type="url" id="sourceEditUrl" required>
-          </div>
-          <div class="form-group">
-            <label for="sourceEditUsername" id="labelSourceEditUsername"
-              data-i18n-key="settings.modelSources.usernameLabel"></label>
-            <input type="text" id="sourceEditUsername">
-          </div>
-          <div class="form-group">
-            <label for="sourceEditPassword" id="labelSourceEditPassword"
-              data-i18n-key="settings.modelSources.passwordLabel"></label>
-            <input type="password" id="sourceEditPassword">
-          </div>
-        </div>
-
-      </form>
-      <div id="sourceEditFeedback" class="Model-feedback"></div> <!-- Feedback Area -->
-      <div class="Model-actions">
-        <button type="button" id="sourceEditCancelBtn" class="btn btn-secondary"
-          data-i18n-key="settings.cancel"></button> <!-- Already type="button" -->
-        <button type="submit" id="sourceEditSaveBtn" class="btn btn-primary" form="sourceEditForm"
-          data-i18n-key="settings.modelSources.saveSource"></button> <!-- type="submit" is correct here -->
-      </div>
-    </div>
-  </div>
   </div>
 
   <script src="../../dist/renderer/bundle.js"></script>
