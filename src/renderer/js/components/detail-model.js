@@ -475,10 +475,16 @@ function attachSaveListener() {
                 setTimeout(() => {
                     // Check if Model is still open before hiding
                     if (detailModel.classList.contains('active')) {
+                         // Prepare data specifically for the event, including the file path
+                         const eventDetail = {
+                             ...updatedModelData,
+                             file: currentModel.file, // Add the original file path back for identification
+                             image: currentModel.image // Add image path back in case card re-render needs it
+                         };
                          hideDetailModel();
                          // Notify the main view to potentially reload/refresh the specific model card
-                         logMessage('info', `[DetailModel] 触发 model-updated 事件: ${updatedModelData.name}`);
-                         window.dispatchEvent(new CustomEvent('model-updated', { detail: updatedModelData }));
+                         logMessage('info', `[DetailModel] 触发 model-updated 事件: ${eventDetail.name}`);
+                         window.dispatchEvent(new CustomEvent('model-updated', { detail: eventDetail }));
                     }
                 }, 1500);
 

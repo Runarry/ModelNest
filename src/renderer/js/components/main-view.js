@@ -256,6 +256,97 @@ function renderFilterTypes() {
   filterType = filterSelect.value; // Update internal state
 }
 
+/**
+ * Renders a single model card/list item element.
+ * @param {object} model - The model data object.
+ * @returns {HTMLElement} The created list item element.
+ */
+function _renderSingleModelElement(model) {
+    const card = document.createElement('li');
+    card.className = 'model-card'; // Base class, specific styles handled by parent view class
+    card.dataset.modelFile = model.file; // Add unique identifier
+
+    const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
+
+    // --- Image ---
+    let imageElement;
+    if (model.image) {
+        imageElement = document.createElement('img');
+        imageElement.setAttribute('data-image-path', model.image);
+        imageElement.setAttribute('data-source-id', currentSourceId);
+        imageElement.alt = model.name || t('modelImageAlt');
+        imageElement.className = 'model-image';
+        imageElement.loading = 'lazy';
+        imageObserver.observe(imageElement);
+    } else {
+        imageElement = document.createElement('div');
+        imageElement.className = 'model-image model-image-placeholder';
+        imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="placeholder-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
+    }
+    card.appendChild(imageElement);
+
+    // --- Content (Name, Type) ---
+    const contentDiv = document.createElement('div');
+    contentDiv.className = 'model-info';
+
+    const nameH3 = document.createElement('h3');
+    nameH3.className = 'model-name';
+    nameH3.textContent = model.name;
+
+    const typeSpan = document.createElement('span');
+    typeSpan.className = 'model-type';
+    typeSpan.textContent = model.modelType ? model.modelType.toUpperCase() : t('uncategorized').toUpperCase();
+
+    contentDiv.appendChild(nameH3);
+    contentDiv.appendChild(typeSpan);
+    card.appendChild(contentDiv);
+
+    // --- Tags ---
+    const tagsContainer = document.createElement('div');
+    tagsContainer.className = 'tags-container';
+    card.appendChild(tagsContainer);
+
+    if (model.tags && model.tags.length > 0) {
+        model.tags.forEach((tag, index) => {
+            const tagElement = document.createElement('span');
+            tagElement.className = 'tag';
+            tagElement.textContent = tag;
+            if (index >= MAX_VISIBLE_TAGS) {
+                tagElement.classList.add('tag-hidden');
+            }
+            tagsContainer.appendChild(tagElement);
+        });
+
+        if (model.tags.length > MAX_VISIBLE_TAGS) {
+            const moreBtn = document.createElement('button');
+            moreBtn.className = 'tag-more-btn';
+            moreBtn.textContent = t('showMore');
+            moreBtn.onclick = (event) => {
+                logMessage('info', `[UI] 点击了模型 "${model.name}" 的 "显示更多/更少" 标签按钮`);
+                event.stopPropagation();
+                const container = event.target.closest('.tags-container');
+                const isExpanded = container.classList.toggle('expanded');
+                event.target.textContent = isExpanded ? t('showLess') : t('showMore');
+            };
+            tagsContainer.appendChild(moreBtn);
+        }
+    }
+
+    // --- Click Event ---
+    card.addEventListener('click', () => {
+        logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
+        if (_showDetail) {
+            const isReadOnly = currentSourceConfig?.readOnly === true;
+            logMessage('debug', `[MainView] 打开详情，传递 readOnly 状态: ${isReadOnly}`);
+            _showDetail(model, currentSourceId, isReadOnly);
+        } else {
+            logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
+        }
+    });
+
+    return card;
+}
+
 /** Renders the model list based on the current filter, display mode, and models data. */
 function renderModels() {
   if (!modelList) return;
@@ -264,7 +355,6 @@ function renderModels() {
   const filteredModels = filterType
       ? models.filter(m => (m.modelType ? m.modelType.toUpperCase() : t('uncategorized').toUpperCase()) === filterType)
       : models;
-  const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
 
   // Set container class based on display mode
   const mainSection = modelList.closest('#mainSection') || document.body; // Find parent or default to body
@@ -282,96 +372,75 @@ function renderModels() {
   }
 
   filteredModels.forEach(model => {
-    const card = document.createElement('li');
-    card.className = 'model-card'; // Base class, specific styles handled by parent view class
-
-    // --- Image ---
-    let imageElement;
-    if (model.image) {
-      imageElement = document.createElement('img');
-      // Set data attributes but not src initially for lazy loading
-      imageElement.setAttribute('data-image-path', model.image);
-      imageElement.setAttribute('data-source-id', currentSourceId); // Use currentSourceId
-      imageElement.alt = model.name || t('modelImageAlt'); // Use model name or generic alt text
-      imageElement.className = 'model-image';
-      imageElement.loading = 'lazy'; // Browser-level lazy loading hint
-      imageObserver.observe(imageElement); // Use observer from ui-utils
-    } else {
-      // Placeholder for models without images
-      imageElement = document.createElement('div');
-      imageElement.className = 'model-image model-image-placeholder';
-      imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="placeholder-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
-    }
-    card.appendChild(imageElement);
-
-    // --- Content (Name, Type) ---
-    const contentDiv = document.createElement('div');
-    contentDiv.className = 'model-info'; // Corrected class name to match CSS
-
-    const nameH3 = document.createElement('h3');
-    nameH3.className = 'model-name';
-    nameH3.textContent = model.name;
-
-    const typeSpan = document.createElement('span');
-    typeSpan.className = 'model-type';
-    // 显示时将模型类型转为大写，处理未分类情况
-    typeSpan.textContent = model.modelType ? model.modelType.toUpperCase() : t('uncategorized').toUpperCase();
-
-    contentDiv.appendChild(nameH3);
-    contentDiv.appendChild(typeSpan);
-    card.appendChild(contentDiv);
-
-    // --- Tags ---
-    // Always create the tags container for consistent layout
-    const tagsContainer = document.createElement('div');
-    tagsContainer.className = 'tags-container';
-    card.appendChild(tagsContainer); // Add the container regardless of tags presence
-
-    // Only populate the container if tags exist
-    if (model.tags && model.tags.length > 0) {
-      model.tags.forEach((tag, index) => {
-        const tagElement = document.createElement('span');
-        tagElement.className = 'tag';
-        tagElement.textContent = tag;
-        if (index >= MAX_VISIBLE_TAGS) {
-          tagElement.classList.add('tag-hidden');
-        }
-        tagsContainer.appendChild(tagElement);
-      });
-
-      if (model.tags.length > MAX_VISIBLE_TAGS) {
-        const moreBtn = document.createElement('button');
-        moreBtn.className = 'tag-more-btn';
-        moreBtn.textContent = t('showMore');
-        moreBtn.onclick = (event) => {
-          // Task 4: Click Event Logging
-          logMessage('info', `[UI] 点击了模型 "${model.name}" 的 "显示更多/更少" 标签按钮`);
-          event.stopPropagation();
-          const container = event.target.closest('.tags-container');
-          const isExpanded = container.classList.toggle('expanded');
-          event.target.textContent = isExpanded ? t('showLess') : t('showMore');
-        };
-        tagsContainer.appendChild(moreBtn);
-      }
-    }
-
-    // --- Click Event ---
-    card.addEventListener('click', () => {
-        // Task 4: Click Event Logging
-        logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
-        // Call the callback provided during initialization, passing the read-only status
-        if (_showDetail) {
-            const isReadOnly = currentSourceConfig?.readOnly === true; // Get read-only status
-            logMessage('debug', `[MainView] 打开详情，传递 readOnly 状态: ${isReadOnly}`);
-            _showDetail(model, currentSourceId, isReadOnly); // Pass sourceId and isReadOnly
-        } else {
-            // Task 1: Error Logging (Potential failure point)
-            logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
-        }
-    });
-
-    modelList.appendChild(card);
+    const cardElement = _renderSingleModelElement(model); // Use the helper function
+    modelList.appendChild(cardElement);
   });
+}
+
+/**
+ * Updates a single model card in the list or adds it if it's new (and matches current filter).
+ * @param {object} updatedModelData - The updated model data object.
+ */
+export function updateSingleModelCard(updatedModelData) {
+    if (!modelList || !updatedModelData || !updatedModelData.file) {
+        logMessage('warn', '[MainView] updateSingleModelCard: 列表元素或更新数据无效', updatedModelData);
+        return;
+    }
+    logMessage('info', `[MainView] 尝试更新单个模型卡片: ${updatedModelData.name} (${updatedModelData.file})`);
+
+    // 1. Update internal state
+    const modelIndex = models.findIndex(m => m.file === updatedModelData.file);
+    if (modelIndex !== -1) {
+        logMessage('debug', `[MainView] 在内部模型数组中找到并更新模型: ${updatedModelData.file}`);
+        models[modelIndex] = updatedModelData;
+    } else {
+        // If the model wasn't in the original list (e.g., newly created/synced?),
+        // we might need to add it if it matches the current directory/filter.
+        // For simplicity now, we only update existing ones.
+        // TODO: Consider adding logic to insert new models if applicable.
+        logMessage('warn', `[MainView] 更新的模型 ${updatedModelData.file} 不在当前加载的内部模型数组中，跳过更新。`);
+        // return; // Or proceed to check if it should be added to the view
+    }
+
+    // 2. Check if the updated model should be visible based on the current filter
+    const modelTypeUpper = updatedModelData.modelType ? updatedModelData.modelType.toUpperCase() : t('uncategorized').toUpperCase();
+    const shouldBeVisible = !filterType || modelTypeUpper === filterType;
+
+    // 3. Find existing DOM element
+    // Use JSON.stringify to properly escape the file path for the CSS selector
+    const escapedFilePath = JSON.stringify(updatedModelData.file);
+    const selector = `li[data-model-file=${escapedFilePath}]`;
+    logMessage('debug', `[MainView] Attempting to find card with selector: ${selector}`);
+    const existingCard = modelList.querySelector(selector);
+    logMessage('debug', `[MainView] Found existing card for ${updatedModelData.file}:`, existingCard ? 'Yes' : 'No');
+
+    if (existingCard) {
+        if (shouldBeVisible) {
+            // Model exists and should be visible: Replace it
+            logMessage('debug', `[MainView] 找到现有 DOM 卡片，将替换: ${updatedModelData.file}`);
+            const newCardElement = _renderSingleModelElement(updatedModelData);
+            existingCard.replaceWith(newCardElement);
+        } else {
+            // Model exists but should NO LONGER be visible: Remove it
+            logMessage('debug', `[MainView] 找到现有 DOM 卡片，但不再符合过滤器，将移除: ${updatedModelData.file}`);
+            existingCard.remove();
+        }
+    } else if (shouldBeVisible) {
+        // Model does NOT exist in DOM, but SHOULD be visible: Add it
+        // This handles cases where a model might be added/synced while viewing the list
+        logMessage('debug', `[MainView] 未找到现有 DOM 卡片，但模型符合过滤器，将添加: ${updatedModelData.file}`);
+        const newCardElement = _renderSingleModelElement(updatedModelData);
+        modelList.appendChild(newCardElement);
+        // Remove the "empty list" message if it exists
+        const emptyMsg = modelList.querySelector('.empty-list-message');
+        if (emptyMsg) emptyMsg.remove();
+    } else {
+         logMessage('debug', `[MainView] 模型 ${updatedModelData.file} 不存在于 DOM 且不符合当前过滤器，无需操作。`);
+    }
+
+    // 4. Re-render filter types in case the updated model introduced/removed a type
+    //    (This is less efficient but ensures filter dropdown is accurate)
+    renderFilterTypes();
 }
 
 

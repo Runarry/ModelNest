@@ -1,6 +1,7 @@
 // Import necessary initialization functions and utilities
 import { initThemeSwitcher } from './js/utils/theme.js';
-import { initMainView, loadModels as loadModelsForView, renderSources } from './js/components/main-view.js';
+// Import updateSingleModelCard along with other functions
+import { initMainView, loadModels as loadModelsForView, renderSources, updateSingleModelCard } from './js/components/main-view.js';
 import { initDetailModel, showDetailModel, hideDetailModel } from './js/components/detail-model.js';
 import { initSettingsModel } from './js/components/settings-model.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
@@ -200,20 +201,15 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Listen for model updates (e.g., after saving in detail Model)
    window.addEventListener('model-updated', (event) => {
        logMessage('info', '[Renderer] 收到 model-updated 事件:', event.detail);
-       // TODO: Implement more granular update instead of full reload?
-       // For now, just reload models for the current source/directory
-       const currentSourceId = document.getElementById('sourceSelect')?.value;
-       // Need to know the current directory from main-view state if possible,
-       // otherwise, just reload the root for simplicity.
-       if (currentSourceId) {
-           logMessage('info', "[Renderer] 模型更新后重新加载当前数据源的模型...");
-           loadModelsForView(currentSourceId, null); // Reload root for now - logging inside
+       // Call the new function to update only the specific card
+       if (event.detail) {
+           updateSingleModelCard(event.detail);
        } else {
-            logMessage('warn', "[Renderer] 收到 model-updated 事件，但没有选择当前数据源，无法重新加载");
+           logMessage('warn', '[Renderer] 收到 model-updated 事件，但 event.detail 为空，无法更新卡片');
        }
    });
 
-   // Helper function to display critical initialization errors
+  // Helper function to display critical initialization errors
    function showInitializationError(message) {
         const mainSection = document.getElementById('mainSection');
         const loadingIndicator = document.getElementById('loadingIndicator');
