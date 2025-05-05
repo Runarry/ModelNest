@@ -127,6 +127,7 @@
   min-width: 180px;
   min-height: 100px;
   align-items: flex-start;
+  align-content: flex-start;
 }
 
 /* Style for hidden tags */

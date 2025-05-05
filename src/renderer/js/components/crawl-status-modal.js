@@ -171,7 +171,12 @@ export class CrawlStatusModal {
         if (!this.modalElement || !status) return;
         logMessage('debug', '[CrawlStatusModal] Updating status:', status);
 
-        const { status: state, processed, total, currentModel, error } = status;
+        // Correctly access values from the nested progress object
+        const { status: state, progress, error } = status;
+        const processedCount = progress?.completed ?? 0; // Use 'completed' from backend, provide default
+        const totalCount = progress?.total ?? 0; // Use 'total' from backend, provide default
+        const currentModel = progress?.currentModelName; // Get current model name
+
         let statusText = '';
         let pauseResumeTextKey = 'crawlModal.button.pause';
         let pauseResumeAction = 'pause'; // 'pause' or 'resume'
@@ -192,8 +197,8 @@ export class CrawlStatusModal {
                 break;
             case 'running': // 改为小写
                 statusText = t('crawlModal.status.running', {
-                    processed: processed,
-                    total: total,
+                    processed: processedCount, // Use correct variable
+                    total: totalCount,       // Use correct variable
                     model: currentModel || '...'
                 });
                 this.startButton.disabled = true;
@@ -205,8 +210,8 @@ export class CrawlStatusModal {
                 break;
             case 'paused': // 改为小写
                 statusText = t('crawlModal.status.paused', {
-                    processed: processed,
-                    total: total
+                    processed: processedCount, // Use correct variable
+                    total: totalCount        // Use correct variable
                 });
                 this.startButton.disabled = true;
                 this.pauseResumeButton.style.display = 'inline-block';
@@ -216,7 +221,7 @@ export class CrawlStatusModal {
                 this.cancelButton.disabled = false;
                 break;
             case 'finished': // 改为小写
-                statusText = t('crawlModal.status.finished', { total: total }); // 需要添加/修改翻译键
+                statusText = t('crawlModal.status.finished', { total: totalCount }); // Use correct variable
                 this.startButton.disabled = false; // 完成后可以重新开始
                 this.pauseResumeButton.style.display = 'none';
                 this.cancelButton.disabled = true; // 完成后不能取消
