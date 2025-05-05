@@ -1,6 +1,7 @@
 import { clearChildren, setLoading, imageObserver, loadImage } from '../utils/ui-utils.js';
 import { t } from '../core/i18n.js'; // 导入 i18n 函数
 import { logMessage, listModels, listSubdirectories,getAllSourceConfigs } from '../apiBridge.js'; // 导入 API 桥接
+import { CrawlStatusModal } from './crawl-status-modal.js'; // 导入弹窗组件 (稍后创建)
 
 // ===== DOM Element References =====
 // These might be passed during initialization or queried within functions
@@ -10,6 +11,7 @@ let modelList;
 let cardViewBtn;
 let listViewBtn;
 let directoryTabsContainer; // The container for directory tabs (e.g., '.directory-tabs')
+let crawlInfoButton; // 新增：补全模型信息按钮
 
 // ===== Module State =====
 let models = [];
@@ -20,6 +22,7 @@ let subdirectories = []; // List of subdirectories for the current source
 let currentSourceId = null; // Keep track of the currently selected source ID
 let allSourceConfigs = []; // 新增：存储所有数据源的完整配置
 let currentSourceConfig = null; // 新增：存储当前选定数据源的配置
+let crawlStatusModal = null; // 新增：弹窗实例
 
 // ===== Initialization =====
 
@@ -32,6 +35,7 @@ let currentSourceConfig = null; // 新增：存储当前选定数据源的配置
  * @param {string} config.cardViewBtnId - ID of the card view button.
  * @param {string} config.listViewBtnId - ID of the list view button.
  * @param {string} config.directoryTabsSelector - Selector for the directory tabs container.
+ * @param {string} config.crawlInfoButtonId - ID of the crawl info button.
  * @param {function} showDetailCallback - Callback function to show model details.
  */
 export function initMainView(config, showDetailCallback) {
@@ -41,8 +45,9 @@ export function initMainView(config, showDetailCallback) {
     cardViewBtn = document.getElementById(config.cardViewBtnId);
     listViewBtn = document.getElementById(config.listViewBtnId);
     directoryTabsContainer = document.querySelector(config.directoryTabsSelector);
+    crawlInfoButton = document.getElementById(config.crawlInfoButtonId); // 获取按钮
 
-    if (!sourceSelect || !filterSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer) {
+    if (!sourceSelect || !filterSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton) {
         // Task 1: Error Logging
         logMessage('error', "[MainView] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID/选择器:", config);
         return;
@@ -60,6 +65,13 @@ export function initMainView(config, showDetailCallback) {
         logMessage('info', '[UI] 点击了列表视图按钮');
         switchViewMode('list');
     });
+    crawlInfoButton.addEventListener('click', () => {
+        logMessage('info', '[UI] 点击了补全模型信息按钮');
+        if (crawlStatusModal) {
+            // 传递当前数据源 ID 和目录给弹窗
+            crawlStatusModal.show(currentSourceId, currentDirectory);
+        }
+    });
 
     // Set initial active view button
     if (displayMode === 'card') {
@@ -72,6 +84,9 @@ export function initMainView(config, showDetailCallback) {
 
     // Store the callback for showing details
     _showDetail = showDetailCallback;
+
+    // 初始化弹窗实例 (稍后创建 CrawlStatusModal 类)
+    crawlStatusModal = new CrawlStatusModal();
 }
 
 // Internal reference to the showDetail function provided by the main module
@@ -194,7 +209,9 @@ export async function renderSources(sourcesData) { // Make async to fetch config
       handleSourceChange(); // This will call updateWriteActionUI
   } else {
       // No sources available, ensure write actions are disabled
+      // 并且隐藏爬虫按钮
       updateWriteActionUI(true);
+      if (crawlInfoButton) crawlInfoButton.style.display = 'none';
   }
 }
 
@@ -417,6 +434,16 @@ async function handleSourceChange() {
   // ---
   // 更新写入操作相关的 UI 状态
   updateWriteActionUI(currentSourceConfig?.readOnly ?? false);
+
+  // --- 控制爬虫按钮显隐 ---
+  if (crawlInfoButton) {
+      if (currentSourceConfig?.type === 'local') {
+          crawlInfoButton.style.display = 'inline-block'; // 或者 'block'，取决于布局
+          // TODO: 在爬取进行时禁用此按钮
+      } else {
+          crawlInfoButton.style.display = 'none';
+      }
+  }
   // ---
 
   if (selectedSourceId) {
@@ -431,48 +458,50 @@ async function handleSourceChange() {
       renderModels();
       renderDirectoryTabs();
       renderFilterTypes();
+      // 隐藏爬虫按钮
+      if (crawlInfoButton) crawlInfoButton.style.display = 'none';
   }
 }
 
 /** Handles the change event for the filter select dropdown. */
 function handleFilterChange() {
-  if (!filterSelect) {
-      logMessage('warn', '[MainView] handleFilterChange: filterSelect 元素不存在');
-      return;
-  }
-  const newFilterType = filterSelect.value;
-  // Task 4: Click Event Logging (Implicit via change)
-  logMessage('info', `[UI] 切换模型类型过滤器: "${newFilterType || '全部'}"`);
-  if (filterType !== newFilterType) {
-    filterType = newFilterType;
-    setLoading(true); // Show loading indicator briefly for visual feedback
-    // Use setTimeout to allow the loading indicator to render before blocking the thread
-    setTimeout(() => {
-      logMessage('debug', '[MainView] 开始渲染过滤后的模型');
-      const renderStart = Date.now();
-      renderModels();
-      const renderEnd = Date.now();
-      logMessage('debug', `[MainView] 渲染过滤后的模型完成, 耗时: ${renderEnd - renderStart}ms`);
-      setLoading(false);
-    }, 10); // Shorter delay, just enough to yield
-  }
+if (!filterSelect) {
+    logMessage('warn', '[MainView] handleFilterChange: filterSelect 元素不存在');
+    return;
+}
+const newFilterType = filterSelect.value;
+// Task 4: Click Event Logging (Implicit via change)
+logMessage('info', `[UI] 切换模型类型过滤器: "${newFilterType || '全部'}"`);
+if (filterType !== newFilterType) {
+  filterType = newFilterType;
+  setLoading(true); // Show loading indicator briefly for visual feedback
+  // Use setTimeout to allow the loading indicator to render before blocking the thread
+  setTimeout(() => {
+    logMessage('debug', '[MainView] 开始渲染过滤后的模型');
+    const renderStart = Date.now();
+    renderModels();
+    const renderEnd = Date.now();
+    logMessage('debug', `[MainView] 渲染过滤后的模型完成, 耗时: ${renderEnd - renderStart}ms`);
+    setLoading(false);
+  }, 10); // Shorter delay, just enough to yield
+}
 }
 
 /** Handles switching between card and list view modes. */
 function switchViewMode(newMode) {
-  if (displayMode !== newMode) {
-    // Task 4: Click Event Logging (Handled by callers)
-    logMessage('info', `[UI] 切换视图模式到: ${newMode}`);
-    displayMode = newMode;
-    // Update button active states
-    if (newMode === 'card') {
-      cardViewBtn.classList.add('active');
-      listViewBtn.classList.remove('active');
-    } else {
-      listViewBtn.classList.add('active');
-      cardViewBtn.classList.remove('active');
-    }
-    // Re-render the model list with the new view mode class
-    renderModels();
+if (displayMode !== newMode) {
+  // Task 4: Click Event Logging (Handled by callers)
+  logMessage('info', `[UI] 切换视图模式到: ${newMode}`);
+  displayMode = newMode;
+  // Update button active states
+  if (newMode === 'card') {
+    cardViewBtn.classList.add('active');
+    listViewBtn.classList.remove('active');
+  } else {
+    listViewBtn.classList.add('active');
+    cardViewBtn.classList.remove('active');
   }
+  // Re-render the model list with the new view mode class
+  renderModels();
+}
 }

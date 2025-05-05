@@ -20,7 +20,8 @@
     "title": "Directory"
   },
   "main": {
-    "labelModelSource": "Model Source:"
+    "labelModelSource": "Model Source:",
+    "button.crawlInfoTitle": "Fetch Model Info (Online)"
   },
   "detail": {
     "type": "Type:",
@@ -182,5 +183,32 @@
   "errors": {
     "readOnlyDataSource": "Operation failed: The data source is read-only."
   },
-  "readOnlyMode": "Read-Only Mode"
+  "readOnlyMode": "Read-Only Mode",
+  "crawlModal": {
+    "title": "Fetch Model Info Status",
+    "closeTitle": "Close",
+    "status": {
+      "idle": "Ready. Click 'Start' to fetch info for the current model source.",
+      "scanning": "Scanning files...",
+      "running": "Processing: {processed}/{total} - Current: {model}",
+      "paused": "Paused ({processed}/{total})",
+      "finished": "Crawling finished ({total} models)",
+      "canceled": "Canceled",
+      "error": "Error occurred: {error}",
+      "unknown": "Unknown status"
+    },
+    "button": {
+      "start": "Start",
+      "pause": "Pause",
+      "resume": "Resume",
+      "cancel": "Cancel"
+    },
+    "error": {
+      "getStatusFailed": "Failed to get status",
+      "startFailed": "Failed to start",
+      "pauseFailed": "Failed to pause",
+      "resumeFailed": "Failed to resume"
+    }
+  },
+  "unknownError": "An unknown error occurred"
 }

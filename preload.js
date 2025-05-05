@@ -26,6 +26,23 @@ contextBridge.exposeInMainWorld('api', {
   },
   // --- End Updater API ---
 
+  // --- Model Crawler API ---
+  startCrawl: (sourceId, directory) => ipcRenderer.invoke('start-crawl', sourceId, directory),
+  pauseCrawl: () => ipcRenderer.invoke('pause-crawl'),
+  resumeCrawl: () => ipcRenderer.invoke('resume-crawl'),
+  cancelCrawl: () => ipcRenderer.invoke('cancel-crawl'),
+  getCrawlStatus: () => ipcRenderer.invoke('get-crawl-status'),
+  onCrawlStatusUpdate: (callback) => {
+    // Wrap the callback to match the expected signature (event, status) => callback(status)
+    const listener = (_event, status) => callback(status);
+    ipcRenderer.on('crawl-status-update', listener);
+    // Return a function to remove this specific listener
+    return () => ipcRenderer.removeListener('crawl-status-update', listener);
+  },
+  // Optional: Explicitly provide a way to remove a listener if the above pattern isn't used
+  // removeCrawlStatusUpdateListener: (callback) => ipcRenderer.removeListener('crawl-status-update', callback), // Be cautious with direct callback removal if wrapped
+  // --- End Model Crawler API ---
+
   // 通用日志记录接口
   logMessage: (level, message, ...args) => {
     // 验证 level 是否是有效的日志级别 (可选但推荐)

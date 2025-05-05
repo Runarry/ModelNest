@@ -197,6 +197,79 @@ class LocalDataSource extends DataSource {
       throw error; // 重新抛出写入错误
     }
   }
+
+  /**
+   * 检查文件是否存在。
+   * @param {string} filePath - 文件的完整路径。
+   * @returns {Promise<boolean>} 如果文件存在则返回 true，否则返回 false。
+   */
+  async fileExists(filePath) {
+    const startTime = Date.now();
+    log.debug(`[LocalDataSource] 检查文件是否存在: ${filePath}`);
+    if (!filePath) {
+        log.warn('[LocalDataSource] fileExists 调用时 filePath 为空');
+        return false;
+    }
+    try {
+      await fs.promises.access(filePath, fs.constants.F_OK);
+      const duration = Date.now() - startTime;
+      log.debug(`[LocalDataSource] 文件存在: ${filePath}, 耗时: ${duration}ms`);
+      return true;
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      if (error.code === 'ENOENT') {
+        log.debug(`[LocalDataSource] 文件不存在: ${filePath}, 耗时: ${duration}ms`);
+      } else {
+        log.error(`[LocalDataSource] 检查文件存在性时出错: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
+      }
+      return false;
+    }
+  }
+
+  /**
+   * 将 Buffer 数据写入本地文件系统。
+   * @param {string} filePath - 要写入的文件的完整路径。
+   * @param {Buffer} dataBuffer - 要写入的 Buffer 数据。
+   * @returns {Promise<void>} 操作完成时解析的 Promise。
+   * @throws {Error} 如果写入失败。
+   */
+  async writeFile(filePath, dataBuffer) {
+    const startTime = Date.now();
+    log.info(`[LocalDataSource] 开始写入文件: ${filePath}`);
+     if (!filePath) {
+        log.error('[LocalDataSource] writeFile 调用时 filePath 为空');
+        throw new Error('File path cannot be empty for writing file.');
+    }
+    if (!Buffer.isBuffer(dataBuffer)) {
+        log.error('[LocalDataSource] writeFile 调用时 dataBuffer 不是 Buffer');
+        throw new Error('Data to write must be a Buffer.');
+    }
+
+    try {
+      // 确保目录存在
+      const dirPath = path.dirname(filePath);
+      try {
+        await fs.promises.access(dirPath);
+      } catch (accessError) {
+        if (accessError.code === 'ENOENT') {
+          log.info(`[LocalDataSource] 目录 ${dirPath} 不存在，正在创建...`);
+          await fs.promises.mkdir(dirPath, { recursive: true });
+        } else {
+          log.error(`[LocalDataSource] 访问目录时出错 ${dirPath}:`, accessError);
+          throw accessError; // 重新抛出访问错误
+        }
+      }
+
+      // 写入文件
+      await fs.promises.writeFile(filePath, dataBuffer);
+      const duration = Date.now() - startTime;
+      log.info(`[LocalDataSource] 成功写入文件: ${filePath}, 大小: ${(dataBuffer.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      log.error(`[LocalDataSource] 写入文件时出错: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
+      throw error; // 重新抛出写入错误
+    }
+  }
 }
 
 module.exports = {

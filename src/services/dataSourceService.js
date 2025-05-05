@@ -34,9 +34,15 @@ class DataSourceService {
   async getSourceConfig(sourceId) {
     try {
       const config = await this.#configService.getConfig();
-      const sourceConfig = config.modelSources?.find(source => source.id === sourceId);
+      // --- 添加详细日志 ---
+      log.debug(`DataSourceService: getSourceConfig called with sourceId: "${sourceId}"`);
+      log.debug(`DataSourceService: Full config loaded: ${JSON.stringify(config, null, 2)}`); // 打印完整配置
+      const modelSources = config?.modelSources;
+      log.debug(`DataSourceService: modelSources array: ${JSON.stringify(modelSources, null, 2)}`); // 打印 modelSources 数组
+      // --- 结束日志 ---
+      const sourceConfig = modelSources?.find(source => source.id === sourceId);
       if (!sourceConfig) {
-        log.warn(`DataSourceService: Source config with id "${sourceId}" not found.`);
+        log.warn(`DataSourceService: Source config with id "${sourceId}" not found in the loaded modelSources.`); // 更明确的警告
         return null;
       }
       return sourceConfig;

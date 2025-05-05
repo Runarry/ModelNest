@@ -74,7 +74,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     modelListId: 'modelList',
     cardViewBtnId: 'cardViewBtn',
     listViewBtnId: 'listViewBtn',
-    directoryTabsSelector: '.directory-tabs' // Selector for the container
+    directoryTabsSelector: '.directory-tabs', // Selector for the container
+    crawlInfoButtonId: 'crawl-info-button' // 新增：爬虫按钮 ID
   };
   // Pass showDetailModel (from detail-Model module) as the callback
   initMainView(mainViewConfig, (model) => {

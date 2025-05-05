@@ -3,6 +3,7 @@ const DataSourceService = require('./dataSourceService');
 const ModelService = require('./modelService');
 const ImageService = require('./imageService');
 const UpdateService = require('./updateService');
+const ModelCrawlerService = require('./modelCrawlerService'); // Import the new service
 
 /**
  * Initializes all application services and handles dependency injection.
@@ -26,6 +27,9 @@ async function initializeServices() {
   const updateService = new UpdateService();
   updateService.initialize(); // Does not need to be awaited currently
 
+  // 6. Initialize ModelCrawlerService, injecting DataSourceService
+  const modelCrawlerService = new ModelCrawlerService(dataSourceService);
+
   // Return all service instances
   return {
     configService,
@@ -33,6 +37,7 @@ async function initializeServices() {
     modelService,
     imageService,
     updateService,
+    modelCrawlerService, // Add the new service instance
   };
 }
 

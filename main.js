@@ -12,6 +12,7 @@ const log = require('electron-log');
 
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the model library IPC initializer
 const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app IPC initializer
+const { initializeModelCrawlerIPC } = require('./src/ipc/modelCrawlerIPC.js'); // Import the model crawler IPC initializer
 let mainWindow; // Declare mainWindow globally
 let services = null; // Declare services globally
 
@@ -120,13 +121,23 @@ app.whenReady().then(async () => { // 改为 async 回调
   initializeModelLibraryIPC(services);
   log.info('[IPC] IPC Handlers 已初始化');
 
-  createWindow(services); // TODO: Modify createWindow to accept services and pass webContents to updateService
-// Pass webContents to UpdateService after window creation
-  if (mainWindow && services && services.updateService) {
-    services.updateService.setWebContents(mainWindow.webContents);
-    log.info('[Main] mainWindow.webContents passed to UpdateService.');
+  createWindow(services);
+
+  // Initialize IPC handlers that require mainWindow AFTER it's created
+  if (mainWindow && services) {
+    // Initialize Model Crawler IPC
+    initializeModelCrawlerIPC(ipcMain, services, mainWindow);
+    log.info('[IPC] Model Crawler IPC Handler 已初始化');
+
+    // Pass webContents to UpdateService
+    if (services.updateService) {
+      services.updateService.setWebContents(mainWindow.webContents);
+      log.info('[Main] mainWindow.webContents passed to UpdateService.');
+    } else {
+      log.warn('[Main] UpdateService not available when trying to set webContents.');
+    }
   } else {
-    log.error('[Main] Failed to pass webContents to UpdateService: mainWindow or services not available.');
+    log.error('[Main] Failed to initialize post-window IPC or pass webContents: mainWindow or services not available.');
   }
 
   // --- Electron Updater Logic is now handled by UpdateService ---
