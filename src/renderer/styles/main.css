@@ -315,7 +315,7 @@ select:hover {
   border-radius: 8px;
   width: 90%;
   max-width: 600px;
-  max-height: 90vh;
+  height: 90vh;
   overflow-y: auto;
   padding: 2rem;
   position: relative;
@@ -340,7 +340,7 @@ select:hover {
 
 .Model-image {
   width: 100%;
-  max-height: 290px;
+  max-height: 55vh;
   object-fit: contain;
   margin-bottom: 1.5rem;
   border-radius: 4px;
@@ -532,7 +532,6 @@ select:hover {
 
 .tab-content.active {
   display: block;
-  height: 300px;
   overflow-y: auto;
 
 

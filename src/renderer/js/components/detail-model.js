@@ -172,13 +172,20 @@ function renderModelContent(model) {
     detailDescriptionContainer.innerHTML = `
       <div class="detail-Model-content">
         <div class="detail-tabs">
-          <button class="tab-btn active" data-tab="basic">${t('detail.tabs.basic')}</button>
+          <button class="tab-btn active" data-tab="image">${t('detail.tabs.image')}</button> <!-- Image Tab first and active -->
+          <button class="tab-btn" data-tab="basic">${t('detail.tabs.basic')}</button> <!-- Basic tab no longer active -->
           <button class="tab-btn" data-tab="description">${t('detail.tabs.description')}</button>
           <button class="tab-btn" data-tab="extra">${t('detail.tabs.extra')}</button>
-          <button class="tab-btn" data-tab="image">${t('detail.tabs.image')}</button> <!-- Added Image Tab -->
         </div>
 
-        <div class="tab-content active" id="basic-tab">
+        <!-- Image Tab Content Pane (Now first content, and active by default) -->
+        <div class="tab-content active" id="image-tab">
+          <div class="detail-info image-container">
+            <!-- Image will be moved here dynamically -->
+          </div>
+        </div>
+
+        <div class="tab-content" id="basic-tab"> <!-- Basic tab content no longer active -->
           <div class="detail-info">
             ${renderEditableField(t('detail.type'), 'model-type', model.modelType || '')}
             ${renderReadonlyField(t('detail.filePath'), model.file || t('notAvailable'))}
@@ -190,7 +197,7 @@ function renderModelContent(model) {
 
         <div class="tab-content" id="description-tab">
           <div class="detail-info">
-            <textarea id="model-description" class="description-textarea" rows="8" }">${model.description || ''}</textarea>
+            <textarea id="model-description" class="description-textarea" rows="8">${model.description || ''}</textarea>
           </div>
         </div>
 
@@ -202,15 +209,8 @@ function renderModelContent(model) {
           </div>
         </div>
 
-        <!-- Added Image Tab Content Pane -->
-        <div class="tab-content" id="image-tab">
-          <div class="detail-info image-container">
-            <!-- Image will be moved here dynamically -->
-          </div>
-        </div>
-
         <div class="Model-actions">
-             <span id="readOnlyIndicator" class="readonly-indicator" style="display: none;">${t('readOnlyMode')}</span> <!-- 新增：只读提示 -->
+             <span id="readOnlyIndicator" class="readonly-indicator" style="display: none;">${t('readOnlyMode')}</span>
              <span id="detailFeedback" class="Model-feedback"></span>
              <button id="saveDetailBtn" class="btn btn-primary">${t('detail.save')}</button>
         </div>
@@ -223,12 +223,13 @@ function renderModelContent(model) {
         const imageTabContent = detailDescriptionContainer.querySelector('#image-tab .image-container');
         if (imageTabContent && detailImage) {
             imageTabContent.appendChild(detailImage);
-            // Ensure image is visible only if this tab is active initially (handled by attachTabListeners)
+            // Ensure image is visible because image tab is now default active
+            detailImage.style.display = 'block';
         } else {
             logMessage('warn', '[DetailModel] Could not find image tab container or detailImage element to move.');
         }
 
-        attachTabListeners(); // Attach listeners AFTER moving the image
+        attachTabListeners(); // Attach listeners AFTER moving the image and setting initial display
         attachSaveListener();
         applyReadOnlyState(); // Apply read-only state
     }, 0);
