@@ -46,7 +46,6 @@ class ImageService {
             if (cachedBuffer) {
                 // 缓存命中
                 // TODO: MIME type determination needs update. imageCache.getCache should ideally return mimeType.
-                // Currently returning a generic type as we cannot reliably determine it from the old compressFormat config.
                 const mimeType = 'application/octet-stream';
                 log.warn(`[ImageService] Cache HIT for ${libraryId}/${imageName}. MIME type determination needs update. Returning generic type.`);
                 log.info(`[ImageService] Returning cached buffer.`);
