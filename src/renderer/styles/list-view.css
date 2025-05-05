@@ -130,7 +130,7 @@
   overflow: visible;
   padding: 0.2rem 0;
   background-color: transparent;
-  max-width: 350px; /* 增加最大宽度 */
+  max-width: 500px; /* 增加最大宽度 */
   position: relative;
   transition: max-height 0.3s ease-out;
 }
@@ -177,7 +177,7 @@
   }
 
   .list-view .tags-container {
-      max-width: 250px; /* 增加标签容器宽度 */
+      max-width: 400px; /* 增加标签容器宽度 */
   }
 }
 
