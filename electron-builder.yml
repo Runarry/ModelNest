@@ -1,13 +1,33 @@
 appId: com.banazzle.modelnest
 productName: ModelNest
 files:
-  - 'src/**'
-  - 'src/**/**'
+  # Core files
+  - main.js
+  - preload.js
+  - package.json
+  # Assets
+  - assets/**
+  # Bundled renderer code
+  - from: dist/renderer
+    to: dist/renderer
+    filter:
+      - bundle.js
+      - bundle.js.map # Optional
+  # Renderer static files (HTML, CSS, locales)
+  - from: src/renderer
+    to: src/renderer
+    filter:
+      - index.html
+      - styles/**
+      - locales/** # Include locales
+  # Main process source files (excluding bundled renderer JS)
+  - from: src
+    to: src
+    filter:
+      - "**/*.js" # Include all JS files...
+      - "!renderer/main.js" # ...except renderer entry point...
+      - "!renderer/js/**" # ...and its modules.
 
-  - 'assets/**'
-  - 'main.js'
-  - 'preload.js'
-  - 'package.json'
 
 icon: assets/icon.png
 
