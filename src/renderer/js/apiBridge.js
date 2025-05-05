@@ -43,3 +43,94 @@ export const getAllSourceConfigs = api.getAllSourceConfigs;
 // You might also export the entire api object if needed,
 // but exporting individual functions is generally preferred for clarity.
 // export default api;
+// --- Model Crawl APIs ---
+
+/**
+ * Starts the model crawl process for a given source and directory.
+ * @param {string} sourceId - The ID of the data source.
+ * @param {string} directory - The directory to crawl.
+ * @returns {Promise&lt;void&gt;}
+ */
+export const startCrawl = async (sourceId, directory) => {
+  logMessage('info', `[API Bridge] Starting crawl for source: ${sourceId}, directory: ${directory}`);
+  try {
+    await api.startCrawl(sourceId, directory);
+    logMessage('info', `[API Bridge] Crawl started successfully for source: ${sourceId}`);
+  } catch (error) {
+    logMessage('error', `[API Bridge] Error starting crawl for source: ${sourceId}`, error);
+    throw error; // Re-throw the error after logging
+  }
+};
+
+/**
+ * Pauses the current crawl process.
+ * @returns {Promise&lt;void&gt;}
+ */
+export const pauseCrawl = async () => {
+  logMessage('info', '[API Bridge] Pausing crawl');
+  try {
+    await api.pauseCrawl();
+    logMessage('info', '[API Bridge] Crawl paused successfully');
+  } catch (error) {
+    logMessage('error', '[API Bridge] Error pausing crawl', error);
+    throw error;
+  }
+};
+
+/**
+ * Resumes a paused crawl process.
+ * @returns {Promise&lt;void&gt;}
+ */
+export const resumeCrawl = async () => {
+  logMessage('info', '[API Bridge] Resuming crawl');
+  try {
+    await api.resumeCrawl();
+    logMessage('info', '[API Bridge] Crawl resumed successfully');
+  } catch (error) {
+    logMessage('error', '[API Bridge] Error resuming crawl', error);
+    throw error;
+  }
+};
+
+/**
+ * Cancels the current crawl process.
+ * @returns {Promise&lt;void&gt;}
+ */
+export const cancelCrawl = async () => {
+  logMessage('info', '[API Bridge] Cancelling crawl');
+  try {
+    await api.cancelCrawl();
+    logMessage('info', '[API Bridge] Crawl cancelled successfully');
+  } catch (error) {
+    logMessage('error', '[API Bridge] Error cancelling crawl', error);
+    throw error;
+  }
+};
+
+/**
+ * Gets the current status of the crawl process.
+ * @returns {Promise&lt;object&gt;} - The crawl status object.
+ */
+export const getCrawlStatus = async () => {
+  logMessage('debug', '[API Bridge] Getting crawl status');
+  try {
+    const status = await api.getCrawlStatus();
+    logMessage('debug', '[API Bridge] Crawl status received:', status);
+    return status;
+  } catch (error) {
+    logMessage('error', '[API Bridge] Error getting crawl status', error);
+    throw error;
+  }
+};
+
+/**
+ * Registers a listener for crawl status updates.
+ * Directly exports the function from the exposed API.
+ */
+export const onCrawlStatusUpdate = api.onCrawlStatusUpdate;
+
+/**
+ * Removes a listener for crawl status updates.
+ * Directly exports the function from the exposed API.
+ */
+export const removeCrawlStatusUpdateListener = api.removeCrawlStatusUpdateListener;
