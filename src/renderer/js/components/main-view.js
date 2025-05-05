@@ -232,12 +232,18 @@ function renderFilterTypes() {
   allOption.textContent = t('all'); // Use translation key 'all'
   filterSelect.appendChild(allOption);
 
-  const types = Array.from(new Set(models.map(m => m.modelType).filter(Boolean)));
+  // 提取所有模型类型并转为大写，处理未分类情况，然后去重
+  const types = Array.from(new Set(
+      models
+          .map(m => m.modelType ? m.modelType.toUpperCase() : t('uncategorized').toUpperCase())
+          .filter(Boolean) // 过滤掉可能存在的空值（虽然大写'UNCATEGORIZED'不会为空）
+  ));
   types.sort(); // Sort types alphabetically
   types.forEach(type => {
     const option = document.createElement('option');
+    // 确保 value 和 textContent 都是大写
     option.value = type;
-    option.textContent = type; // Assuming type names don't need translation for now
+    option.textContent = type;
     filterSelect.appendChild(option);
   });
 
@@ -254,7 +260,10 @@ function renderFilterTypes() {
 function renderModels() {
   if (!modelList) return;
   clearChildren(modelList);
-  const filteredModels = filterType ? models.filter(m => m.modelType === filterType) : models;
+  // 筛选逻辑：比较时将模型类型和选中的类型（filterType 已是大写）都视为大写
+  const filteredModels = filterType
+      ? models.filter(m => (m.modelType ? m.modelType.toUpperCase() : t('uncategorized').toUpperCase()) === filterType)
+      : models;
   const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
 
   // Set container class based on display mode
@@ -305,7 +314,8 @@ function renderModels() {
 
     const typeSpan = document.createElement('span');
     typeSpan.className = 'model-type';
-    typeSpan.textContent = model.modelType || t('uncategorized');
+    // 显示时将模型类型转为大写，处理未分类情况
+    typeSpan.textContent = model.modelType ? model.modelType.toUpperCase() : t('uncategorized').toUpperCase();
 
     contentDiv.appendChild(nameH3);
     contentDiv.appendChild(typeSpan);
