@@ -47,7 +47,7 @@ class ImageService {
                 // 缓存命中
                 // TODO: MIME type determination needs update. imageCache.getCache should ideally return mimeType.
                 const mimeType = 'application/octet-stream';
-                log.warn(`[ImageService] Cache HIT for ${libraryId}/${imageName}. MIME type determination needs update. Returning generic type.`);
+                log.info(`[ImageService] Cache HIT for ${libraryId}/${imageName}. MIME type determination needs update. Returning generic type.`);
                 log.info(`[ImageService] Returning cached buffer.`);
                 const duration = Date.now() - startTime;
                 log.info(`[ImageService] <<< getImage END (Cache Hit) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
