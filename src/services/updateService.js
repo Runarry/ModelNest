@@ -90,6 +90,12 @@ class UpdateService {
    */
   checkForUpdates() {
     log.info('[UpdateService] >>> Starting checkForUpdates method.');
+    // 安全检查：确保 autoUpdater 已加载
+    if (!autoUpdater) {
+        log.error('[UpdateService] Error: autoUpdater is not available. Cannot check for updates.');
+        this.sendStatusToRenderer({ status: 'error', message: 'Updater not available' });
+        return;
+    }
     log.info('[UpdateService] Executing checkForUpdates...');
     try {
       // 注意：如果 webContents 未设置，检查更新仍然会进行，但状态无法发送到 UI
@@ -109,13 +115,19 @@ class UpdateService {
    */
   downloadUpdate() {
     log.info('[UpdateService] >>> Starting downloadUpdate method.');
+    // 安全检查：确保 autoUpdater 已加载
+    if (!autoUpdater) {
+        log.error('[UpdateService] Error: autoUpdater is not available. Cannot download update.');
+        this.sendStatusToRenderer({ status: 'error', message: 'Updater not available' });
+        return;
+    }
     log.info('[UpdateService] Executing downloadUpdate...');
     try {
       // 注意：如果 webContents 未设置，下载仍然会进行，但进度状态无法发送到 UI
       if (!this.webContents) {
         log.warn('[UpdateService] downloadUpdate called, but webContents is not set. Progress updates might not reach the UI.');
       }
-      this.autoUpdater.downloadUpdate(); // 调用 electron-updater 的下载方法
+      autoUpdater.downloadUpdate(); // 正确调用导入的 autoUpdater
       log.info('[UpdateService] >>> Calling autoUpdater.downloadUpdate()...');
       // 可以选择性地发送一个“开始下载”的状态，尽管 'download-progress' 事件会很快跟上
       // this.sendStatusToRenderer({ status: 'downloading-started' });
