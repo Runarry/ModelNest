@@ -144,25 +144,10 @@ class ImageService {
             throw error;
         }
     }
-/**
-     * Cleans up the image cache. Intended to be called on application exit.
-     */
-    async cleanupCache() {
-        log.info('[ImageService] cleanupCache called. Clearing image cache...');
-        try {
-            // Assuming imageCache.clearCache() is synchronous or handles its own async ops.
-            // If it returns a Promise, use await here.
-            imageCache.clearCache();
-            log.info('[ImageService] Image cache cleared successfully.');
-        } catch (error) {
-            log.error('[ImageService] Failed to clear image cache:', error);
-            // Depending on requirements, might re-throw the error.
-            // throw error;
-        }
-    }
+    // 移除 cleanupCache 方法，因为它不再被 main.js 调用
 
     /**
-     * 清除图片缓存
+     * 清除图片缓存 (供手动触发等场景使用)
      * @returns {Promise<void>}
      */
     async clearCache() {

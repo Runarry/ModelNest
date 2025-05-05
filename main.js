@@ -212,16 +212,17 @@ app.on('window-all-closed', async function () { // Ensure the function is async
   log.info('[Lifecycle] 所有窗口已关闭');
   if (process.platform !== 'darwin') {
     try {
-      // 清理图片缓存 (通过 ImageService)
-      if (services && services.imageService) {
-          await services.imageService.cleanupCache(); // Call the service method
-      } else {
-          log.warn('[Lifecycle] Services or ImageService not available during window-all-closed.');
-      }
+      // 移除：不再在应用关闭时自动清理图片缓存
+      // if (services && services.imageService) {
+      //     await services.imageService.cleanupCache(); // Call the service method
+      // } else {
+      //     log.warn('[Lifecycle] Services or ImageService not available during window-all-closed.');
+      // }
 
       // WebDAV 缓存清理逻辑暂时忽略 (根据指令)
     } catch (e) {
-      log.error('[Cache] 清理缓存失败:', e.message, e.stack);
+      // 如果有其他清理逻辑失败，仍然记录错误
+      log.error('[Lifecycle] 关闭过程中的清理操作失败:', e.message, e.stack);
     }
     log.info('[Lifecycle] 应用即将退出');
     app.quit();

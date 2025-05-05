@@ -8,7 +8,12 @@ const { deepClone } = require('../common/utils'); // 假设 utils.js 中有 deep
 const DEFAULT_CONFIG = {
   modelSources: [],
   supportedExtensions: [],
-  imageCache: {}, // 添加默认的 imageCache 配置
+  imageCache: {
+    maxCacheSizeMB: 200, // 默认图片缓存大小 (MB)
+    compressQuality: 50, // 默认压缩质量
+    compressFormat: 'jpeg' // 默认压缩格式
+    // 注意：cacheDir 通常在 imageCache.js 中基于 process.cwd() 设置，不在此处定义
+  },
   locale: null, // 添加默认的 locale 配置项
 };
 
@@ -75,6 +80,30 @@ class ConfigService {
           }
         });
       }
+
+      // --- 添加：确保 imageCache 配置和默认大小 ---
+      if (!loadedConfig.imageCache) {
+        loadedConfig.imageCache = {}; // 确保 imageCache 对象存在
+        log.warn('[ConfigService] Loaded config missing imageCache object. Initializing empty.');
+      }
+      // 检查 maxCacheSizeMB 是否有效，如果无效或缺失，则使用默认值 200
+      if (loadedConfig.imageCache.maxCacheSizeMB === undefined ||
+          loadedConfig.imageCache.maxCacheSizeMB === null ||
+          typeof loadedConfig.imageCache.maxCacheSizeMB !== 'number' || // 确保是数字
+          loadedConfig.imageCache.maxCacheSizeMB <= 0) {
+          const originalValue = loadedConfig.imageCache.maxCacheSizeMB;
+          log.warn(`[ConfigService] Invalid or missing imageCache.maxCacheSizeMB found (value: ${originalValue}). Applying default value: 200 MB.`);
+          loadedConfig.imageCache.maxCacheSizeMB = 200; // 应用默认值
+      }
+      // 可以选择性地为其他 imageCache 属性添加默认值检查
+      if (loadedConfig.imageCache.compressQuality === undefined || loadedConfig.imageCache.compressQuality === null) {
+          loadedConfig.imageCache.compressQuality = DEFAULT_CONFIG.imageCache.compressQuality;
+      }
+       if (loadedConfig.imageCache.compressFormat === undefined || loadedConfig.imageCache.compressFormat === null) {
+          loadedConfig.imageCache.compressFormat = DEFAULT_CONFIG.imageCache.compressFormat;
+      }
+      // --- 结束：确保 imageCache 配置和默认大小 ---
+
 
       this.config = loadedConfig;
       log.info('[ConfigService] Configuration loaded and processed.');

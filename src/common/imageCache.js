@@ -282,8 +282,8 @@ async function checkAndCleanCache() {
     const totalSizeMB = files.reduce((sum, file) => sum + file.size, 0) / (1024 * 1024);
     if (totalSizeMB <= config.maxCacheSizeMB) return;
 
-    // 2. 按最久未用排序
-    files.sort((a, b) => a.atime - b.atime);
+    // 2. 按修改时间排序 (最旧的在前)
+    files.sort((a, b) => a.mtime - b.mtime); // 使用 mtime 替代 atime
 
     // 3. 清理最旧的文件直到满足大小限制
     let removedSize = 0;
