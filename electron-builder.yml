@@ -5,7 +5,7 @@ files:
   - 'src/**'
   - 'src/**/**'
 
-  - 'icon.png'
+  - 'assets/**'
   - 'main.js'
   - 'preload.js'
   - 'package.json'

@@ -22,7 +22,7 @@ function createWindow(services) {
   mainWindow = new BrowserWindow({ // Assign to mainWindow
     width: 1270,
     height: 800,
-    icon: path.join(__dirname, 'icon.png'),
+    icon: path.join(__dirname, 'assets/icon.png'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       nodeIntegration: false,
