@@ -19,18 +19,25 @@
 
 /* 只读指示器样式 */
 .readonly-indicator {
-  background-color: rgba(255, 149, 0, 0.15); /* 更浅的橙色背景 */
-  color: rgba(255, 149, 0, 0.8); /* 更浅的橙色文本 */
+  background-color: rgba(255, 149, 0, 0.15);
+  /* 更浅的橙色背景 */
+  color: rgba(255, 149, 0, 0.8);
+  /* 更浅的橙色文本 */
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 0.85em; /* 更小字体 */
+  font-size: 0.85em;
+  /* 更小字体 */
   margin-left: 8px;
-  display: inline-flex; /* flex 垂直居中图标和文本 */
+  display: inline-flex;
+  /* flex 垂直居中图标和文本 */
   align-items: center;
-  gap: 4px; /* 图标和文本间距 */
+  gap: 4px;
+  /* 图标和文本间距 */
   vertical-align: middle;
-  opacity: 0.8; /* 整体更浅 */
+  opacity: 0.8;
+  /* 整体更浅 */
 }
+
 .readonly-indicator i {
   font-size: 0.9em;
 }
@@ -60,8 +67,10 @@
 body {
   font-family: 'Segoe UI', system-ui, sans-serif;
   color: var(--text-color);
-  display: flex; /* Make body a flex container */
-  flex-direction: column; /* Arrange children vertically */
+  display: flex;
+  /* Make body a flex container */
+  flex-direction: column;
+  /* Arrange children vertically */
   background-color: var(--bg-color);
   line-height: 1.6;
   min-height: 100vh;
@@ -69,45 +78,59 @@ body {
 }
 
 #app {
-  width: 100%; /* 增加最大宽度，使界面更宽 */
-  margin: 0 auto; /* Center the app content */
+  width: 100%;
+  /* 增加最大宽度，使界面更宽 */
+  margin: 0 auto;
+  /* Center the app content */
   display: flex;
   flex-direction: column;
-  height: 100vh; /* Make app take full viewport height */
-  overflow: hidden; /* Prevent body scroll */
+  height: 100vh;
+  /* Make app take full viewport height */
+  overflow: hidden;
+  /* Prevent body scroll */
 }
 
 /* Top Menu Bar Styles */
 .top-menu-bar {
-  padding: 0.5rem 1.5rem; /* 减小水平内边距 */
+  padding: 0.5rem 1.5rem;
+  /* 减小水平内边距 */
   display: flex;
   flex-direction: column;
-  gap: 0.6rem; /* 减小行间距 */
+  gap: 0.6rem;
+  /* 减小行间距 */
   border-bottom: 1px solid var(--border-color);
   width: 100%;
-  flex-shrink: 0; /* Prevent top bar from shrinking */
+  flex-shrink: 0;
+  /* Prevent top bar from shrinking */
 }
 
 /* 顶部行样式 */
 .top-row {
   display: flex;
-  justify-content: space-between; /* 两端对齐 */
-  align-items: center; /* 垂直居中 */
+  justify-content: space-between;
+  /* 两端对齐 */
+  align-items: center;
+  /* 垂直居中 */
 }
 
 /* 底部行样式 */
 .bottom-row {
   display: flex;
-  justify-content: space-between; /* 两端对齐 */
-  align-items: center; /* 垂直居中 */
+  justify-content: space-between;
+  /* 两端对齐 */
+  align-items: center;
+  /* 垂直居中 */
 }
 
 /* 标题样式 */
 .top-menu-bar h1 {
-  margin: 0; /* 移除默认外边距 */
-  font-size: 1.6rem; /* 字体大小 */
+  margin: 0;
+  /* 移除默认外边距 */
+  font-size: 1.6rem;
+  /* 字体大小 */
   color: var(--primary-color);
-  flex-shrink: 0; /* 防止收缩 */
+  flex-shrink: 0;
+  /* 防止收缩 */
 }
 
 /* 模型库选择器样式 */
@@ -115,7 +138,8 @@ body {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-shrink: 0; /* 防止收缩 */
+  flex-shrink: 0;
+  /* 防止收缩 */
 }
 
 .top-source-selector #sourceSelect {
@@ -126,7 +150,8 @@ body {
 
 /* 空白填充元素，使筛选区域靠右对齐 */
 .spacer {
-  flex-grow: 1; /* 占据所有可用空间 */
+  flex-grow: 1;
+  /* 占据所有可用空间 */
 }
 
 /* 筛选区域样式 */
@@ -134,38 +159,50 @@ body {
   display: flex;
   align-items: center;
   gap: 0.4rem;
-  flex-shrink: 0; /* 防止收缩 */
+  flex-shrink: 0;
+  /* 防止收缩 */
 }
 
 /* 设置按钮样式 */
 .settings-controls {
   display: flex;
-  gap: 0.5rem; /* 按钮之间的间距 */
+  gap: 0.5rem;
+  /* 按钮之间的间距 */
   align-items: center;
-  flex-shrink: 0; /* 防止收缩 */
+  flex-shrink: 0;
+  /* 防止收缩 */
 }
 
 /* Main Layout Styles */
 .main-layout {
-  flex: 1; /* Take remaining vertical space */
-  display: flex; /* Arrange children (directory + content) horizontally */
-  overflow: hidden; /* Prevent this layout from scrolling */
-  padding: 0.8rem 1.5rem 1.5rem 1.5rem; /* 减小内边距，使内容区域更大 */
+  flex: 1;
+  /* Take remaining vertical space */
+  display: flex;
+  /* Arrange children (directory + content) horizontally */
+  overflow: hidden;
+  /* Prevent this layout from scrolling */
+  padding: 0.8rem 1.5rem 1.5rem 1.5rem;
+  /* 减小内边距，使内容区域更大 */
   min-width: 1080px;
 }
 
 /* Removed .sidebar and .sidebar-label styles */
 
 .content-area {
-  flex: 1; /* Take remaining space within main-layout */
-  display: flex; /* Use flex for content-layout */
-  overflow: hidden; /* Prevent content-area scroll */
-  min-width: 0; /* Prevent content overflow issues */
+  flex: 1;
+  /* Take remaining space within main-layout */
+  display: flex;
+  /* Use flex for content-layout */
+  overflow: hidden;
+  /* Prevent content-area scroll */
+  min-width: 0;
+  /* Prevent content overflow issues */
 }
 
 /* Removed styles for .source-selector.content-section */
 
-.content-label { /* Keep general label style if used elsewhere, or make more specific */
+.content-label {
+  /* Keep general label style if used elsewhere, or make more specific */
   font-weight: 600;
   color: var(--text-color);
   white-space: nowrap;
@@ -174,13 +211,16 @@ body {
 /* 视图切换按钮组样式 */
 .view-toggle {
   display: flex;
-  gap: 0.2rem; /* 按钮之间的间距 */
+  gap: 0.2rem;
+  /* 按钮之间的间距 */
   align-items: center;
 }
 
 /* 下拉框样式 */
-#filterSelect, #sourceSelect {
-  padding: 0.4rem 0.8rem; /* 内边距 */
+#filterSelect,
+#sourceSelect {
+  padding: 0.4rem 0.8rem;
+  /* 内边距 */
   border-radius: 4px;
   border: 1px solid var(--border-color);
 }
@@ -198,11 +238,13 @@ select {
   background-color: var(--card-bg);
   color: var(--text-color);
   font-size: 1rem;
-  transition: border-color 0.2s ease; /* Add transition for hover */
+  transition: border-color 0.2s ease;
+  /* Add transition for hover */
 }
 
 select:hover {
-  border-color: var(--primary-color); /* Add hover effect */
+  border-color: var(--primary-color);
+  /* Add hover effect */
 }
 
 #loading {
@@ -232,7 +274,8 @@ select:hover {
 
 #mainSection {
   /* Removed incorrect grid layout */
-  gap: 1.5rem; /* Keep gap if needed, or remove if not applicable */
+  gap: 1.5rem;
+  /* Keep gap if needed, or remove if not applicable */
 }
 
 /* Source selector styles now applied to top-source-selector */
@@ -454,6 +497,7 @@ select:hover {
 
 /* 移动端适配 */
 @media (max-width: 768px) {
+
   .detail-Model-content .detail-row,
   .detail-Model-content .extra-info-item {
     flex-direction: column;
@@ -479,12 +523,15 @@ select:hover {
 }
 
 .detail-Model-content .btn-save {
-  align-self: flex-end; /* 保存按钮右对齐 */
-  margin-top: 20px; /* 增加与上方内容的间距 */
+  align-self: flex-end;
+  /* 保存按钮右对齐 */
+  margin-top: 20px;
+  /* 增加与上方内容的间距 */
 }
 
 .detail-Model-content hr.separator {
-  margin: 20px 0; /* 增加分隔线上下的间距 */
+  margin: 20px 0;
+  /* 增加分隔线上下的间距 */
   border: none;
   border-top: 1px solid var(--border-color);
 }
@@ -527,26 +574,34 @@ select:hover {
 
 
 }
+
 .model-image {
   width: 100%;
   height: 100%;
   object-fit: cover;
   object-position: center;
 }
+
 /* Styles for source select options with icons */
 #sourceSelect option {
-  padding-left: 25px; /* Add padding for the icon */
-  position: relative; /* Needed for pseudo-element positioning */
+  padding-left: 25px;
+  /* Add padding for the icon */
+  position: relative;
+  /* Needed for pseudo-element positioning */
 }
 
 #sourceSelect option::before {
-  content: ''; /* Default empty content */
+  content: '';
+  /* Default empty content */
   position: absolute;
-  left: 5px; /* Position icon to the left */
+  left: 5px;
+  /* Position icon to the left */
   top: 50%;
   transform: translateY(-50%);
-  width: 16px; /* Icon width */
-  height: 16px; /* Icon height */
+  width: 16px;
+  /* Icon width */
+  height: 16px;
+  /* Icon height */
   background-repeat: no-repeat;
   background-size: contain;
   background-position: center;
@@ -554,114 +609,141 @@ select:hover {
 
 /* Icon for Local Sources (Using a simple disk emoji for now) */
 #sourceSelect .source-option-local::before {
- content: '💾'; /* Unicode character for floppy disk */
- /* Alternatively, use background-image with a data URI or URL */
- /* background-image: url('path/to/local-icon.svg'); */
- font-size: 14px; /* Adjust emoji size if needed */
+  content: '💾';
+  /* Unicode character for floppy disk */
+  /* Alternatively, use background-image with a data URI or URL */
+  /* background-image: url('path/to/local-icon.svg'); */
+  font-size: 14px;
+  /* Adjust emoji size if needed */
 }
 
 /* 目录 Tab 栏样式 */
 .content-layout {
   display: flex;
-  height: 100%; /* Take full height of parent (.content-area) */
-  width: 100%; /* Take full width of parent (.content-area) */
-  min-width: 0; /* 防止flex布局最小宽度限制影响宽度计算 */
+  height: 100%;
+  /* Take full height of parent (.content-area) */
+  width: 100%;
+  /* Take full width of parent (.content-area) */
+  min-width: 0;
+  /* 防止flex布局最小宽度限制影响宽度计算 */
   /* Removed gap, use margin on directory-tabs instead */
 }
 
 .directory-tabs {
- width: 180px; /* 减小左侧目录宽度 */
- flex-shrink: 0;
- background-color: var(--card-bg);
- border-radius: 8px;
- padding: 0.8rem;
- box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
- height: 100%; /* Take full height */
- overflow-y: hidden; /* Prevent directory tabs from scrolling */
- margin-right: 1.5rem; /* Space between tabs and content */
+  width: 180px;
+  /* 减小左侧目录宽度 */
+  flex-shrink: 0;
+  background-color: var(--card-bg);
+  border-radius: 8px;
+  padding: 0.8rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  height: 100%;
+  /* Take full height */
+  overflow-y: hidden;
+  /* Prevent directory tabs from scrolling */
+  margin-right: 1.5rem;
+  /* Space between tabs and content */
 }
 
 .tab-header {
- font-weight: 600;
- color: var(--primary-color);
- margin-bottom: 0.8rem;
- padding-bottom: 0.5rem;
- border-bottom: 1px solid var(--border-color);
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 0.8rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .tab-list {
- display: flex;
- flex-direction: column;
- gap: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .tab-item {
- padding: 0.6rem 0.8rem;
- border-radius: 6px;
- cursor: pointer;
- transition: background-color 0.2s ease;
- font-size: 0.9rem;
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  font-size: 0.9rem;
 }
 
 .tab-item:hover {
- background-color: rgba(67, 97, 238, 0.1);
+  background-color: rgba(67, 97, 238, 0.1);
 }
 
 .tab-item.active {
- background-color: rgba(67, 97, 238, 0.2);
- font-weight: 500;
- color: var(--primary-color);
+  background-color: rgba(67, 97, 238, 0.2);
+  font-weight: 500;
+  color: var(--primary-color);
 }
 
 .content-main {
-  flex: 1; /* Take remaining horizontal space */
-  min-width: 0; /* Prevent flex min-width from affecting width calculation */
+  flex: 1;
+  /* Take remaining horizontal space */
+  min-width: 0;
+  /* Prevent flex min-width from affecting width calculation */
   position: relative;
   padding-top: 0;
-  height: 100%; /* Take full height */
-  overflow-y: auto; /* Enable vertical scrolling ONLY for this area */
-  scrollbar-gutter: stable; /* Reserve space for scrollbar to prevent layout shifts */
+  height: 100%;
+  /* Take full height */
+  overflow-y: auto;
+  /* Enable vertical scrolling ONLY for this area */
+  scrollbar-gutter: stable;
+  /* Reserve space for scrollbar to prevent layout shifts */
 }
 
 /* 响应式调整 */
 @media (max-width: 768px) {
- .content-layout {
-   flex-direction: column;
- }
- 
- .directory-tabs {
-   width: 100%;
-   order: -1; /* 移动端将目录栏放在顶部 */
- }
+  .content-layout {
+    flex-direction: column;
+  }
+
+  .directory-tabs {
+    width: 100%;
+    order: -1;
+    /* 移动端将目录栏放在顶部 */
+  }
 }
 
 /* Icon for WebDAV Sources (Using a cloud emoji for now) */
 #sourceSelect .source-option-webdav::before {
- content: '☁️'; /* Unicode character for cloud */
- /* Alternatively, use background-image with a data URI or URL */
- /* background-image: url('path/to/webdav-icon.svg'); */
- font-size: 14px; /* Adjust emoji size if needed */
+  content: '☁️';
+  /* Unicode character for cloud */
+  /* Alternatively, use background-image with a data URI or URL */
+  /* background-image: url('path/to/webdav-icon.svg'); */
+  font-size: 14px;
+  /* Adjust emoji size if needed */
 }
+
 /* Settings Model Specific Styles */
 .settings-Model-content {
-  max-width: 800px; /* Allow settings Model to be wider */
+  max-width: 800px;
+  /* Allow settings Model to be wider */
   display: flex;
   flex-direction: column;
 }
 
 .settings-form {
-  flex-grow: 1; /* Allow form area to take available space */
-  padding: 1rem 0; /* Add some vertical padding */
-  overflow-y: auto; /* Allow scrolling if content overflows */
-  margin-bottom: 1rem; /* Space before action buttons */
+  flex-grow: 1;
+  /* Allow form area to take available space */
+  padding: 1rem 0;
+  /* Add some vertical padding */
+  overflow-y: auto;
+  /* Allow scrolling if content overflows */
+  margin-bottom: 1rem;
+  /* Space before action buttons */
 }
 
 .Model-actions {
   display: flex;
-  justify-content: flex-end; /* Align buttons to the right */
-  gap: 0.8rem; /* Space between buttons */
-  padding-top: 1rem; /* Space above buttons */
-  border-top: 1px solid var(--border-color); /* Separator line */
+  justify-content: flex-end;
+  /* Align buttons to the right */
+  gap: 0.8rem;
+  /* Space between buttons */
+  padding-top: 1rem;
+  /* Space above buttons */
+  border-top: 1px solid var(--border-color);
+  /* Separator line */
 }
 
 /* Basic button styling (assuming .btn classes exist or are added) */
@@ -701,6 +783,7 @@ select:hover {
   padding-bottom: 1.5rem;
   border-bottom: 1px solid var(--border-color);
 }
+
 .settings-section:last-child {
   border-bottom: none;
   margin-bottom: 0;
@@ -734,7 +817,8 @@ select:hover {
   padding: 0.6rem 0.8rem;
   border: 1px solid var(--border-color);
   border-radius: 4px;
-  background-color: var(--bg-color); /* Use bg color for inputs */
+  background-color: var(--bg-color);
+  /* Use bg color for inputs */
   color: var(--text-color);
   font-size: 0.9rem;
 }
@@ -788,9 +872,11 @@ select:hover {
 
 .source-item-path {
   font-size: 0.85rem;
-  color: #6c757d; /* Use a secondary text color */
+  color: #6c757d;
+  /* Use a secondary text color */
   word-break: break-all;
 }
+
 [data-theme="dark"] .source-item-path {
   color: #adb5bd;
 }
@@ -802,9 +888,11 @@ select:hover {
   padding: 0.3rem;
   color: var(--text-color);
 }
+
 .source-item-actions button:hover {
   color: var(--primary-color);
 }
+
 .source-item-actions button.delete-btn:hover {
   color: var(--danger-color);
 }
@@ -812,35 +900,50 @@ select:hover {
 .add-source-btn {
   margin-top: 0.5rem;
 }
+
 /* Model Feedback Area Styles */
 .Model-feedback {
   padding: 0.8rem 1rem;
-  margin-bottom: 1rem; /* Space between feedback and actions */
+  margin-bottom: 1rem;
+  /* Space between feedback and actions */
   border-radius: 4px;
   font-size: 0.9rem;
-  display: none; /* Hidden by default */
+  display: none;
+  /* Hidden by default */
   border: 1px solid transparent;
 }
 
 .Model-feedback.feedback-success {
-  color: #155724; /* Dark green text */
-  background-color: #d4edda; /* Light green background */
-  border-color: #c3e6cb; /* Green border */
-  display: block; /* Show when class is added */
+  color: #155724;
+  /* Dark green text */
+  background-color: #d4edda;
+  /* Light green background */
+  border-color: #c3e6cb;
+  /* Green border */
+  display: block;
+  /* Show when class is added */
 }
 
 .Model-feedback.feedback-error {
-  color: #721c24; /* Dark red text */
-  background-color: #f8d7da; /* Light red background */
-  border-color: #f5c6cb; /* Red border */
-  display: block; /* Show when class is added */
+  color: #721c24;
+  /* Dark red text */
+  background-color: #f8d7da;
+  /* Light red background */
+  border-color: #f5c6cb;
+  /* Red border */
+  display: block;
+  /* Show when class is added */
 }
 
 .Model-feedback.feedback-info {
-  color: #0c5460; /* Dark cyan text */
-  background-color: #d1ecf1; /* Light cyan background */
-  border-color: #bee5eb; /* Cyan border */
-  display: block; /* Show when class is added */
+  color: #0c5460;
+  /* Dark cyan text */
+  background-color: #d1ecf1;
+  /* Light cyan background */
+  border-color: #bee5eb;
+  /* Cyan border */
+  display: block;
+  /* Show when class is added */
 }
 
 /* Style for disabled buttons */
@@ -848,33 +951,44 @@ select:hover {
   opacity: 0.6;
   cursor: not-allowed;
 }
+
 /* ===== Crawl Status Modal Styles ===== */
 #crawlStatusModal {
-  position: fixed; /* Stay in place */
-  z-index: 1001; /* Sit on top, higher than detail modal */
+  position: fixed;
+  /* Stay in place */
+  z-index: 1001;
+  /* Sit on top, higher than detail modal */
   left: 0;
   top: 0;
   width: 100%;
   height: 100%;
-  overflow: auto; /* Enable scroll if needed */
-  background-color: rgba(0, 0, 0, 0.6); /* Black w/ opacity */
+  overflow: auto;
+  /* Enable scroll if needed */
+  background-color: rgba(0, 0, 0, 0.6);
+  /* Black w/ opacity */
   /* Use flexbox for centering */
   display: flex;
-  justify-content: center; /* Center horizontally */
-  align-items: center; /* Center vertically */
+  justify-content: center;
+  /* Center horizontally */
+  align-items: center;
+  /* Center vertically */
 }
 
 #crawlStatusModal .modal-content {
   background-color: var(--card-bg);
   /* margin: auto; /* Removed for flex centering */
-  padding: 25px 30px; /* More padding */
+  padding: 25px 30px;
+  /* More padding */
   border: 1px solid var(--border-color);
   border-radius: 8px;
-  width: 80%; /* Could be more or less, depending on screen size */
-  max-width: 500px; /* Maximum width */
+  width: 80%;
+  /* Could be more or less, depending on screen size */
+  max-width: 500px;
+  /* Maximum width */
   position: relative;
   box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
-  animation: fadeIn 0.3s ease-out; /* Simple fade-in animation */
+  animation: fadeIn 0.3s ease-out;
+  /* Simple fade-in animation */
 }
 
 #crawlStatusModal .close-button {
@@ -895,24 +1009,29 @@ select:hover {
 
 #crawlStatusModal h2 {
   margin-top: 0;
-  margin-bottom: 20px; /* Space below title */
+  margin-bottom: 20px;
+  /* Space below title */
   color: var(--primary-color);
   font-size: 1.4rem;
   text-align: center;
 }
 
 #crawlStatusModal #crawl-status-text {
-  margin-bottom: 25px; /* Space below status text */
+  margin-bottom: 25px;
+  /* Space below status text */
   font-size: 1rem;
   text-align: center;
-  min-height: 40px; /* Ensure space even when text is short */
+  min-height: 40px;
+  /* Ensure space even when text is short */
   line-height: 1.5;
 }
 
 #crawlStatusModal .modal-buttons {
   display: flex;
-  justify-content: center; /* Center buttons */
-  gap: 15px; /* Space between buttons */
+  justify-content: center;
+  /* Center buttons */
+  gap: 15px;
+  /* Space between buttons */
   margin-top: 15px;
 }
 
@@ -923,37 +1042,49 @@ select:hover {
   cursor: pointer;
   font-size: 0.95rem;
   transition: background-color 0.2s ease, opacity 0.2s ease;
-  border: 1px solid transparent; /* Base border */
+  border: 1px solid transparent;
+  /* Base border */
 }
 
 #crawlStatusModal #crawl-start-button {
-  background-color: var(--success-color); /* Green for start */
+  background-color: var(--success-color);
+  /* Green for start */
   color: white;
   border-color: var(--success-color);
 }
+
 #crawlStatusModal #crawl-start-button:hover:not(:disabled) {
-  background-color: #3a9d34; /* Darker green */
+  background-color: #3a9d34;
+  /* Darker green */
 }
 
 #crawlStatusModal #crawl-pause-resume-button {
-  background-color: var(--warning-color); /* Orange for pause/resume */
+  background-color: var(--warning-color);
+  /* Orange for pause/resume */
   color: white;
   border-color: var(--warning-color);
 }
+
 #crawlStatusModal #crawl-pause-resume-button:hover:not(:disabled) {
-  background-color: #e68a00; /* Darker orange */
+  background-color: #e68a00;
+  /* Darker orange */
 }
 
 #crawlStatusModal #crawl-cancel-button {
-  background-color: var(--secondary-button-bg); /* Use secondary style for cancel */
+  background-color: var(--secondary-button-bg);
+  /* Use secondary style for cancel */
   color: var(--secondary-button-text-color);
   border-color: var(--secondary-button-border);
 }
+
 #crawlStatusModal #crawl-cancel-button:hover:not(:disabled) {
-  background-color: rgba(0, 0, 0, 0.1); /* Slight darken */
+  background-color: rgba(0, 0, 0, 0.1);
+  /* Slight darken */
 }
+
 [data-theme="dark"] #crawlStatusModal #crawl-cancel-button:hover:not(:disabled) {
-    background-color: rgba(255, 255, 255, 0.1); /* Slight lighten for dark theme */
+  background-color: rgba(255, 255, 255, 0.1);
+  /* Slight lighten for dark theme */
 }
 
 
@@ -964,9 +1095,17 @@ select:hover {
 
 /* Simple fade-in animation */
 @keyframes fadeIn {
-  from { opacity: 0; transform: translateY(-10px); }
-  to { opacity: 1; transform: translateY(0); }
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
+
 /* Styles for the auto-resizing description textarea */
 .description-textarea {
   width: 100%;
@@ -975,9 +1114,16 @@ select:hover {
   border-radius: 4px;
   font-size: 0.9rem;
   line-height: 1.5;
-  overflow: hidden; /* Hide scrollbars */
-  resize: none; /* Disable manual resize */
+  overflow: hidden;
+  /* Hide scrollbars */
+  resize: none;
+  /* Disable manual resize */
   box-sizing: border-box;
-  min-height: 50px; /* Minimum height */
-  transition: height 0.2s ease; /* Smooth height transition */
+  min-height: 50px;
+  /* Minimum height */
+  transition: height 0.2s ease;
+  /* Smooth height transition */
 }
+
+
+
