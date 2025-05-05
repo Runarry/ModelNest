@@ -532,6 +532,10 @@ select:hover {
 
 .tab-content.active {
   display: block;
+  height: 300px;
+  overflow-y: auto;
+
+
 }
 .model-image {
   width: 100%;
