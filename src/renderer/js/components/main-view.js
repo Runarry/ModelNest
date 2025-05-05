@@ -12,6 +12,7 @@ let cardViewBtn;
 let listViewBtn;
 let directoryTabsContainer; // The container for directory tabs (e.g., '.directory-tabs')
 let crawlInfoButton; // 新增：补全模型信息按钮
+let sourceReadonlyIndicator; // 新增：只读状态指示器
 
 // ===== Module State =====
 let models = [];
@@ -36,6 +37,7 @@ let crawlStatusModal = null; // 新增：弹窗实例
  * @param {string} config.listViewBtnId - ID of the list view button.
  * @param {string} config.directoryTabsSelector - Selector for the directory tabs container.
  * @param {string} config.crawlInfoButtonId - ID of the crawl info button.
+ * @param {string} config.sourceReadonlyIndicatorId - ID of the source readonly indicator span.
  * @param {function} showDetailCallback - Callback function to show model details.
  */
 export function initMainView(config, showDetailCallback) {
@@ -46,8 +48,9 @@ export function initMainView(config, showDetailCallback) {
     listViewBtn = document.getElementById(config.listViewBtnId);
     directoryTabsContainer = document.querySelector(config.directoryTabsSelector);
     crawlInfoButton = document.getElementById(config.crawlInfoButtonId); // 获取按钮
+    sourceReadonlyIndicator = document.getElementById(config.sourceReadonlyIndicatorId); // 获取只读指示器
 
-    if (!sourceSelect || !filterSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton) {
+    if (!sourceSelect || !filterSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton || !sourceReadonlyIndicator) {
         // Task 1: Error Logging
         logMessage('error', "[MainView] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID/选择器:", config);
         return;
@@ -201,17 +204,20 @@ export async function renderSources(sourcesData) { // Make async to fetch config
     sourceSelect.appendChild(option);
   });
   // Restore selection or select first if previous value is gone
-  if (sourcesData.some(s => s.id === currentVal)) {
+  // --- 使用 sourcesToRender 进行判断 ---
+  if (sourcesToRender.some(s => s.id === currentVal)) {
       sourceSelect.value = currentVal;
-  } else if (sourcesData.length > 0) {
-      sourceSelect.value = sourcesData[0].id;
+  } else if (sourcesToRender.length > 0) {
+      sourceSelect.value = sourcesToRender[0].id;
       // Trigger change event manually if selection defaulted to first
-      handleSourceChange(); // This will call updateWriteActionUI
+      // This ensures the initial models are loaded when the app starts or sources change
+      handleSourceChange();
   } else {
       // No sources available, ensure write actions are disabled
       // 并且隐藏爬虫按钮
       updateWriteActionUI(true);
       if (crawlInfoButton) crawlInfoButton.style.display = 'none';
+      if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
   }
 }
 
@@ -423,35 +429,52 @@ async function handleSourceChange() {
       return;
   }
   const selectedSourceId = sourceSelect.value;
-  // Task 4: Click Event Logging (Implicit via change)
-  logMessage('info', `[UI] 切换数据源: ${selectedSourceId || '无'} (选择器值: ${sourceSelect.options[sourceSelect.selectedIndex]?.text})`);
+  logMessage('info', `[UI] handleSourceChange started. Selected Source ID: ${selectedSourceId}`); // Added log
 
   // --- 更新当前数据源配置 ---
   currentSourceConfig = allSourceConfigs.find(config => config.id === selectedSourceId) || null;
+  logMessage('debug', `[MainView] Found config for ID ${selectedSourceId}:`, currentSourceConfig); // Added log
+
   if (currentSourceConfig) {
-      logMessage('info', `[MainView] 当前数据源配置已更新: ${currentSourceConfig.name}, ReadOnly: ${currentSourceConfig.readOnly}`);
+      logMessage('info', `[MainView] 当前数据源配置已更新: ${currentSourceConfig.name}, ReadOnly: ${currentSourceConfig.readOnly}, Type: ${currentSourceConfig.type}`); // Enhanced log
   } else if (selectedSourceId) {
       logMessage('warn', `[MainView] 未找到 ID 为 ${selectedSourceId} 的数据源配置`);
   }
   // ---
-  // 更新写入操作相关的 UI 状态
-  updateWriteActionUI(currentSourceConfig?.readOnly ?? false);
+  // 更新写入操作相关的 UI 状态 (这部分可能需要根据实际的 updateWriteActionUI 调整或移除)
+  // updateWriteActionUI(currentSourceConfig?.readOnly ?? false);
 
-  // --- 控制爬虫按钮显隐 ---
-  if (crawlInfoButton) {
-      if (currentSourceConfig?.type === 'local') {
-          crawlInfoButton.style.display = 'inline-block'; // 或者 'block'，取决于布局
-          // TODO: 在爬取进行时禁用此按钮
-      } else {
-          crawlInfoButton.style.display = 'none';
-      }
+  // --- 控制爬虫按钮和只读指示器的显隐 ---
+  logMessage('debug', `[MainView] Checking button/indicator elements. Button: ${!!crawlInfoButton}, Indicator: ${!!sourceReadonlyIndicator}`); // Added log
+  if (crawlInfoButton && sourceReadonlyIndicator) {
+    const isReadOnly = currentSourceConfig?.readOnly === true;
+    const isLocal = currentSourceConfig?.type?.toUpperCase() === 'LOCAL';
+    logMessage('debug', `[MainView] Display logic check: isReadOnly=${isReadOnly}, isLocal=${isLocal}`); // Added log
+
+    if (isReadOnly) {
+        logMessage('debug', '[MainView] Setting UI for ReadOnly source.'); // Added log
+        crawlInfoButton.style.display = 'none';
+        sourceReadonlyIndicator.style.display = 'inline-flex';
+    } else {
+        logMessage('debug', '[MainView] Setting UI for Writable source.'); // Added log
+        sourceReadonlyIndicator.style.display = 'none';
+        if (isLocal) {
+            logMessage('debug', '[MainView] Source is LOCAL, showing crawl button.'); // Added log
+            crawlInfoButton.style.display = 'inline-block';
+        } else {
+            logMessage('debug', '[MainView] Source is NOT LOCAL, hiding crawl button.'); // Added log
+            crawlInfoButton.style.display = 'none';
+        }
+    }
+  } else {
+      logMessage('warn', '[MainView] 无法控制按钮/指示器显隐，DOM 元素未找到');
   }
   // ---
 
   if (selectedSourceId) {
-    // Reset directory and load models for the new source
-    // loadModels already has logging
+    logMessage('info', `[MainView] Calling loadModels for source: ${selectedSourceId}`); // Added log
     await loadModels(selectedSourceId, null);
+    logMessage('info', `[MainView] loadModels finished for source: ${selectedSourceId}`); // Added log
   } else {
       // Handle case where no source is selected (e.g., empty list)
       logMessage('info', '[MainView] 没有选择数据源，清空视图');
@@ -462,7 +485,9 @@ async function handleSourceChange() {
       renderFilterTypes();
       // 隐藏爬虫按钮
       if (crawlInfoButton) crawlInfoButton.style.display = 'none';
+      if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
   }
+  logMessage('info', `[UI] handleSourceChange finished for Source ID: ${selectedSourceId}`); // Added log
 }
 
 /** Handles the change event for the filter select dropdown. */

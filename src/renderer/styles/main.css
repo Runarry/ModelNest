@@ -19,14 +19,20 @@
 
 /* 只读指示器样式 */
 .readonly-indicator {
-  background-color: rgba(255, 149, 0, 0.2); /* 使用warning-color的透明版本 */
-  color: var(--warning-color);
+  background-color: rgba(255, 149, 0, 0.15); /* 更浅的橙色背景 */
+  color: rgba(255, 149, 0, 0.8); /* 更浅的橙色文本 */
   padding: 2px 8px;
   border-radius: 4px;
-  font-size: 0.9em;
+  font-size: 0.85em; /* 更小字体 */
   margin-left: 8px;
-  display: inline-block;
+  display: inline-flex; /* flex 垂直居中图标和文本 */
+  align-items: center;
+  gap: 4px; /* 图标和文本间距 */
   vertical-align: middle;
+  opacity: 0.8; /* 整体更浅 */
+}
+.readonly-indicator i {
+  font-size: 0.9em;
 }
 
 [data-theme="dark"] {

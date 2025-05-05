@@ -8,6 +8,8 @@
   <link rel="stylesheet" href="styles/card-view.css">
   <link rel="stylesheet" href="styles/list-view.css">
 <link rel="stylesheet" href="styles/settings-view.css">
+<!-- Font Awesome for lock icon -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
 </head>
 <body>
   <div id="app">
@@ -33,6 +35,10 @@
         <div class="source-selector">
           <label for="sourceSelect" class="content-label" data-i18n-key="main.labelModelSource">模型库:</label>
           <select id="sourceSelect"></select>
+          <span id="source-readonly-indicator" class="readonly-indicator" style="display: none;">
+            <i class="fas fa-lock"></i>
+            <span data-i18n-key="readOnlyMode">只读</span>
+          </span>
           <button id="crawl-info-button" class="view-btn" style="display: none;" data-i18n-title-key="main.button.crawlInfoTitle">
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="feather feather-refresh-cw"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path></svg>
           </button>
