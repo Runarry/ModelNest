@@ -39,9 +39,7 @@ contextBridge.exposeInMainWorld('api', {
     // Return a function to remove this specific listener
     return () => ipcRenderer.removeListener('crawl-status-update', listener);
   },
-  // Optional: Explicitly provide a way to remove a listener if the above pattern isn't used
-  // removeCrawlStatusUpdateListener: (callback) => ipcRenderer.removeListener('crawl-status-update', callback), // Be cautious with direct callback removal if wrapped
-  // --- End Model Crawler API ---
+  removeCrawlStatusUpdateListener: (callback) => ipcRenderer.removeListener('crawl-status-update', callback),
 
   // 通用日志记录接口
   logMessage: (level, message, ...args) => {
