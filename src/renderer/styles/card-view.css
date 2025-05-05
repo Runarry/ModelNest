@@ -124,8 +124,8 @@
   border-radius: 0 0 8px 8px; /* Radius for bottom corners if needed */
   position: relative;
   transition: max-height 0.3s ease-out; /* Smooth transition for expansion */
-  min-width: 180;
-  min-height: 100;
+  min-width: 180px;
+  min-height: 100px;
   align-items: flex-start;
 }
 

@@ -144,6 +144,7 @@ body {
   display: flex; /* Arrange children (directory + content) horizontally */
   overflow: hidden; /* Prevent this layout from scrolling */
   padding: 0.8rem 1.5rem 1.5rem 1.5rem; /* 减小内边距，使内容区域更大 */
+  min-width: 1067px;
 }
 
 /* Removed .sidebar and .sidebar-label styles */

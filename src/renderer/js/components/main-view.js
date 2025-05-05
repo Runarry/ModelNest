@@ -306,10 +306,13 @@ function renderModels() {
     card.appendChild(contentDiv);
 
     // --- Tags ---
-    if (model.tags && model.tags.length > 0) {
-      const tagsContainer = document.createElement('div');
-      tagsContainer.className = 'tags-container';
+    // Always create the tags container for consistent layout
+    const tagsContainer = document.createElement('div');
+    tagsContainer.className = 'tags-container';
+    card.appendChild(tagsContainer); // Add the container regardless of tags presence
 
+    // Only populate the container if tags exist
+    if (model.tags && model.tags.length > 0) {
       model.tags.forEach((tag, index) => {
         const tagElement = document.createElement('span');
         tagElement.className = 'tag';
@@ -334,7 +337,6 @@ function renderModels() {
         };
         tagsContainer.appendChild(moreBtn);
       }
-      card.appendChild(tagsContainer);
     }
 
     // --- Click Event ---
