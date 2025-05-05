@@ -197,7 +197,7 @@ function renderModelContent(model) {
 
         <div class="tab-content" id="description-tab">
           <div class="detail-info">
-            <textarea id="model-description" class="description-textarea" rows="8">${model.description || ''}</textarea>
+            <textarea id="model-description" class="description-textarea">${model.description || ''}</textarea>
           </div>
         </div>
 
@@ -232,6 +232,34 @@ function renderModelContent(model) {
         attachTabListeners(); // Attach listeners AFTER moving the image and setting initial display
         attachSaveListener();
         applyReadOnlyState(); // Apply read-only state
+
+        // --- Textarea Auto Height ---
+        const descriptionTextarea = detailDescriptionContainer.querySelector('#model-description');
+        if (descriptionTextarea) {
+            // 用 requestAnimationFrame 确保渲染后再调整高度
+            function autoResize() {
+                descriptionTextarea.style.height = 'auto';
+                descriptionTextarea.style.height = (descriptionTextarea.scrollHeight+10) + 'px';
+            }
+            requestAnimationFrame(autoResize);
+            descriptionTextarea.addEventListener('input', autoResize);
+            // 切换tab时也要调整
+            const tabBtns = detailDescriptionContainer.querySelectorAll('.tab-btn');
+            tabBtns.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    setTimeout(autoResize, 0);
+                });
+            });
+            // 禁止手动调整
+            descriptionTextarea.style.resize = 'none';
+            // 隐藏滚动条
+            descriptionTextarea.style.overflowY = 'hidden';
+            // 只读状态
+            descriptionTextarea.disabled = currentIsReadOnly;
+        } else {
+            logMessage('warn', '[DetailModel] Could not find description textarea #model-description for auto-height.');
+        }
+        // --- End Textarea Auto Height ---
     }, 0);
 }
 
@@ -521,3 +549,4 @@ function collectExtraData(container) {
     });
     return data;
 }
+

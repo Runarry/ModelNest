@@ -488,17 +488,7 @@ select:hover {
   border-top: 1px solid var(--border-color);
 }
 
-.description-textarea {
-  width: 100%;
-  padding: 0.8rem;
-  border: 1px solid var(--border-color);
-  border-radius: 4px;
-  font-size: 0.9rem;
-  line-height: 1.5;
-  resize: vertical;
-  min-height: 200px;
-}
-/* Tab样式 */
+
 .detail-tabs {
   display: flex;
   border-bottom: 1px solid var(--border-color);
@@ -975,4 +965,18 @@ select:hover {
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-10px); }
   to { opacity: 1; transform: translateY(0); }
+}
+/* Styles for the auto-resizing description textarea */
+.description-textarea {
+  width: 100%;
+  padding: 0.8rem;
+  border: 1px solid var(--border-color);
+  border-radius: 4px;
+  font-size: 0.9rem;
+  line-height: 1.5;
+  overflow: hidden; /* Hide scrollbars */
+  resize: none; /* Disable manual resize */
+  box-sizing: border-box;
+  min-height: 50px; /* Minimum height */
+  transition: height 0.2s ease; /* Smooth height transition */
 }
