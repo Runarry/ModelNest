@@ -2,15 +2,15 @@
   "appTitle": "ModelNest 模型管理",
   "appName": "ModelNest",
   "loadingModels": "加载模型数据中...",
-"noModelsFound": "未找到模型。",
+  "noModelsFound": "未找到模型。",
   "viewCard": "卡片视图",
   "viewList": "列表视图",
   "all": "全部",
-  "showMore":"更多",
-  "showLess":"更少",
+  "showMore": "更多",
+  "showLess": "更少",
   "filterAll": "全部",
   "uncategorized": "未分类",
-"addModel": "添加模型",
+  "addModel": "添加模型",
   "sourceIsReadOnlyCannotAdd": "数据源为只读，无法添加模型",
   "tooltip": {
     "toggleTheme": "切换主题",
@@ -21,7 +21,10 @@
   },
   "main": {
     "labelModelSource": "模型库:",
-    "button.crawlInfoTitle": "补全模型信息 (联网)"
+    "button": 
+    {
+      "crawlInfoTitle": "通过CIVITA抓取信息"
+    }
   },
   "detail": {
     "type": "类型:",
@@ -93,9 +96,8 @@
       "language": {
         "enUS": "English",
         "zhCN": "简体中文"
-
       },
-     "changeSuccess": "语言已切换至 {lang}。",
+      "changeSuccess": "语言已切换至 {lang}。",
       "changeError": "切换语言失败: {message}"
     },
     "fileRecognition": {

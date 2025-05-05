@@ -21,7 +21,9 @@
   },
   "main": {
     "labelModelSource": "Model Source:",
-    "button.crawlInfoTitle": "Fetch Model Info (Online)"
+    "button": {
+      "crawlInfoTitle": "Retrieve information via CIVITA"
+    }
   },
   "detail": {
     "type": "Type:",
