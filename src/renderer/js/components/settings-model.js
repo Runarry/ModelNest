@@ -378,7 +378,7 @@ function populateImageCachePane() {
             .then(sizeBytes => {
                 // Check if the returned value is a valid number
                 if (typeof sizeBytes === 'number' && !isNaN(sizeBytes)) {
-                    cacheSizeDisplay.textContent = t('settings.imageCache.currentSizeLabel', { size: formatBytes(sizeBytes) }); // Use formatBytes
+                    cacheSizeDisplay.textContent = formatBytes(sizeBytes); // Use formatBytes
                     cacheSizeDisplay.classList.remove('error');
                 } else {
                     // Handle cases where the API might return non-numeric or error states (though it should return 0 on error now)
