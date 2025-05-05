@@ -104,6 +104,26 @@ class UpdateService {
     }
   }
 
+/**
+   * @description 开始下载可用更新。
+   */
+  downloadUpdate() {
+    log.info('[UpdateService] >>> Starting downloadUpdate method.');
+    log.info('[UpdateService] Executing downloadUpdate...');
+    try {
+      // 注意：如果 webContents 未设置，下载仍然会进行，但进度状态无法发送到 UI
+      if (!this.webContents) {
+        log.warn('[UpdateService] downloadUpdate called, but webContents is not set. Progress updates might not reach the UI.');
+      }
+      this.autoUpdater.downloadUpdate(); // 调用 electron-updater 的下载方法
+      log.info('[UpdateService] >>> Calling autoUpdater.downloadUpdate()...');
+      // 可以选择性地发送一个“开始下载”的状态，尽管 'download-progress' 事件会很快跟上
+      // this.sendStatusToRenderer({ status: 'downloading-started' });
+    } catch (error) {
+      log.error('[UpdateService] Error calling downloadUpdate:', error);
+      this.sendStatusToRenderer({ status: 'error', info: `Failed to start download: ${error.message}` });
+    }
+  }
   /**
    * @description 退出应用并安装已下载的更新。
    */

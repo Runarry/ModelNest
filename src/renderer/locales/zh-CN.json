@@ -144,7 +144,8 @@
       "statusDownloaded": "更新下载完成，可以安装。",
       "statusError": "更新出错：{message}",
       "checkError": "检查更新失败：{message}",
-      "installError": "启动安装失败：{message}"
+      "installError": "启动安装失败：{message}",
+      "downloadButton":"立即更新"
     },
     "about": {
       "title": "关于",

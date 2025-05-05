@@ -159,6 +159,19 @@ app.whenReady().then(async () => { // 改为 async 回调
     }
   });
 
+ipcMain.handle('updater.downloadUpdate', async () => {
+    log.info('[Updater IPC] 收到 downloadUpdate 请求');
+    // Delegate to UpdateService
+    try {
+      await services.updateService.downloadUpdate();
+      // UpdateService should handle sending status updates
+      return { success: true };
+    } catch (error) {
+      log.error('[Updater IPC] Error during downloadUpdate via service:', error.message, error.stack);
+      // UpdateService should ideally handle sending error status too
+      throw error; // Re-throw for the renderer to catch
+    }
+  });
   ipcMain.handle('updater.quitAndInstall', () => {
     log.info('[Updater IPC] 收到 quitAndInstall 请求');
     // Delegate to UpdateService

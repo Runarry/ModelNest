@@ -144,7 +144,8 @@
       "statusDownloaded": "Update downloaded. Ready to install.",
       "statusError": "Update error: {message}",
       "checkError": "Failed to check for updates: {message}",
-      "installError": "Failed to initiate installation: {message}"
+      "installError": "Failed to initiate installation: {message}",
+      "downloadButton": "Update Now"
     },
     "about": {
       "title": "About",

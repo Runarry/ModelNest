@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('api', {
 
   // --- Updater API ---
   checkForUpdate: () => ipcRenderer.invoke('updater.checkForUpdate'),
+downloadUpdate: () => ipcRenderer.invoke('updater.downloadUpdate'), // <-- 添加下载更新 API
   quitAndInstall: () => ipcRenderer.invoke('updater.quitAndInstall'),
   onUpdateStatus: (callback) => {
     const listener = (_event, ...args) => callback(...args);

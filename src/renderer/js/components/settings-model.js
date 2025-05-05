@@ -8,6 +8,7 @@ import {
     onUpdateStatus,
     checkForUpdate,
     quitAndInstall,
+    downloadUpdate, // <-- 添加下载更新函数
     getAppVersion, // <-- 添加获取应用版本
     clearImageCache, // <-- 添加清除图片缓存 (假设存在)
     getPackageInfo, // <-- 添加 getPackageInfo 导入
@@ -1499,21 +1500,44 @@ function handleUpdateButtonClick() {
         return;
     }
 
-    const currentActionText = currentCheckUpdatesBtn.textContent;
+    const action = currentCheckUpdatesBtn.dataset.action || 'check'; // Default to 'check' if attribute is missing
+    logMessage('info', `[UI] 点击了更新按钮，执行操作: ${action}`);
 
-    // Compare against the specific text for install action
-    if (currentActionText === t('settings.updates.installButton')) { // Use correct key
-        logMessage('info', "[UI] 点击了更新按钮：执行退出并安装");
-        quitAndInstall().catch(err => { // Add error handling for quitAndInstall
-             logMessage('error', "[SettingsModel] 调用 quitAndInstall 失败:", err);
-             currentUpdateStatusInfoEl.textContent = t('settings.updates.installError', { message: err.message }); // Show error using current reference
-        });
-    } else {
-        logMessage('info', "[UI] 点击了更新按钮：执行检查更新");
-        checkForUpdate().catch(err => { // Add error handling for checkForUpdate
-             logMessage('error', "[SettingsModel] 调用 checkForUpdate 失败:", err);
-             currentUpdateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message }); // Show error using current reference
-        });
+    switch (action) {
+        case 'check':
+            checkForUpdate().catch(err => {
+                logMessage('error', "[SettingsModel] 调用 checkForUpdate 失败:", err);
+                currentUpdateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message });
+            });
+            break;
+        case 'download':
+            // Provide immediate feedback
+            currentCheckUpdatesBtn.disabled = true;
+            currentCheckUpdatesBtn.textContent = t('settings.updates.downloadingButton'); // Use correct key
+            currentCheckUpdatesBtn.dataset.action = 'checking'; // Prevent multiple clicks while downloading starts
+            currentUpdateStatusInfoEl.textContent = t('settings.updates.statusDownloading'); // Use correct key
+
+            downloadUpdate().catch(err => {
+                logMessage('error', "[SettingsModel] 调用 downloadUpdate 失败:", err);
+                currentUpdateStatusInfoEl.textContent = t('settings.updates.statusError', { message: err.message }); // Need downloadError key
+                // Re-enable button or revert state? Maybe revert to 'available' state?
+                handleUpdateStatus({ status: 'available', info: {} }); // Revert to available state on download error
+            });
+            break;
+        case 'install':
+            quitAndInstall().catch(err => {
+                logMessage('error', "[SettingsModel] 调用 quitAndInstall 失败:", err);
+                currentUpdateStatusInfoEl.textContent = t('settings.updates.installError', { message: err.message });
+            });
+            break;
+        default:
+            logMessage('warn', `[SettingsModel] 未知的更新按钮操作: ${action}`);
+            // Optionally default to check for updates
+            checkForUpdate().catch(err => {
+                logMessage('error', "[SettingsModel] 调用 checkForUpdate (默认) 失败:", err);
+                currentUpdateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message });
+            });
+            break;
     }
 }
 
@@ -1542,43 +1566,60 @@ function handleUpdateStatus(status, ...args) {
 
     // Reset button state initially
     checkUpdatesBtn.disabled = false;
-    checkUpdatesBtn.textContent = t('settings.updates.checkButton'); // Use correct key
+    checkUpdatesBtn.textContent = t('settings.updates.checkButton'); // Default text
+    checkUpdatesBtn.dataset.action = 'check'; // Default action
 
     // Access the status string from the status object
     switch (status.status) {
         case 'checking':
-            updateStatusInfoEl.textContent = t('settings.updates.statusChecking'); // Use correct key
+            updateStatusInfoEl.textContent = t('settings.updates.statusChecking');
             checkUpdatesBtn.disabled = true;
-            checkUpdatesBtn.textContent = t('settings.updates.checkingButton'); // Use correct key
+            checkUpdatesBtn.textContent = t('settings.updates.checkingButton');
+            checkUpdatesBtn.dataset.action = 'checking'; // Indicate checking state
             break;
-        case 'available':
-            updateStatusInfoEl.textContent = t('settings.updates.statusAvailable'); // Use correct key
+        case 'available': // Renamed from 'update-available' based on previous code, confirm if needed
+            const version = status.info?.version || 'N/A';
+            updateStatusInfoEl.textContent = t('settings.updates.statusAvailable', { version: version }); // Include version
+            checkUpdatesBtn.disabled = false;
+            checkUpdatesBtn.textContent = t('settings.updates.downloadButton'); // New text: "立即更新"
+            checkUpdatesBtn.dataset.action = 'download'; // Set action to download
             break;
         case 'not-available':
-            updateStatusInfoEl.textContent = t('settings.updates.statusNotAvailable'); // Use correct key
+            updateStatusInfoEl.textContent = t('settings.updates.statusNotAvailable');
+            checkUpdatesBtn.disabled = false; // Re-enable check button
+            checkUpdatesBtn.textContent = t('settings.updates.checkButton');
+            checkUpdatesBtn.dataset.action = 'check';
             break;
         case 'downloading':
-            const progress = args[0]?.percent;
-            const progressText = progress ? `(${progress.toFixed(1)}%)` : '';
-            updateStatusInfoEl.textContent = `${t('settings.updates.statusDownloading')} ${progressText}`; // Use correct key
+            const progress = status.info?.percent; // Assuming progress info is in status.info
+            const progressText = typeof progress === 'number' ? `(${progress.toFixed(1)}%)` : '';
+            updateStatusInfoEl.textContent = `${t('settings.updates.statusDownloading')} ${progressText}`;
             checkUpdatesBtn.disabled = true;
-            checkUpdatesBtn.textContent = t('settings.updates.downloadingButton'); // Use correct key
+            checkUpdatesBtn.textContent = t('settings.updates.downloadingButton');
+            checkUpdatesBtn.dataset.action = 'checking'; // Treat as checking during download
             break;
-        case 'downloaded':
-            updateStatusInfoEl.textContent = t('settings.updates.statusDownloaded'); // Use correct key
+        case 'downloaded': // Renamed from 'update-downloaded' based on previous code, confirm if needed
+            updateStatusInfoEl.textContent = t('settings.updates.statusDownloaded');
             checkUpdatesBtn.disabled = false;
-            checkUpdatesBtn.textContent = t('settings.updates.installButton'); // Use correct key
+            checkUpdatesBtn.textContent = t('settings.updates.installButton');
+            checkUpdatesBtn.dataset.action = 'install'; // Set action to install
             break;
         case 'error':
-            const error = args[0];
-            const errorMessage = error instanceof Error ? error.message : String(error || t('settings.update.unknownError'));
+            const error = status.info; // Assuming error info is in status.info
+            const errorMessage = error instanceof Error ? error.message : String(error || t('settings.updates.unknownError')); // Use correct key path
             logMessage('error', `[SettingsModel] 更新过程中发生错误: ${errorMessage}`, error);
-            updateStatusInfoEl.textContent = t('settings.updates.statusError', { message: errorMessage }); // Use correct key
+            updateStatusInfoEl.textContent = t('settings.updates.statusError', { message: errorMessage });
+            checkUpdatesBtn.disabled = false; // Re-enable check button on error
+            checkUpdatesBtn.textContent = t('settings.updates.checkButton');
+            checkUpdatesBtn.dataset.action = 'check';
             break;
         default:
             // Log the entire status object for better debugging
             logMessage('warn', `[SettingsModel] 未处理的更新状态对象:`, status);
-            // updateStatusInfoEl.textContent = t('settings.updates.statusIdle'); // Optional reset
+            updateStatusInfoEl.textContent = t('settings.updates.statusIdle'); // Reset to idle
+            checkUpdatesBtn.disabled = false;
+            checkUpdatesBtn.textContent = t('settings.updates.checkButton');
+            checkUpdatesBtn.dataset.action = 'check';
             break;
     }
 }

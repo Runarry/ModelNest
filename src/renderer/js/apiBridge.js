@@ -32,6 +32,7 @@ export const saveConfig = api.saveConfig;
 export const onUpdateStatus = api.onUpdateStatus; // Likely an event listener registration
 export const checkForUpdate = api.checkForUpdate;
 export const quitAndInstall = api.quitAndInstall;
+export const downloadUpdate = api.downloadUpdate; // <-- 添加下载更新函数
 export const listModels = api.listModels;
 export const listSubdirectories = api.listSubdirectories;
 export const saveModel = api.saveModel;
