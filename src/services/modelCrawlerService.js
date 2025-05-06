@@ -3,7 +3,8 @@ const path = require('path');
 const fs = require('fs'); // Needed for potential hash calculation if crawler requires it
 const crypto = require('crypto'); // Needed for hash calculation
 // Corrected import name to match the exported function
-const { getCivitaiModelInfoWithTagsAndVersions } = require('../utils/civitai-model-info-crawler');
+// Import calcFileHash as well
+const { getCivitaiModelInfoWithTagsAndVersions, calcFileHash } = require('../utils/civitai-model-info-crawler');
 const { downloadAndSaveImage } = require('../utils/imageDownloader');
 const { LocalDataSource } = require('../data/localDataSource'); // Import LocalDataSource for type checking
 const { CRAWL_STATUS } = require('../common/constants'); // Assuming constants for status
@@ -288,14 +289,23 @@ class ModelCrawlerService {
 
       let modelInfo = null;
       try {
-        // --- Call Civitai Crawler ---
-        // Assuming crawler takes the file path. If it needs hash, calculate it first.
-        log.debug(`[Service:ModelCrawler] Calling Civitai crawler for path: ${taskItem.modelPath}`);
-        // Corrected function call name
-        modelInfo = await getCivitaiModelInfoWithTagsAndVersions(taskItem.modelPath); // Pass path
+        // --- Calculate Hash (Optional but recommended for efficiency) ---
+        let modelHash = null;
+        try {
+            modelHash = await calcFileHash(taskItem.modelPath);
+            log.debug(`[Service:ModelCrawler] Calculated hash for ${taskItem.modelName}: ${modelHash}`);
+        } catch (hashError) {
+            log.error(`[Service:ModelCrawler] Failed to calculate hash for ${taskItem.modelName} at path ${taskItem.modelPath}:`, hashError);
+            // Continue without pre-calculated hash, let the crawler handle it internally if needed
+        }
+
+        // --- Call Civitai Crawler (passing optional hash) ---
+        log.debug(`[Service:ModelCrawler] Calling Civitai crawler for path: ${taskItem.modelPath} with hash: ${modelHash || 'N/A'}`);
+        // Pass path and optional pre-calculated hash
+        modelInfo = await getCivitaiModelInfoWithTagsAndVersions(taskItem.modelPath, modelHash);
 
         if (modelInfo) {
-          log.info(`[Service:ModelCrawler] Civitai info found for: ${taskItem.modelName}`);
+          log.info(`[Service:ModelCrawler] Civitai info found for: ${taskItem.modelName} (Hash: ${modelHash || 'calculated internally'})`);
 
           // --- Save JSON if needed ---
           if (taskItem.needsJson) {

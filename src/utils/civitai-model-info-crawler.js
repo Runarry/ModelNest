@@ -37,33 +37,68 @@ async function calcFileHash(filePath) {
 }
 
 /**
- * 通过模型文件HASH获取Civitai模型详细信息（含tags和所有版本）
+ * 通过模型文件HASH或文件路径获取Civitai模型详细信息（含tags和所有版本）
  * @param {string} filePath - 模型文件路径
+ * @param {string} [providedHash=null] - 可选的预计算哈希值
  * @returns {Promise<Object|null>} - 返回模型信息对象，未找到时返回null
  */
-async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
-  // 1. 计算模型文件哈希
-  const hash = await calcFileHash(filePath);
-  log.info(`[Util:CivitaiCrawler] Calculated SHA256 for file [${filePath}]: ${hash}`);
+async function getCivitaiModelInfoWithTagsAndVersions(filePath, providedHash = null) {
+  // 1. 获取或计算模型文件哈希
+  let hash;
+  if (providedHash) {
+    hash = providedHash;
+    log.info(`[Util:CivitaiCrawler] Using provided SHA256 hash for file [${filePath}]: ${hash}`);
+  } else {
+    try {
+      hash = await calcFileHash(filePath);
+      log.info(`[Util:CivitaiCrawler] Calculated SHA256 for file [${filePath}]: ${hash}`);
+    } catch (hashError) {
+      log.error(`[Util:CivitaiCrawler] Failed to calculate hash for file [${filePath}]:`, hashError);
+      throw hashError; // Re-throw hash calculation error
+    }
+  }
 
-  // 2. 查询模型版本信息（by hash）
+  // 2. 查询模型版本信息（by hash）- 带重试逻辑
   let modelId;
   let id;
-  try {
-    const resp = await axios.get(`https://civitai.com/api/v1/model-versions/by-hash/${hash}`);
-    const versionData = resp.data;
-    id = versionData.id;
-    modelId = versionData.modelId;
-    log.info(`[Util:CivitaiCrawler] Successfully fetched model version info by hash: modelId=${modelId}`);
-    if (!versionData.id || !versionData.modelId) return null;
-  } catch (err) {
-    if (err.response && err.response.status === 404) {
-      log.warn(`[Util:CivitaiCrawler] Model version not found on Civitai by hash ${hash}: ${err.message}`);
-      return null;
+  const maxRetries = 3;
+  const retryDelay = 2000; // 2 seconds
+
+  for (let attempt = 1; attempt <= maxRetries + 1; attempt++) {
+    try {
+      const resp = await axios.get(`https://civitai.com/api/v1/model-versions/by-hash/${hash}`);
+      const versionData = resp.data;
+      id = versionData.id;
+      modelId = versionData.modelId;
+      log.info(`[Util:CivitaiCrawler] Attempt ${attempt}: Successfully fetched model version info by hash: modelId=${modelId}`);
+      if (!versionData.id || !versionData.modelId) {
+        log.warn(`[Util:CivitaiCrawler] Attempt ${attempt}: Fetched data but missing id or modelId for hash ${hash}.`);
+        return null; // Treat as not found if essential data is missing
+      }
+      break; // Success, exit retry loop
+    } catch (err) {
+      if (err.response && err.response.status === 404) {
+        log.warn(`[Util:CivitaiCrawler] Attempt ${attempt}: Model version not found on Civitai by hash ${hash}.`);
+        if (attempt > maxRetries) {
+          log.warn(`[Util:CivitaiCrawler] Max retries (${maxRetries}) reached for hash ${hash}. Giving up.`);
+          return null; // Return null after max retries for 404
+        }
+        log.info(`[Util:CivitaiCrawler] Retrying in ${retryDelay / 1000} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+      } else {
+        // For non-404 errors, log and re-throw immediately
+        log.error(`[Util:CivitaiCrawler] Attempt ${attempt}: Failed to fetch model version info by hash ${hash}: ${err.message}`, err);
+        throw err; // Re-throw other errors
+      }
     }
-    log.error(`[Util:CivitaiCrawler] Failed to fetch model version info by hash ${hash}: ${err.message}`);
-    throw err;
   }
+
+  // If loop finished without success (should only happen if break wasn't hit, e.g., initial check failed non-404)
+  if (!modelId) {
+      log.error(`[Util:CivitaiCrawler] Failed to get modelId for hash ${hash} after all attempts.`);
+      return null; // Should technically be caught by error throws, but as a safeguard.
+  }
+
 
   // 3. 主模型信息、标签和所有版本
 
@@ -143,4 +178,4 @@ if (require.main === module) {
 
 
 
-module.exports = { getCivitaiModelInfoWithTagsAndVersions };
+module.exports = { calcFileHash, getCivitaiModelInfoWithTagsAndVersions };
