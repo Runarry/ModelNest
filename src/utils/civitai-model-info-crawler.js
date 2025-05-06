@@ -57,6 +57,10 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
     log.info(`[Util:CivitaiCrawler] Successfully fetched model version info by hash: modelId=${modelId}`);
     if (!versionData.id || !versionData.modelId) return null;
   } catch (err) {
+    if (err.response && err.response.status === 404) {
+      log.warn(`[Util:CivitaiCrawler] Model version not found on Civitai by hash ${hash}: ${err.message}`);
+      return null;
+    }
     log.error(`[Util:CivitaiCrawler] Failed to fetch model version info by hash ${hash}: ${err.message}`);
     throw err;
   }
@@ -77,8 +81,14 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
     log.warn(`[Util:CivitaiCrawler] Failed to fetch main model info or tags/versions for modelId=${modelId}: ${e.message}`);
   }
   
-  let desc = turndownService.turndown( modelInfo.description) || null;
-  let versionDescription = turndownService.turndown( modelVersionInfo.description) || null;
+  let desc = "";
+  if (modelInfo && typeof modelInfo.description === "string" && modelInfo.description.trim()) {
+    desc = turndownService.turndown(modelInfo.description);
+  }
+  let versionDescription = "";
+  if (modelVersionInfo && typeof modelVersionInfo.description === "string" && modelVersionInfo.description.trim()) {
+    versionDescription = turndownService.turndown(modelVersionInfo.description);
+  }
 
   const images = modelVersionInfo.images || [];
 
