@@ -146,8 +146,10 @@ async function getCache(libraryId, imageName) {
 
         // 从扩展名推断 MIME 类型
         const extension = path.extname(foundFileName).toLowerCase();
+        log.debug(`[ImageCache] GIF_DEBUG: Found cache file='${foundFileName}', extracted extension='${extension}'`); // GIF_DEBUG: Log found file and extension
         const mimeType = extToMime[extension] || null; // 如果扩展名不在映射中，则为 null
         log.info(`[ImageCache] Inferred MimeType from extension '${extension}': ${mimeType}`);
+        log.debug(`[ImageCache] GIF_DEBUG: Inferred mimeType='${mimeType}' from extension='${extension}'`); // GIF_DEBUG: Log inferred mimeType
 
         // 更新访问时间 (异步，不阻塞返回) - 只更新找到的数据文件
         const updateTime = new Date();
@@ -183,6 +185,7 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
     const startTime = Date.now();
     const baseCachePath = getCacheFilePath(libraryId, imageName); // 获取不带扩展名的基础路径
     log.info(`[ImageCache] >>> setCache START for key: ${libraryId}_${imageName}. Base path: ${baseCachePath}. Source buffer size: ${sourceBuffer ? sourceBuffer.length : 'null/undefined'}. Preferred format: ${preferredFormat}. Original MimeType: ${originalMimeType}`);
+    log.debug(`[ImageCache] GIF_DEBUG: setCache received originalMimeType='${originalMimeType}'`); // GIF_DEBUG: Log received originalMimeType
 
     if (!sourceBuffer || sourceBuffer.length === 0) {
         log.warn(`[ImageCache] setCache called with empty or invalid sourceBuffer for key: ${libraryId}_${imageName}. Aborting.`);
@@ -266,7 +269,9 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
 
         // 确定最终的文件扩展名
         const finalExtension = mimeToExt[finalMimeType] || defaultExt;
+        log.debug(`[ImageCache] GIF_DEBUG: Determined finalMimeType='${finalMimeType}', finalExtension='${finalExtension}'`); // GIF_DEBUG: Log final mimeType and extension
         const finalCachePath = baseCachePath + finalExtension; // 拼接完整路径
+        log.debug(`[ImageCache] GIF_DEBUG: Final cache path will be: ${finalCachePath}`); // GIF_DEBUG: Log final cache path
 
         // 在写入前，删除可能存在的同名但不同扩展名的旧缓存文件
         try {

@@ -460,7 +460,20 @@ async _recursiveListAllFiles(resolvedCurrentPath) {
       return {
         path: relativePath, // Return the original relative path
         data: content,
-        mimeType: 'image/png' // TODO: Consider determining mime type from response headers if available
+        // Determine mimeType from relativePath extension
+        mimeType: (() => {
+            let mime = 'application/octet-stream'; // Default mime type
+            const ext = path.posix.extname(relativePath).slice(1).toLowerCase();
+            if (ext) {
+                const knownImageTypes = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'];
+                if (knownImageTypes.includes(ext)) {
+                    mime = `image/${ext === 'jpg' ? 'jpeg' : ext}`;
+                    if (ext === 'svg') mime = 'image/svg+xml';
+                }
+            }
+            log.debug(`[WebDavDataSource][${this.config.id}] Determined mimeType for ${relativePath}: ${mime}`);
+            return mime;
+        })() // Use determined mimeType
       };
     } catch (e) {
       const duration = Date.now() - startTime;
