@@ -1,7 +1,9 @@
 // src/renderer/js/components/filter-panel.js
-// import { i18n } from '../core/i18n.js'; // Temporarily commented out
-// const log = window.api.logMessage; // Temporarily commented out
-const consoleLog = console.log; // Use console.log for now
+import { t } from '../core/i18n.js'; // Import the translation function
+// Assuming logMessage is available via apiBridge or directly if preload exposes it
+// For now, we'll stick to consoleLog for simplicity in this diff,
+// but ideally, it should use the project's logging mechanism.
+const consoleLog = console.log;
 
 class FilterPanel {
   constructor(elementId, onFilterChangeCallback) {
@@ -40,32 +42,59 @@ class FilterPanel {
   }
 
   render() {
-    if (!this.container) return;
+    if (!this.container) {
+        consoleLog('[FilterPanel] ERROR: Render - Container not found.');
+        return;
+    }
 
-    const baseModelTitle = '基础模型'; // Hardcoded string
-    const modelTypeTitle = '模型类型'; // Hardcoded string
-    const clearFiltersText = '清空筛选条件'; // Hardcoded string
-    const noOptionsText = '无可用选项'; // Hardcoded string
+    // Use i18n for titles and texts
+    const baseModelTitle = t('filterPanel.baseModelTitle', 'Base Models');
+    const modelTypeTitle = t('filterPanel.modelTypeTitle', 'Model Types');
+    const clearFiltersText = t('filterPanel.clearFilters', 'Clear Filters');
+    const noOptionsText = t('filterPanel.noOptionsAvailable', 'No options available');
 
-    // Avoid template strings completely - use string concatenation
-    let content = '<div>Filter Panel Test</div>';
+    let content = `
+      <div class="filter-panel-content">
+        <div class="filter-section">
+          <h4>${baseModelTitle}</h4>
+          <div class="filter-options-group" data-filter-key="baseModel">
+            ${this.renderOptions(this.availableFilters.baseModels, 'baseModel', noOptionsText)}
+          </div>
+        </div>
+        <div class="filter-section">
+          <h4>${modelTypeTitle}</h4>
+          <div class="filter-options-group" data-filter-key="modelType">
+            ${this.renderOptions(this.availableFilters.modelTypes, 'modelType', noOptionsText)}
+          </div>
+        </div>
+        <div class="filter-actions">
+          <button id="clear-filters-btn" class="filter-panel-button">${clearFiltersText}</button>
+        </div>
+      </div>
+    `;
 
     this.container.innerHTML = content;
-    consoleLog(`[FilterPanel] DEBUG: Render - Container innerHTML set to: ${content.substring(0, 100)}...`); // Log first 100 chars
-    this.addEventListeners();
+    consoleLog(`[FilterPanel] DEBUG: Render - Container innerHTML updated with dynamic content.`);
+    this.addEventListeners(); // Re-attach event listeners to the new content
   }
 
   renderOptions(options, filterKey, noOptionsText) {
     if (!options || options.length === 0) {
-      return `<span class="no-options">\${noOptionsText}</span>`;
+      return `<span class="no-options">${noOptionsText}</span>`; // Use the passed noOptionsText
     }
-    return options.map(option => `
-      <label class="filter-option">
-        <input type="checkbox" name="\${filterKey}" value="\${option}" 
-               \${this.selectedFilters[filterKey]?.includes(option) ? 'checked' : ''}>
-        \${option}
-      </label>
-    `).join('');
+    // Ensure option values are properly escaped if they can contain special HTML characters,
+    // though for typical filter values this might not be an issue.
+    return options.map(option => {
+      const isChecked = this.selectedFilters[filterKey]?.includes(option) ? 'checked' : '';
+      // Sanitize option text if necessary, for now assuming it's safe
+      const displayOption = option;
+      return `
+        <label class="filter-option">
+          <input type="checkbox" name="${filterKey}" value="${option}" ${isChecked}>
+          ${displayOption}
+        </label>
+      `;
+    }).join('');
   }
 
   addEventListeners() {
