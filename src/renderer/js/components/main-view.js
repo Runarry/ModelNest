@@ -2,6 +2,7 @@ import { clearChildren, setLoading, imageObserver, loadImage } from '../utils/ui
 import { t } from '../core/i18n.js'; // 导入 i18n 函数
 import { logMessage, listModels, listSubdirectories,getAllSourceConfigs } from '../apiBridge.js'; // 导入 API 桥接
 import { CrawlStatusModal } from './crawl-status-modal.js'; // 导入弹窗组件 (稍后创建)
+import FilterPanel from './filter-panel.js'; // New: Import FilterPanel component
 
 // ===== DOM Element References =====
 // These might be passed during initialization or queried within functions
@@ -108,15 +109,14 @@ export function initMainView(config, showDetailCallback) {
     // 初始化弹窗实例 (稍后创建 CrawlStatusModal 类)
     crawlStatusModal = new CrawlStatusModal();
 
-    // 初始化新的筛选面板实例
-    // 确保 FilterPanel 类已通过 <script> 标签加载或通过 import 引入 (如果项目使用模块)
-    // 假设 FilterPanel 已在 window 对象上 (window.FilterPanel = FilterPanel; 在 filter-panel.js 中)
-    if (window.FilterPanel) {
-        filterPanelInstance = new window.FilterPanel(config.filterPanelContainerId, handleFiltersApplied);
+    // 初始化新的筛选面板实例 (使用导入的类)
+    try {
+        filterPanelInstance = new FilterPanel(config.filterPanelContainerId, handleFiltersApplied);
         filterPanelInstance.hide(); // Initially hidden
         logMessage('info', '[MainView] FilterPanel 实例已创建。');
-    } else {
-        logMessage('error', '[MainView] FilterPanel 类未找到，无法初始化筛选面板。');
+    } catch (error) {
+        logMessage('error', '[MainView] 创建 FilterPanel 实例时出错:', error.message, error.stack);
+        filterPanelInstance = null; // Ensure instance is null on error
     }
 }
 

@@ -18,9 +18,10 @@ class FilterPanel {
 
     if (!this.container) {
       // Ensuring this line is clean
-      consoleLog(`[FilterPanel] ERROR: Container element with ID '${elementId}' not found.`);
+      consoleLog(`[FilterPanel] ERROR: Constructor - Container element with ID '${elementId}' not found.`);
       return;
     }
+    consoleLog(`[FilterPanel] INFO: Constructor - Container element found:`, this.container);
     consoleLog('[FilterPanel] INFO: FilterPanel initialized.');
     this.init();
   }
@@ -50,6 +51,7 @@ class FilterPanel {
     let content = '<div>Filter Panel Test</div>';
 
     this.container.innerHTML = content;
+    consoleLog(`[FilterPanel] DEBUG: Render - Container innerHTML set to: ${content.substring(0, 100)}...`); // Log first 100 chars
     this.addEventListeners();
   }
 
@@ -115,18 +117,35 @@ class FilterPanel {
   }
 
   show() {
-    if (this.container) this.container.style.display = 'block';
-    consoleLog('[FilterPanel] DEBUG: Shown.');
+    consoleLog('[FilterPanel] DEBUG: show() called.');
+    if (this.container) {
+        consoleLog(`[FilterPanel] DEBUG: show() - Current display: ${this.container.style.display}`);
+        this.container.style.display = 'block';
+        consoleLog(`[FilterPanel] DEBUG: show() - New display: ${this.container.style.display}`);
+    } else {
+        consoleLog('[FilterPanel] WARN: show() - Container not found.');
+    }
+    consoleLog('[FilterPanel] DEBUG: Shown.'); // Keep original log too
   }
 
   hide() {
-    if (this.container) this.container.style.display = 'none';
-    consoleLog('[FilterPanel] DEBUG: Hidden.');
+    consoleLog('[FilterPanel] DEBUG: hide() called.');
+    if (this.container) {
+        consoleLog(`[FilterPanel] DEBUG: hide() - Current display: ${this.container.style.display}`);
+        this.container.style.display = 'none';
+        consoleLog(`[FilterPanel] DEBUG: hide() - New display: ${this.container.style.display}`);
+    } else {
+        consoleLog('[FilterPanel] WARN: hide() - Container not found.');
+    }
+    consoleLog('[FilterPanel] DEBUG: Hidden.'); // Keep original log too
   }
 
   toggle() {
+    consoleLog('[FilterPanel] DEBUG: toggle() called.');
     if (this.container) {
-        if (this.container.style.display === 'none' || !this.container.style.display) {
+        const currentDisplay = this.container.style.display;
+        consoleLog(`[FilterPanel] DEBUG: toggle() - Current display: ${currentDisplay}`);
+        if (currentDisplay === 'none' || !currentDisplay) {
             this.show();
         } else {
             this.hide();
@@ -135,5 +154,6 @@ class FilterPanel {
   }
 }
 
-// Temporarily removed: 
-window.FilterPanel = FilterPanel;
+// Export the class using ES6 module syntax
+export default FilterPanel;
+// Removed: window.FilterPanel = FilterPanel;
