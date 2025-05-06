@@ -74,6 +74,14 @@ export function initMainView(config, showDetailCallback) {
         logMessage('info', '[UI] 点击了打开/关闭筛选面板按钮');
         if (filterPanelInstance) {
             filterPanelInstance.toggle();
+            // After toggling, check visibility to add/remove outside click listener
+            if (filterPanelContainer.style.display === 'block') {
+                document.addEventListener('mousedown', handleOutsideClickForFilterPanel);
+                logMessage('debug', '[MainView] Filter panel shown, added outside click listener.');
+            } else {
+                document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
+                logMessage('debug', '[MainView] Filter panel hidden, removed outside click listener.');
+            }
         }
     });
 
@@ -135,6 +143,26 @@ function handleFiltersApplied(newFilters) {
         loadModels(currentSourceId, currentDirectory);
     } else {
         logMessage('warn', '[MainView] Cannot apply filters: currentSourceId is not set.');
+    }
+}
+
+// ===== Click Outside Handler for Filter Panel =====
+/**
+ * Handles clicks outside the filter panel to close it.
+ * @param {MouseEvent} event - The mousedown event.
+ */
+function handleOutsideClickForFilterPanel(event) {
+    if (!filterPanelInstance || !filterPanelContainer || !openFilterPanelBtn) return;
+
+    // Check if the click is outside the filter panel and not on the toggle button
+    const isClickInsidePanel = filterPanelContainer.contains(event.target);
+    const isClickOnToggleButton = openFilterPanelBtn.contains(event.target);
+
+    if (!isClickInsidePanel && !isClickOnToggleButton) {
+        logMessage('debug', '[MainView] Clicked outside filter panel and toggle button. Hiding panel.');
+        filterPanelInstance.hide();
+        document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
+        logMessage('debug', '[MainView] Filter panel hidden by outside click, removed listener.');
     }
 }
 

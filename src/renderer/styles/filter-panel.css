@@ -1,0 +1,127 @@
+/* Filter Panel Styles */
+
+/* 筛选面板容器 - 使其浮动并定位 */
+#filter-panel-main-container {
+  position: absolute; /* 或者 fixed，取决于您希望它如何滚动 */
+  top: 60px; /* 示例值：调整为您希望它出现的位置，例如在顶部菜单栏下方 */
+  right: 20px; /* 示例值：调整为您希望它出现的位置 */
+  z-index: 1000; /* 确保它在其他内容之上 */
+  background-color: var(--background-color, #fff); /* 使用 CSS 变量或具体颜色 */
+  border: 1px solid var(--border-color, #ccc);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+  padding: 15px;
+  min-width: 280px; /* 根据内容调整 */
+  max-width: 350px;
+  /* display: none; /* 由 JS 控制显隐 */
+}
+
+/* 筛选面板内部内容区域 */
+.filter-panel-content {
+  display: flex;
+  flex-direction: column;
+  gap: 15px; /* 各个筛选区域之间的间距 */
+}
+
+/* 每个筛选部分 (例如 基础模型, 模型类型) */
+.filter-section {
+  /* border-bottom: 1px solid var(--border-color-light, #eee); */ /* 可选的分割线 */
+  /* padding-bottom: 10px; */
+  /* margin-bottom: 10px; */
+}
+
+.filter-section:last-of-type { /* 移除最后一个部分的底部边框/边距 */
+  border-bottom: none;
+  padding-bottom: 0;
+  margin-bottom: 0;
+}
+
+.filter-section h4 {
+  margin-top: 0;
+  margin-bottom: 10px;
+  font-size: 0.95em;
+  font-weight: 600;
+  color: var(--text-color-strong, #333);
+}
+
+/* 筛选选项组 (包裹复选框的 div) */
+.filter-options-group {
+  display: flex;
+  flex-wrap: wrap; /* 允许选项换行 */
+  gap: 8px; /* 选项之间的间距 */
+}
+
+/* 单个筛选选项 (label 包裹 input 和文本) */
+.filter-option {
+  display: inline-flex; /* 使标签和复选框在同一行 */
+  align-items: center;
+  background-color: var(--button-background-color, #f0f0f0);
+  padding: 6px 10px;
+  border-radius: 15px; /* 圆角胶囊形状 */
+  font-size: 0.85em;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border: 1px solid transparent; /* 用于选中状态的边框占位 */
+}
+
+.filter-option:hover {
+  background-color: var(--button-hover-background-color, #e0e0e0);
+}
+
+.filter-option input[type="checkbox"] {
+  margin-right: 6px;
+}
+
+/* 选中状态的选项标签 - 如果隐藏了原生复选框，则需要更复杂的样式 */
+/* .filter-option input[type="checkbox"]:checked + span { */ /* 假设文本在 span 内，或直接对 label */
+  /* font-weight: bold; */
+/* } */
+
+/* 示例：如果想让整个标签像按钮一样，并且根据复选框状态改变背景 */
+/* 需要在 JS 中为选中的 label 添加 'checked-style' 类 */
+label.filter-option.checked-style {
+    background-color: var(--primary-color, #007bff);
+    color: white;
+    border-color: var(--primary-color-dark, #0056b3);
+}
+label.filter-option.checked-style:hover {
+    background-color: var(--primary-color-dark, #0056b3);
+}
+
+
+/* "无可用选项" 文本 */
+.no-options {
+  font-style: italic;
+  color: var(--text-color-secondary, #777);
+  font-size: 0.85em;
+}
+
+/* 筛选操作按钮区域 */
+.filter-actions {
+  margin-top: 15px;
+  padding-top: 15px;
+  border-top: 1px solid var(--border-color-light, #eee);
+  text-align: right; /* 或根据需要调整 */
+}
+
+/* 清空筛选按钮 */
+.filter-panel-button {
+  padding: 8px 15px;
+  background-color: var(--button-secondary-background-color, #6c757d);
+  color: white;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.9em;
+}
+
+.filter-panel-button:hover {
+  background-color: var(--button-secondary-hover-background-color, #5a6268);
+}
+
+/* 筛选触发按钮（在顶部菜单栏的那个）的样式，如果需要调整 */
+#open-filter-panel-btn {
+  /* 您可能已经有 .view-btn 的样式了，这里可以添加或覆盖 */
+  /* 例如，添加一些边距 */
+  margin-left: 8px;
+}
