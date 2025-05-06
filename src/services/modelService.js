@@ -194,42 +194,29 @@ class ModelService {
    */
   async getAvailableFilterOptions(sourceId = null) {
     log.info(`[ModelService] getAvailableFilterOptions called. sourceId: ${sourceId || 'all'}`);
+    // If sourceId is null or undefined, return empty options immediately.
+    if (!sourceId) {
+      log.debug('[ModelService getAvailableFilterOptions] sourceId is null or undefined, returning empty options immediately.');
+      return { baseModels: [], modelTypes: [] };
+    }
+
     try {
       let modelsToProcess = [];
 
-      if (sourceId) {
-        // Fetch models for a specific source
-        const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
-        if (!sourceConfig) {
-          log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
-          return { baseModels: [], modelTypes: [] };
-        }
-        try {
-          // Fetch all models from the root of the specified source, no pre-filtering
-          modelsToProcess = await this.listModels(sourceId, '', {});
-          log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelsToProcess.length} models for source ${sourceId}`);
-        } catch (error) {
-          log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${sourceId}: ${error.message}`);
-          // Return empty options if listing models for the specific source fails
-          return { baseModels: [], modelTypes: [] };
-        }
-      } else {
-        // Fetch models from all sources (existing behavior)
-        const allSourceConfigs = await this.dataSourceService.getAllSourceConfigs();
-        if (!allSourceConfigs || allSourceConfigs.length === 0) {
-          log.warn('[ModelService getAvailableFilterOptions] No data sources configured for global options.');
-          return { baseModels: [], modelTypes: [] };
-        }
-        for (const config of allSourceConfigs) {
-          try {
-            const modelsFromSource = await this.listModels(config.id, '', {});
-            modelsToProcess = modelsToProcess.concat(modelsFromSource);
-          } catch (error) {
-            log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${config.id} during global fetch: ${error.message}`);
-            // Continue to next source if one fails
-          }
-        }
-        log.debug(`[ModelService getAvailableFilterOptions] Total models fetched for global options: ${modelsToProcess.length}`);
+      // Fetch models for the specific source (sourceId is guaranteed to be non-null here)
+      const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
+      if (!sourceConfig) {
+        log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
+        return { baseModels: [], modelTypes: [] };
+      }
+      try {
+        // Fetch all models from the root of the specified source, no pre-filtering
+        modelsToProcess = await this.listModels(sourceId, '', {});
+        log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelsToProcess.length} models for source ${sourceId}`);
+      } catch (error) {
+        log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${sourceId}: ${error.message}`);
+        // Return empty options if listing models for the specific source fails
+        return { baseModels: [], modelTypes: [] };
       }
 
       const baseModels = new Set();
