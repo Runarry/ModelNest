@@ -6,7 +6,9 @@ import { CrawlStatusModal } from './crawl-status-modal.js'; // 导入弹窗组�
 // ===== DOM Element References =====
 // These might be passed during initialization or queried within functions
 let sourceSelect;
-let filterSelect;
+// let filterSelect; // This will be removed/phased out - REMOVED
+let openFilterPanelBtn; // New: Button to open the filter panel
+let filterPanelContainer; // New: Container for the FilterPanel component
 let modelList;
 let cardViewBtn;
 let listViewBtn;
@@ -16,7 +18,9 @@ let sourceReadonlyIndicator; // 新增：只读状态指示器
 
 // ===== Module State =====
 let models = [];
-let filterType = '';
+// let filterType = ''; // This will be removed/phased out - REMOVED
+let currentAppliedFilters = { baseModel: [], modelType: [] }; // New: Applied filters
+let filterPanelInstance = null; // New: Instance of FilterPanel
 let displayMode = 'card'; // 'card' or 'list'
 let currentDirectory = null; // Currently selected directory
 let subdirectories = []; // List of subdirectories for the current source
@@ -31,7 +35,9 @@ let crawlStatusModal = null; // 新增：弹窗实例
  * Initializes the main view module, setting up references and event listeners.
  * @param {object} config - Configuration object.
  * @param {string} config.sourceSelectId - ID of the source select element.
- * @param {string} config.filterSelectId - ID of the filter select element.
+ * @param {string} config.filterSelectId - ID of the filter select element. (Will be removed)
+ * @param {string} config.openFilterPanelBtnId - ID of the button to open the filter panel.
+ * @param {string} config.filterPanelContainerId - ID of the container for the filter panel.
  * @param {string} config.modelListId - ID of the model list container.
  * @param {string} config.cardViewBtnId - ID of the card view button.
  * @param {string} config.listViewBtnId - ID of the list view button.
@@ -42,7 +48,9 @@ let crawlStatusModal = null; // 新增：弹窗实例
  */
 export function initMainView(config, showDetailCallback) {
     sourceSelect = document.getElementById(config.sourceSelectId);
-    filterSelect = document.getElementById(config.filterSelectId);
+    // filterSelect = document.getElementById(config.filterSelectId); // To be removed - REMOVED
+    openFilterPanelBtn = document.getElementById(config.openFilterPanelBtnId);
+    filterPanelContainer = document.getElementById(config.filterPanelContainerId);
     modelList = document.getElementById(config.modelListId);
     cardViewBtn = document.getElementById(config.cardViewBtnId);
     listViewBtn = document.getElementById(config.listViewBtnId);
@@ -50,7 +58,8 @@ export function initMainView(config, showDetailCallback) {
     crawlInfoButton = document.getElementById(config.crawlInfoButtonId); // 获取按钮
     sourceReadonlyIndicator = document.getElementById(config.sourceReadonlyIndicatorId); // 获取只读指示器
 
-    if (!sourceSelect || !filterSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton || !sourceReadonlyIndicator) {
+    // Updated error check to remove filterSelect
+    if (!sourceSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton || !sourceReadonlyIndicator || !openFilterPanelBtn || !filterPanelContainer) {
         // Task 1: Error Logging
         logMessage('error', "[MainView] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID/选择器:", config);
         return;
@@ -58,7 +67,15 @@ export function initMainView(config, showDetailCallback) {
 
     // Attach event listeners
     sourceSelect.addEventListener('change', handleSourceChange); // Logged within handler
-    filterSelect.addEventListener('change', handleFilterChange); // Logged within handler
+    // filterSelect.addEventListener('change', handleFilterChange); // Old filter - REMOVED
+
+    openFilterPanelBtn.addEventListener('click', () => {
+        logMessage('info', '[UI] 点击了打开/关闭筛选面板按钮');
+        if (filterPanelInstance) {
+            filterPanelInstance.toggle();
+        }
+    });
+
     // Task 4: Click Event Logging
     cardViewBtn.addEventListener('click', () => {
         logMessage('info', '[UI] 点击了卡片视图按钮');
@@ -90,6 +107,17 @@ export function initMainView(config, showDetailCallback) {
 
     // 初始化弹窗实例 (稍后创建 CrawlStatusModal 类)
     crawlStatusModal = new CrawlStatusModal();
+
+    // 初始化新的筛选面板实例
+    // 确保 FilterPanel 类已通过 <script> 标签加载或通过 import 引入 (如果项目使用模块)
+    // 假设 FilterPanel 已在 window 对象上 (window.FilterPanel = FilterPanel; 在 filter-panel.js 中)
+    if (window.FilterPanel) {
+        filterPanelInstance = new window.FilterPanel(config.filterPanelContainerId, handleFiltersApplied);
+        filterPanelInstance.hide(); // Initially hidden
+        logMessage('info', '[MainView] FilterPanel 实例已创建。');
+    } else {
+        logMessage('error', '[MainView] FilterPanel 类未找到，无法初始化筛选面板。');
+    }
 }
 
 // Internal reference to the showDetail function provided by the main module
@@ -97,6 +125,18 @@ let _showDetail = (model) => {
     logMessage('warn', "showDetailCallback not initialized in main-view.js");
 };
 
+
+// Callback function for FilterPanel
+function handleFiltersApplied(newFilters) {
+    logMessage('info', '[MainView] Filters applied from panel:', newFilters);
+    currentAppliedFilters = newFilters || { baseModel: [], modelType: [] }; // Ensure it's always an object
+    // Reload models with the new filters for the current source and directory
+    if (currentSourceId) {
+        loadModels(currentSourceId, currentDirectory);
+    } else {
+        logMessage('warn', '[MainView] Cannot apply filters: currentSourceId is not set.');
+    }
+}
 
 // ===== UI Update Functions =====
 
@@ -145,7 +185,8 @@ export async function loadModels(sourceId, directory = null) {
   let modelCount = 0;
   let subdirCount = 0;
   try {
-    models = await listModels(sourceId, directory); // 使用导入的函数
+    // Pass currentAppliedFilters to listModels
+    models = await listModels(sourceId, directory, currentAppliedFilters);
     modelCount = models.length;
     // If loading the root directory, also fetch subdirectories
     if (directory === null) {
@@ -155,7 +196,7 @@ export async function loadModels(sourceId, directory = null) {
       logMessage('debug', `[MainView] 获取到 ${subdirCount} 个子目录`);
       renderDirectoryTabs(); // Render tabs only when loading root
     }
-    renderFilterTypes(); // Update filters based on loaded models
+    // renderFilterTypes(); // Update filters based on loaded models - REMOVED
     renderModels(); // Render the models
     const duration = Date.now() - startTime;
     logMessage('info', `[MainView] 模型加载成功: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms, 模型数: ${modelCount}, 子目录数: ${subdirCount}`);
@@ -166,7 +207,7 @@ export async function loadModels(sourceId, directory = null) {
     subdirectories = []; // Clear subdirectories on error
     renderModels(); // Render empty list
     renderDirectoryTabs(); // Render empty tabs
-    renderFilterTypes(); // Render empty filters
+    // renderFilterTypes(); // Render empty filters - REMOVED
     // Optionally show an error message to the user using showFeedback
     // showFeedback(`Error loading models: ${e.message}`, 'error');
   } finally { // Ensure setLoading(false) is always called
@@ -222,39 +263,7 @@ export async function renderSources(sourcesData) { // Make async to fetch config
 }
 
 
-/** Renders the filter options based on unique types found in the current models list. */
-function renderFilterTypes() {
-  if (!filterSelect) return;
-  const currentVal = filterSelect.value; // Preserve selection
-  clearChildren(filterSelect);
-  const allOption = document.createElement('option');
-  allOption.value = '';
-  allOption.textContent = t('all'); // Use translation key 'all'
-  filterSelect.appendChild(allOption);
-
-  // 提取所有模型类型并转为大写，处理未分类情况，然后去重
-  const types = Array.from(new Set(
-      models
-          .map(m => m.modelType ? m.modelType.toUpperCase() : t('uncategorized').toUpperCase())
-          .filter(Boolean) // 过滤掉可能存在的空值（虽然大写'UNCATEGORIZED'不会为空）
-  ));
-  types.sort(); // Sort types alphabetically
-  types.forEach(type => {
-    const option = document.createElement('option');
-    // 确保 value 和 textContent 都是大写
-    option.value = type;
-    option.textContent = type;
-    filterSelect.appendChild(option);
-  });
-
-  // Restore selection
-  if (types.includes(currentVal)) {
-      filterSelect.value = currentVal;
-  } else {
-      filterSelect.value = ''; // Default to 'All'
-  }
-  filterType = filterSelect.value; // Update internal state
-}
+// Old renderFilterTypes function is removed.
 
 /**
  * Renders a single model card/list item element.
@@ -351,10 +360,9 @@ function _renderSingleModelElement(model) {
 function renderModels() {
   if (!modelList) return;
   clearChildren(modelList);
-  // 筛选逻辑：比较时将模型类型和选中的类型（filterType 已是大写）都视为大写
-  const filteredModels = filterType
-      ? models.filter(m => (m.modelType ? m.modelType.toUpperCase() : t('uncategorized').toUpperCase()) === filterType)
-      : models;
+  // The 'models' array is now pre-filtered by loadModels via modelService.
+  // No need for client-side filtering here based on the old filterType.
+  const filteredModels = models;
 
   // Set container class based on display mode
   const mainSection = modelList.closest('#mainSection') || document.body; // Find parent or default to body
@@ -438,9 +446,9 @@ export function updateSingleModelCard(updatedModelData) {
          logMessage('debug', `[MainView] 模型 ${updatedModelData.file} 不存在于 DOM 且不符合当前过滤器，无需操作。`);
     }
 
-    // 4. Re-render filter types in case the updated model introduced/removed a type
+    // 4. Re-render filter types in case the updated model introduced/removed a type - REMOVED
     //    (This is less efficient but ensures filter dropdown is accurate)
-    renderFilterTypes();
+    // renderFilterTypes(); // This function is removed
 }
 
 
@@ -561,7 +569,7 @@ async function handleSourceChange() {
       subdirectories = [];
       renderModels();
       renderDirectoryTabs();
-      renderFilterTypes();
+      // renderFilterTypes(); // REMOVED
       // 隐藏爬虫按钮
       if (crawlInfoButton) crawlInfoButton.style.display = 'none';
       if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
@@ -569,29 +577,7 @@ async function handleSourceChange() {
   logMessage('info', `[UI] handleSourceChange finished for Source ID: ${selectedSourceId}`); // Added log
 }
 
-/** Handles the change event for the filter select dropdown. */
-function handleFilterChange() {
-if (!filterSelect) {
-    logMessage('warn', '[MainView] handleFilterChange: filterSelect 元素不存在');
-    return;
-}
-const newFilterType = filterSelect.value;
-// Task 4: Click Event Logging (Implicit via change)
-logMessage('info', `[UI] 切换模型类型过滤器: "${newFilterType || '全部'}"`);
-if (filterType !== newFilterType) {
-  filterType = newFilterType;
-  setLoading(true); // Show loading indicator briefly for visual feedback
-  // Use setTimeout to allow the loading indicator to render before blocking the thread
-  setTimeout(() => {
-    logMessage('debug', '[MainView] 开始渲染过滤后的模型');
-    const renderStart = Date.now();
-    renderModels();
-    const renderEnd = Date.now();
-    logMessage('debug', `[MainView] 渲染过滤后的模型完成, 耗时: ${renderEnd - renderStart}ms`);
-    setLoading(false);
-  }, 10); // Shorter delay, just enough to yield
-}
-}
+// Old handleFilterChange function is removed.
 
 /** Handles switching between card and list view modes. */
 function switchViewMode(newMode) {

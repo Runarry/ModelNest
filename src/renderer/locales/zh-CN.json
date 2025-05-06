@@ -236,5 +236,11 @@
       "resumeFailed": "恢复失败"
     }
   },
+  "filterPanel": {
+    "baseModelTitle": "基础模型",
+    "modelTypeTitle": "模型类型",
+    "clearFilters": "清空筛选条件",
+    "noOptionsAvailable": "无可用选项"
+  },
   "unknownError": "发生未知错误"
 }

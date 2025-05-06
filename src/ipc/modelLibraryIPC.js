@@ -26,15 +26,15 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
   });
 
   // --- Model Listing ---
-  ipcMain.handle('listModels', async (event, { sourceId, directory }) => {
-    log.info('[IPC] listModels 请求', { sourceId, directory });
+  ipcMain.handle('listModels', async (event, { sourceId, directory, filters }) => { // Added filters
+    log.info('[IPC] listModels 请求', { sourceId, directory, filters: JSON.stringify(filters) }); // Log filters
     try {
       // 验证输入
       if (!sourceId) throw new Error('缺少 sourceId');
-      // 直接调用 ModelService 列出模型
-      return await services.modelService.listModels(sourceId, directory);
+      // 直接调用 ModelService 列出模型, 传递 filters
+      return await services.modelService.listModels(sourceId, directory, filters);
     } catch (error) {
-      log.error('[IPC] 调用 modelService.listModels 失败:', error.message, error.stack, { sourceId, directory });
+      log.error('[IPC] 调用 modelService.listModels 失败:', error.message, error.stack, { sourceId, directory, filters });
       // 将错误传递给渲染进程
       throw error;
     }
@@ -98,6 +98,18 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
       throw error;
     }
   });
+
+  // --- Filter Options Fetching ---
+  ipcMain.handle('getFilterOptions', async () => {
+    log.info('[IPC] getFilterOptions 请求');
+    try {
+      return await services.modelService.getAvailableFilterOptions();
+    } catch (error) {
+      log.error('[IPC] 调用 modelService.getAvailableFilterOptions 失败:', error.message, error.stack);
+      throw error; // 将错误传递给渲染进程
+    }
+  });
+
   log.info('[IPC] Model Library IPC Handlers 初始化完成');
 }
 

@@ -70,15 +70,17 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       // Configuration for main view module
       const mainViewConfig = {
-    sourceSelectId: 'sourceSelect',
-    filterSelectId: 'filterSelect',
-    modelListId: 'modelList',
-    cardViewBtnId: 'cardViewBtn',
-    listViewBtnId: 'listViewBtn',
-    directoryTabsSelector: '.directory-tabs', // Selector for the container
-    crawlInfoButtonId: 'crawl-info-button', // 新增：爬虫按钮 ID
-    sourceReadonlyIndicatorId: 'source-readonly-indicator' // 新增：只读指示器 ID
-  };
+        sourceSelectId: 'sourceSelect',
+        // filterSelectId: 'filterSelect', // Old filter, no longer actively used by main-view.js for new filter panel
+        modelListId: 'modelList',
+        cardViewBtnId: 'cardViewBtn',
+        listViewBtnId: 'listViewBtn',
+        directoryTabsSelector: '.directory-tabs', // Selector for the container
+        crawlInfoButtonId: 'crawl-info-button', // 新增：爬虫按钮 ID
+        sourceReadonlyIndicatorId: 'source-readonly-indicator', // 新增：只读指示器 ID
+        openFilterPanelBtnId: 'open-filter-panel-btn', // ID for the button that opens the new filter panel
+        filterPanelContainerId: 'filter-panel-main-container' // ID for the div that will contain the filter panel
+      };
   // Pass showDetailModel (from detail-Model module) as the callback
   initMainView(mainViewConfig, (model) => {
       const currentSourceId = document.getElementById('sourceSelect')?.value;

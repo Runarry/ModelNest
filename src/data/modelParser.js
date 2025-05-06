@@ -53,7 +53,8 @@ async function parseLocalModels(dir, supportedExtensions) { // 改为 async 函�
       }
       const modelObj = {
         name: base,
-        modelType: detail.modelType || ext.replace('.', '').toUpperCase(),
+        modelType: (detail.modelType || ext.replace('.', '').toUpperCase()).trim(),
+        baseModel: (detail.baseModel  || '').trim(), // 新增 baseModel 并 trim
         description: detail.description || '',
         image: image ? path.join(dir, image) : '',
         file: path.join(dir, file),
@@ -72,7 +73,16 @@ async function parseLocalModels(dir, supportedExtensions) { // 改为 async 函�
 // 新增：从 JSON 字符串安全解析模型详情
 function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier = '字符串') {
   try {
-    return JSON.parse(jsonContent);
+    const parsed = JSON.parse(jsonContent);
+    // 兼容 baseModel 和 basic 字段
+    let baseModelValue = parsed.baseModel || parsed.basic || '';
+    parsed.baseModel = typeof baseModelValue === 'string' ? baseModelValue.trim() : '';
+    
+    // Trim modelType if it exists
+    if (parsed.modelType && typeof parsed.modelType === 'string') {
+      parsed.modelType = parsed.modelType.trim();
+    }
+    return parsed;
   } catch (e) {
     log.error(`[modelParser] 解析来自 "${sourceIdentifier}" 的 JSON 内容失败`, e.message, e.stack);
     return {}; // 返回空对象表示解析失败
@@ -126,7 +136,8 @@ function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, par
     id: `${sourceId}::${relativeModelPath}`,
     sourceId: sourceId, // 添加 sourceId
     name: base,
-    modelType: parsedJsonDetail.modelType || path.posix.extname(relativeModelPath).replace('.', '').toUpperCase(),
+    modelType: (parsedJsonDetail.modelType || path.posix.extname(relativeModelPath).replace('.', '').toUpperCase()).trim(),
+    baseModel: (parsedJsonDetail.baseModel || parsedJsonDetail.basic || '').trim(), // 新增 baseModel，兼容 basic 并 trim
     tags: parsedJsonDetail.tags|| [],
     description: parsedJsonDetail.description || '',
     image: relativeImagePath, // 使用相对路径

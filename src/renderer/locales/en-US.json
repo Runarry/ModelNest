@@ -235,5 +235,11 @@
       "resumeFailed": "Failed to resume"
     }
   },
+  "filterPanel": {
+    "baseModelTitle": "Base Model",
+    "modelTypeTitle": "Model Type",
+    "clearFilters": "Clear Filters",
+    "noOptionsAvailable": "No options available"
+  },
   "unknownError": "An unknown error occurred"
 }

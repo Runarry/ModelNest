@@ -4,7 +4,7 @@ console.log('[Preload] Exposing API via contextBridge...');
 contextBridge.exposeInMainWorld('api', {
   getConfig: () => ipcRenderer.invoke('getConfig'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'), // 添加获取应用版本号的 API
-  listModels: (sourceId, directory = null) => ipcRenderer.invoke('listModels', { sourceId, directory }), // 添加 directory 参数
+  listModels: (sourceId, directory = null, filters = {}) => ipcRenderer.invoke('listModels', { sourceId, directory, filters }), // 添加 directory 和 filters 参数
   listSubdirectories: (sourceId) => ipcRenderer.invoke('listSubdirectories', { sourceId }), // 添加新 API
   getModelDetail: (sourceId, jsonPath) => ipcRenderer.invoke('getModelDetail', { sourceId, jsonPath }),
   saveModel: (model) => ipcRenderer.invoke('saveModel', model),
@@ -14,6 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   onConfigUpdated: (callback) => ipcRenderer.on('config-updated', callback),
   openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'), // Add open folder dialog API
   getAllSourceConfigs: () => ipcRenderer.invoke('getAllSourceConfigs'), // Add getAllSourceConfigs API
+  getFilterOptions: () => ipcRenderer.invoke('getFilterOptions'), // Add getFilterOptions API
 
   // --- Updater API ---
   checkForUpdate: () => ipcRenderer.invoke('updater.checkForUpdate'),

@@ -80,8 +80,8 @@ class ModelService {
    * @param {string} directory - The directory path relative to the source root.
    * @returns {Promise<Array<object>>} - Resolves with an array of model info objects or rejects on error.
    */
-  async listModels(sourceId, directory) {
-    log.info(`[ModelService] listModels called. sourceId: ${sourceId}, directory: ${directory}`);
+  async listModels(sourceId, directory, filters = {}) { // Added filters parameter
+    log.info(`[ModelService] listModels called. sourceId: ${sourceId}, directory: ${directory}, filters: ${JSON.stringify(filters)}`);
     try {
       // 1. Get source configuration and supported extensions using DataSourceService
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
@@ -93,8 +93,32 @@ class ModelService {
       log.debug(`[ModelService listModels] Retrieved source config and supported extensions: ${supportedExts}`);
 
       // 2. List models using dataSourceInterface
-      const models = await dataSourceInterface.listModels(sourceConfig, directory, supportedExts);
-      log.info(`[ModelService listModels] Found ${models.length} models for source ${sourceId} in directory ${directory}`);
+      let models = await dataSourceInterface.listModels(sourceConfig, directory, supportedExts);
+      log.info(`[ModelService listModels] Found ${models.length} raw models for source ${sourceId} in directory ${directory}`);
+
+      // 3. Apply filters if any
+      if (filters) {
+        if (filters.baseModel && Array.isArray(filters.baseModel) && filters.baseModel.length > 0) {
+          const baseModelFilter = filters.baseModel.map(bm => bm.toLowerCase());
+          models = models.filter(model =>
+            model.baseModel &&
+            typeof model.baseModel === 'string' &&
+            baseModelFilter.includes(model.baseModel.toLowerCase())
+          );
+          log.debug(`[ModelService listModels] Filtered by baseModel. Count: ${models.length}`);
+        }
+        if (filters.modelType && Array.isArray(filters.modelType) && filters.modelType.length > 0) {
+          const modelTypeFilter = filters.modelType.map(mt => mt.toLowerCase());
+          models = models.filter(model =>
+            model.modelType &&
+            typeof model.modelType === 'string' &&
+            modelTypeFilter.includes(model.modelType.toLowerCase())
+          );
+          log.debug(`[ModelService listModels] Filtered by modelType. Count: ${models.length}`);
+        }
+      }
+
+      log.info(`[ModelService listModels] Returning ${models.length} filtered models for source ${sourceId} in directory ${directory}`);
       return models;
     } catch (error) {
       log.error(`[ModelService] Error listing models for source ${sourceId} in directory ${directory}:`, error.message, error.stack);
@@ -158,6 +182,76 @@ class ModelService {
       log.error(`[ModelService] Error getting model detail for source ${sourceId}, path ${jsonPath}:`, error.message, error.stack);
       // Re-throw to allow caller (IPC) to handle it, consistent with original IPC logic.
       throw error;
+    }
+  }
+
+  /**
+   * Gets available filter options (baseModels, modelTypes) from all models across all sources.
+   * @returns {Promise<{baseModels: Array<string>, modelTypes: Array<string>}>}
+   */
+  async getAvailableFilterOptions() {
+    log.info('[ModelService] getAvailableFilterOptions called.');
+    try {
+      const allSourceConfigs = await this.dataSourceService.getAllSourceConfigs();
+      if (!allSourceConfigs || allSourceConfigs.length === 0) {
+        log.warn('[ModelService getAvailableFilterOptions] No data sources configured.');
+        return { baseModels: [], modelTypes: [] };
+      }
+
+      let allModels = [];
+      for (const sourceConfig of allSourceConfigs) {
+        // For simplicity, initially fetching models from the root directory of each source.
+        // This might need to be more sophisticated if models are deeply nested and
+        // filter options should reflect all possible models.
+        // We pass an empty filter initially to get all models for option extraction.
+        try {
+          const modelsFromSource = await this.listModels(sourceConfig.id, '', {}); // Pass empty directory and empty filters
+          allModels = allModels.concat(modelsFromSource);
+        } catch (error) {
+            log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${sourceConfig.id}: ${error.message}`);
+            // Continue to next source if one fails
+        }
+      }
+
+      log.debug(`[ModelService getAvailableFilterOptions] Total models fetched for options: ${allModels.length}`);
+
+      const baseModels = new Set();
+      const modelTypes = new Set();
+
+      allModels.forEach(model => {
+        if (model.baseModel && typeof model.baseModel === 'string' && model.baseModel.trim() !== '') {
+          baseModels.add(model.baseModel.trim());
+        }
+        if (model.modelType && typeof model.modelType === 'string' && model.modelType.trim() !== '') {
+          // For modelType, we want case-insensitive uniqueness, but store the first encountered casing.
+          // This is a simple approach; a more robust one might normalize to a specific case.
+          const lowerModelType = model.modelType.trim().toLowerCase();
+          let found = false;
+          for (const existingType of modelTypes) {
+            if (existingType.toLowerCase() === lowerModelType) {
+              found = true;
+              break;
+            }
+          }
+          if (!found) {
+            modelTypes.add(model.modelType.trim());
+          }
+        }
+      });
+      
+      const sortedBaseModels = Array.from(baseModels).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
+      const sortedModelTypes = Array.from(modelTypes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
+
+
+      log.info(`[ModelService getAvailableFilterOptions] Options found - BaseModels: ${sortedBaseModels.length}, ModelTypes: ${sortedModelTypes.length}`);
+      return {
+        baseModels: sortedBaseModels,
+        modelTypes: sortedModelTypes,
+      };
+    } catch (error) {
+      log.error('[ModelService] Error in getAvailableFilterOptions:', error.message, error.stack);
+      // Return empty options on error to prevent UI breakage
+      return { baseModels: [], modelTypes: [] };
     }
   }
 }
