@@ -124,7 +124,7 @@ class LocalDataSource extends DataSource {
    */
   async getImageData(imagePath) {
     const startTime = Date.now();
-    log.debug(`[LocalDataSource] GIF_DEBUG: 开始获取图片数据: ${imagePath}`); // GIF_DEBUG: Log input path
+    log.debug(`[LocalDataSource] 开始获取图片数据: ${imagePath}`);
     if (!imagePath) {
         log.warn('[LocalDataSource] getImageData 调用时 imagePath 为空');
         return null;
@@ -134,9 +134,7 @@ class LocalDataSource extends DataSource {
       await fs.promises.access(imagePath);
       // 读取文件内容
       const fileData = await fs.promises.readFile(imagePath);
-      const ext = path.extname(imagePath).slice(1).toLowerCase(); // GIF_DEBUG: Get extension
-      const mimeType = `image/${ext}`; // GIF_DEBUG: Generate mimeType
-      log.debug(`[LocalDataSource] GIF_DEBUG: Extracted ext='${ext}', Generated mimeType='${mimeType}' for path: ${imagePath}`); // GIF_DEBUG: Log ext and mimeType
+      const mimeType = `image/${path.extname(imagePath).slice(1).toLowerCase()}`;
       const duration = Date.now() - startTime;
       log.debug(`[LocalDataSource] 读取本地图片成功: ${imagePath}, 大小: ${(fileData.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
       return {

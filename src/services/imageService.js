@@ -39,19 +39,15 @@ class ImageService {
 
         try {
             // 1. 尝试从缓存获取
-            log.debug(`[ImageService] Attempting imageCache.getCache for key: ${libraryId}/${imageName}`);
             const cacheResult = await imageCache.getCache(libraryId, imageName); // Returns { data: Buffer, mimeType: string | null } | null
             log.debug(`[ImageService] imageCache.getCache returned for key: ${libraryId}/${imageName}. Result: ${cacheResult ? `Data: ${cacheResult.data.length} bytes, MimeType: ${cacheResult.mimeType}` : 'null'}`);
-            log.debug(`[ImageService] GIF_DEBUG: MimeType from imageCache.getCache: ${cacheResult?.mimeType}`); // GIF_DEBUG: Log mimeType from cache
 
             if (cacheResult && cacheResult.data) {
                 // 缓存命中
                 const mimeType = cacheResult.mimeType || 'application/octet-stream'; // Use cached mimeType or default
-                log.info(`[ImageService] Cache HIT for ${libraryId}/${imageName}. Using MIME type: ${mimeType}`);
-                log.debug(`[ImageService] GIF_DEBUG: Final mimeType returned (Cache Hit): ${mimeType}`); // GIF_DEBUG: Log final mimeType on cache hit
-                log.info(`[ImageService] Returning cached buffer.`);
+   
                 const duration = Date.now() - startTime;
-                log.info(`[ImageService] <<< getImage END (Cache Hit) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
+                log.info(`[ImageService] Cache HIT for ${libraryId}/${imageName}, Duration: ${duration}ms Using MIME type: ${mimeType}`);
                 return { data: cacheResult.data, mimeType: mimeType };
             }
 
@@ -70,9 +66,8 @@ class ImageService {
             log.debug(`[ImageService] dataSourceInterface.getImageData returned for ${libraryId}/${imagePath}. Has data: ${!!(imageDataResult && imageDataResult.data)}`);
 
             if (!imageDataResult || !imageDataResult.data) {
+
                 log.warn(`[ImageService] dataSourceInterface.getImageData returned null or no data for ${libraryId}/${imagePath}. Cannot proceed with caching.`);
-                const duration = Date.now() - startTime;
-                log.warn(`[ImageService] <<< getImage END (No Source Data) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
                 return null; // 图片未找到或读取错误
             }
 
@@ -87,7 +82,6 @@ class ImageService {
             const sourceBuffer = imageDataResult.data;
             const originalMimeType = imageDataResult.mimeType;
             log.info(`[ImageService] Successfully fetched source image buffer for ${libraryId}/${imageName}. Size: ${(sourceBuffer.length / 1024).toFixed(1)}KB, Original Mime: ${originalMimeType || 'N/A'}`);
-            log.debug(`[ImageService] GIF_DEBUG: Original mimeType from dataSourceInterface.getImageData: ${originalMimeType}`); // GIF_DEBUG: Log original mimeType from data source
 
 
             // 3. 获取缓存格式配置，并决定是否缓存
@@ -100,14 +94,10 @@ class ImageService {
             // 如果首选格式是 'Original'，则直接返回原始数据，不进行缓存
             if (preferredFormat === 'Original') {
                 log.info(`[ImageService] Preferred format is 'Original'. Skipping cache for ${libraryId}/${imageName}. Returning source buffer.`);
-                const duration = Date.now() - startTime;
-                log.info(`[ImageService] <<< getImage END (Original Format, No Cache) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
-                log.debug(`[ImageService] GIF_DEBUG: Final mimeType returned (Original Format, No Cache): ${originalMimeType || 'application/octet-stream'}`); // GIF_DEBUG: Log final mimeType when returning original
                 return { data: sourceBuffer, mimeType: originalMimeType || 'application/octet-stream' };
             } else {
                 // 否则，尝试将原始 Buffer 存入缓存（imageCache.setCache 会进行处理）
                 log.debug(`[ImageService] Attempting imageCache.setCache for key: ${libraryId}/${imageName}, source buffer size: ${sourceBuffer.length} bytes, preferredFormat: ${preferredFormat}, originalMimeType: ${originalMimeType}`);
-                log.debug(`[ImageService] GIF_DEBUG: Passing originalMimeType='${originalMimeType}' to imageCache.setCache`); // GIF_DEBUG: Log mimeType passed to setCache
                 try {
                     // 将获取到的 preferredFormat 和 originalMimeType 传递给 setCache
                     await imageCache.setCache(libraryId, imageName, sourceBuffer, preferredFormat, originalMimeType);
@@ -127,9 +117,6 @@ class ImageService {
                     // 成功从缓存获取处理后的数据
                     const finalMimeType = finalCacheResult.mimeType || 'application/octet-stream'; // 使用缓存的 mimeType 或默认值
                     log.info(`[ImageService] Successfully retrieved processed buffer from cache after setCache attempt for ${libraryId}/${imageName}. Using MIME type: ${finalMimeType}`);
-                    const duration = Date.now() - startTime;
-                    log.info(`[ImageService] <<< getImage END (Cache Miss, Processed & Cached) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
-                    log.debug(`[ImageService] GIF_DEBUG: Final mimeType returned (Cache Miss, Processed & Cached): ${finalMimeType}`); // GIF_DEBUG: Log final mimeType after processing
                     return { data: finalCacheResult.data, mimeType: finalMimeType };
                 } else {
                     // 如果 setCache 之后 getCache 仍然失败
@@ -137,9 +124,6 @@ class ImageService {
                     // 降级：返回原始 buffer
                     const fallbackMimeType = originalMimeType || 'application/octet-stream';
                     log.warn(`[ImageService] Falling back to returning original source buffer for ${libraryId}/${imageName} due to post-setCache read failure. Using MIME type: ${fallbackMimeType}`);
-                    const duration = Date.now() - startTime;
-                    log.error(`[ImageService] <<< getImage END (Failed Post-SetCache Read, Fallback) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
-                    log.debug(`[ImageService] GIF_DEBUG: Final mimeType returned (Failed Post-SetCache Read, Fallback): ${fallbackMimeType}`); // GIF_DEBUG: Log final mimeType on fallback
                     return { data: sourceBuffer, mimeType: fallbackMimeType };
                 }
             }
@@ -147,8 +131,6 @@ class ImageService {
         } catch (error) {
             // 捕获所有可能的错误
             log.error(`[ImageService] UNHANDLED Error during getImage for ${libraryId}/${imageName}:`, error.message, error.stack);
-            const duration = Date.now() - startTime;
-            log.error(`[ImageService] <<< getImage END (Unhandled Error) for ${libraryId}/${imageName}. Duration: ${duration}ms`);
             return null;
         }
     }
