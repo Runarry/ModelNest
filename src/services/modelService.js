@@ -240,19 +240,8 @@ class ModelService {
           baseModels.add(model.baseModel.trim());
         }
         if (model.modelType && typeof model.modelType === 'string' && model.modelType.trim() !== '') {
-          // For modelType, we want case-insensitive uniqueness, but store the first encountered casing.
-          // This is a simple approach; a more robust one might normalize to a specific case.
-          const lowerModelType = model.modelType.trim().toLowerCase();
-          let found = false;
-          for (const existingType of modelTypes) {
-            if (existingType.toLowerCase() === lowerModelType) {
-              found = true;
-              break;
-            }
-          }
-          if (!found) {
-            modelTypes.add(model.modelType.trim());
-          }
+          // Convert to uppercase and add to Set for unique, uppercase model types.
+          modelTypes.add(model.modelType.trim().toUpperCase());
         }
       });
       
