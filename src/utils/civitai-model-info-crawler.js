@@ -116,6 +116,31 @@ async function getCivitaiModelInfoWithTagsAndVersions(filePath) {
   };
 }
 
+/**
+ * 命令行测试入口
+ * 用法: node civitaiInfo.js your_model_file.safetensors
+ */
+if (require.main === module) {
+  const filePath = process.argv[2];
+  if (!filePath) {
+    log.error('[Util:CivitaiCrawler] Usage: node civitai-model-info-crawler.js your_model_file.safetensors');
+    process.exit(1);
+  }
+  getCivitaiModelInfoWithTagsAndVersions(filePath)
+    .then(info => {
+      if (info) {
+        log.info('[Util:CivitaiCrawler] Model info found:\n' + JSON.stringify(info, null, 2));
+      } else {
+        log.warn('[Util:CivitaiCrawler] Model info not found for this file.');
+      }
+    })
+    .catch(err => {
+      log.error('[Util:CivitaiCrawler] Error occurred: ' + err.message);
+    });
+}
+
+// 导出主要方法供 Electron 其他模块调用
+
 
 
 module.exports = { getCivitaiModelInfoWithTagsAndVersions };
