@@ -14,7 +14,7 @@ contextBridge.exposeInMainWorld('api', {
   onConfigUpdated: (callback) => ipcRenderer.on('config-updated', callback),
   openFolderDialog: () => ipcRenderer.invoke('open-folder-dialog'), // Add open folder dialog API
   getAllSourceConfigs: () => ipcRenderer.invoke('getAllSourceConfigs'), // Add getAllSourceConfigs API
-  getFilterOptions: () => ipcRenderer.invoke('getFilterOptions'), // Add getFilterOptions API
+  getFilterOptions: (sourceId) => ipcRenderer.invoke('getFilterOptions', { sourceId }), // Add getFilterOptions API, now accepts sourceId
 
   // --- Updater API ---
   checkForUpdate: () => ipcRenderer.invoke('updater.checkForUpdate'),

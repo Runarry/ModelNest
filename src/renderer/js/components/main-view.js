@@ -29,6 +29,7 @@ let currentSourceId = null; // Keep track of the currently selected source ID
 let allSourceConfigs = []; // 新增：存储所有数据源的完整配置
 let currentSourceConfig = null; // 新增：存储当前选定数据源的配置
 let crawlStatusModal = null; // 新增：弹窗实例
+let cachedFilterOptionsBySource = {}; // New: Cache for filter options, keyed by sourceId
 
 // ===== Initialization =====
 
@@ -117,15 +118,22 @@ export function initMainView(config, showDetailCallback) {
     // 初始化弹窗实例 (稍后创建 CrawlStatusModal 类)
     crawlStatusModal = new CrawlStatusModal();
 
-    // 初始化新的筛选面板实例 (使用导入的类)
+    // 初始化新的筛选面板实例 (使用导入的类，并传入可能的缓存选项)
     try {
-        filterPanelInstance = new FilterPanel(config.filterPanelContainerId, handleFiltersApplied);
+        filterPanelInstance = new FilterPanel(
+            config.filterPanelContainerId,
+            handleFiltersApplied,
+            null // Initialize FilterPanel without initial options; they will be loaded/updated by refreshAndCacheFilterOptions
+        );
         filterPanelInstance.hide(); // Initially hidden
         logMessage('info', '[MainView] FilterPanel 实例已创建。');
     } catch (error) {
         logMessage('error', '[MainView] 创建 FilterPanel 实例时出错:', error.message, error.stack);
         filterPanelInstance = null; // Ensure instance is null on error
     }
+
+    // Initial fetch of filter options will be triggered by the first call to loadModels
+    // (e.g., via handleSourceChange after renderSources sets an initial source)
 }
 
 // Internal reference to the showDetail function provided by the main module
@@ -228,6 +236,10 @@ export async function loadModels(sourceId, directory = null) {
     renderModels(); // Render the models
     const duration = Date.now() - startTime;
     logMessage('info', `[MainView] 模型加载成功: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms, 模型数: ${modelCount}, 子目录数: ${subdirCount}`);
+    
+    // Refresh filter options for the current source after models are loaded successfully
+    refreshAndCacheFilterOptions(currentSourceId); // Pass currentSourceId
+
   } catch (e) {
     const duration = Date.now() - startTime;
     logMessage('error', `[MainView] 加载模型失败: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms`, e.message, e.stack, e);
@@ -624,4 +636,42 @@ if (displayMode !== newMode) {
   // Re-render the model list with the new view mode class
   renderModels();
 }
+}
+
+// ===== Filter Options Caching =====
+
+/**
+ * Fetches the latest filter options for a specific sourceId from the backend,
+ * updates the cache, and notifies the FilterPanel instance if it exists.
+ * @param {string} sourceIdToFetch - The ID of the source for which to fetch options.
+ */
+async function refreshAndCacheFilterOptions(sourceIdToFetch) {
+    if (!sourceIdToFetch) {
+        logMessage('warn', '[MainView] refreshAndCacheFilterOptions: sourceIdToFetch is null or undefined. Clearing panel options.');
+        if (filterPanelInstance) {
+            filterPanelInstance.updateOptions({ baseModels: [], modelTypes: [] }); // Clear options in panel
+        }
+        return;
+    }
+
+    logMessage('info', `[MainView] Refreshing filter options cache for sourceId: ${sourceIdToFetch}...`);
+    try {
+        const newOptions = await window.api.getFilterOptions(sourceIdToFetch); // Pass sourceIdToFetch
+        cachedFilterOptionsBySource[sourceIdToFetch] = newOptions || { baseModels: [], modelTypes: [] }; // Update cache for the specific source
+        logMessage('info', `[MainView] Filter options cache updated for sourceId ${sourceIdToFetch}:`, cachedFilterOptionsBySource[sourceIdToFetch]);
+
+        // If the panel instance exists AND the refreshed options are for the currently active source, update its options
+        if (filterPanelInstance && currentSourceId === sourceIdToFetch) {
+            filterPanelInstance.updateOptions(cachedFilterOptionsBySource[sourceIdToFetch]);
+        } else if (filterPanelInstance && currentSourceId !== sourceIdToFetch) {
+            logMessage('debug', `[MainView] Filter options fetched for ${sourceIdToFetch}, but current source is ${currentSourceId}. Panel not updated immediately.`);
+        }
+    } catch (error) {
+        logMessage('error', `[MainView] Failed to refresh filter options cache for sourceId ${sourceIdToFetch}:`, error.message, error.stack);
+        // Optionally clear cache for this source on error or keep stale data
+        // cachedFilterOptionsBySource[sourceIdToFetch] = { baseModels: [], modelTypes: [] };
+        // if (filterPanelInstance && currentSourceId === sourceIdToFetch) {
+        //     filterPanelInstance.updateOptions({ baseModels: [], modelTypes: [] });
+        // }
+    }
 }

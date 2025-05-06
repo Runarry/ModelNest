@@ -186,39 +186,56 @@ class ModelService {
   }
 
   /**
-   * Gets available filter options (baseModels, modelTypes) from all models across all sources.
+   * Gets available filter options (baseModels, modelTypes).
+   * If a sourceId is provided, options are fetched only for that source.
+   * Otherwise, options are aggregated from all sources.
+   * @param {string} [sourceId=null] - Optional ID of the data source.
    * @returns {Promise<{baseModels: Array<string>, modelTypes: Array<string>}>}
    */
-  async getAvailableFilterOptions() {
-    log.info('[ModelService] getAvailableFilterOptions called.');
+  async getAvailableFilterOptions(sourceId = null) {
+    log.info(`[ModelService] getAvailableFilterOptions called. sourceId: ${sourceId || 'all'}`);
     try {
-      const allSourceConfigs = await this.dataSourceService.getAllSourceConfigs();
-      if (!allSourceConfigs || allSourceConfigs.length === 0) {
-        log.warn('[ModelService getAvailableFilterOptions] No data sources configured.');
-        return { baseModels: [], modelTypes: [] };
-      }
+      let modelsToProcess = [];
 
-      let allModels = [];
-      for (const sourceConfig of allSourceConfigs) {
-        // For simplicity, initially fetching models from the root directory of each source.
-        // This might need to be more sophisticated if models are deeply nested and
-        // filter options should reflect all possible models.
-        // We pass an empty filter initially to get all models for option extraction.
-        try {
-          const modelsFromSource = await this.listModels(sourceConfig.id, '', {}); // Pass empty directory and empty filters
-          allModels = allModels.concat(modelsFromSource);
-        } catch (error) {
-            log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${sourceConfig.id}: ${error.message}`);
-            // Continue to next source if one fails
+      if (sourceId) {
+        // Fetch models for a specific source
+        const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
+        if (!sourceConfig) {
+          log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
+          return { baseModels: [], modelTypes: [] };
         }
+        try {
+          // Fetch all models from the root of the specified source, no pre-filtering
+          modelsToProcess = await this.listModels(sourceId, '', {});
+          log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelsToProcess.length} models for source ${sourceId}`);
+        } catch (error) {
+          log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${sourceId}: ${error.message}`);
+          // Return empty options if listing models for the specific source fails
+          return { baseModels: [], modelTypes: [] };
+        }
+      } else {
+        // Fetch models from all sources (existing behavior)
+        const allSourceConfigs = await this.dataSourceService.getAllSourceConfigs();
+        if (!allSourceConfigs || allSourceConfigs.length === 0) {
+          log.warn('[ModelService getAvailableFilterOptions] No data sources configured for global options.');
+          return { baseModels: [], modelTypes: [] };
+        }
+        for (const config of allSourceConfigs) {
+          try {
+            const modelsFromSource = await this.listModels(config.id, '', {});
+            modelsToProcess = modelsToProcess.concat(modelsFromSource);
+          } catch (error) {
+            log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${config.id} during global fetch: ${error.message}`);
+            // Continue to next source if one fails
+          }
+        }
+        log.debug(`[ModelService getAvailableFilterOptions] Total models fetched for global options: ${modelsToProcess.length}`);
       }
-
-      log.debug(`[ModelService getAvailableFilterOptions] Total models fetched for options: ${allModels.length}`);
 
       const baseModels = new Set();
       const modelTypes = new Set();
 
-      allModels.forEach(model => {
+      modelsToProcess.forEach(model => {
         if (model.baseModel && typeof model.baseModel === 'string' && model.baseModel.trim() !== '') {
           baseModels.add(model.baseModel.trim());
         }

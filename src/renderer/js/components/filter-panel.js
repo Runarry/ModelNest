@@ -6,7 +6,13 @@ import { t } from '../core/i18n.js'; // Import the translation function
 const consoleLog = console.log;
 
 class FilterPanel {
-  constructor(elementId, onFilterChangeCallback) {
+  /**
+   * Creates an instance of FilterPanel.
+   * @param {string} elementId - The ID of the container element for the panel.
+   * @param {function} onFilterChangeCallback - Callback function when filters change.
+   * @param {object} [initialOptions=null] - Optional pre-fetched filter options { baseModels: [], modelTypes: [] }.
+   */
+  constructor(elementId, onFilterChangeCallback, initialOptions = null) {
     this.container = document.getElementById(elementId);
     this.onFilterChange = onFilterChangeCallback;
     this.availableFilters = {
@@ -19,26 +25,48 @@ class FilterPanel {
     };
 
     if (!this.container) {
-      // Ensuring this line is clean
       consoleLog(`[FilterPanel] ERROR: Constructor - Container element with ID '${elementId}' not found.`);
-      return;
+      return; // Stop initialization if container is missing
     }
     consoleLog(`[FilterPanel] INFO: Constructor - Container element found:`, this.container);
+
+    let shouldFetchOptions = true;
+    if (initialOptions && initialOptions.baseModels && initialOptions.modelTypes) {
+        consoleLog('[FilterPanel] INFO: Constructor - Using provided initial options.');
+        this.availableFilters.baseModels = initialOptions.baseModels;
+        this.availableFilters.modelTypes = initialOptions.modelTypes;
+        shouldFetchOptions = false; // Don't fetch if initial options are provided
+        this.render(); // Render immediately with initial options
+    } else {
+        consoleLog('[FilterPanel] INFO: Constructor - Initial options not provided or incomplete.');
+        // Render initially with potentially empty options (or a loading state)
+        this.render();
+    }
+
     consoleLog('[FilterPanel] INFO: FilterPanel initialized.');
-    this.init();
+    // Fetch options only if they weren't provided initially
+    if (shouldFetchOptions) {
+        this.init(); // Asynchronously fetch options
+    }
   }
 
+  /**
+   * Asynchronously fetches filter options if they weren't provided initially.
+   */
   async init() {
+    consoleLog('[FilterPanel] INFO: init() - Attempting to fetch filter options...');
     try {
-      // Assuming window.api is still available for getFilterOptions
       const options = await window.api.getFilterOptions();
       this.availableFilters.baseModels = options.baseModels || [];
       this.availableFilters.modelTypes = options.modelTypes || [];
-      consoleLog('[FilterPanel] DEBUG: Fetched filter options:', this.availableFilters);
+      consoleLog('[FilterPanel] DEBUG: init() - Fetched filter options:', this.availableFilters);
+      // Re-render with the fetched options
+      this.render();
     } catch (error) {
-      consoleLog('[FilterPanel] ERROR: Error fetching filter options:', error.message, error.stack);
+      consoleLog('[FilterPanel] ERROR: init() - Error fetching filter options:', error.message, error.stack);
+      // Keep existing (likely empty) options and render state
+      this.render();
     }
-    this.render();
   }
 
   render() {
@@ -179,6 +207,24 @@ class FilterPanel {
         } else {
             this.hide();
         }
+    }
+  }
+
+  /**
+   * Updates the available filter options and re-renders the panel.
+   * @param {object} newOptions - The new filter options { baseModels: [], modelTypes: [] }.
+   */
+  updateOptions(newOptions) {
+    consoleLog('[FilterPanel] INFO: updateOptions() called with:', newOptions);
+    if (newOptions && newOptions.baseModels && newOptions.modelTypes) {
+        this.availableFilters.baseModels = newOptions.baseModels;
+        this.availableFilters.modelTypes = newOptions.modelTypes;
+        // Optionally reset selected filters when options change, or try to preserve them
+        // For now, let's re-render which will preserve valid selections
+        this.render();
+        consoleLog('[FilterPanel] INFO: updateOptions() - Panel re-rendered with new options.');
+    } else {
+        consoleLog('[FilterPanel] WARN: updateOptions() - Invalid or incomplete options provided.');
     }
   }
 }

@@ -100,12 +100,13 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
   });
 
   // --- Filter Options Fetching ---
-  ipcMain.handle('getFilterOptions', async () => {
-    log.info('[IPC] getFilterOptions 请求');
+  ipcMain.handle('getFilterOptions', async (event, { sourceId } = {}) => { // Destructure sourceId, default to empty object if no args
+    log.info(`[IPC] getFilterOptions 请求, sourceId: ${sourceId || 'all'}`);
     try {
-      return await services.modelService.getAvailableFilterOptions();
+      // Pass sourceId to the service method. If sourceId is undefined, the service method will handle it.
+      return await services.modelService.getAvailableFilterOptions(sourceId);
     } catch (error) {
-      log.error('[IPC] 调用 modelService.getAvailableFilterOptions 失败:', error.message, error.stack);
+      log.error(`[IPC] 调用 modelService.getAvailableFilterOptions 失败 (sourceId: ${sourceId || 'all'}):`, error.message, error.stack);
       throw error; // 将错误传递给渲染进程
     }
   });
