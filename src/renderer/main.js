@@ -1,3 +1,4 @@
+import './styles/index.css'; // 导入主 CSS 文件
 // Import necessary initialization functions and utilities
 import { initThemeSwitcher } from './js/utils/theme.js';
 // Import updateSingleModelCard along with other functions

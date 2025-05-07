@@ -13,12 +13,15 @@ files:
     filter:
       - bundle.js
       - bundle.js.map # Optional
+      - styles/bundle.css
   # Renderer static files (HTML, CSS, locales)
   - from: src/renderer
     to: src/renderer
     filter:
       - index.html
-      - styles/**
+      - vendor/**
+
+      - "!styles/**"
       - locales/** # Include locales
   # Main process source files (excluding bundled renderer JS)
   - from: src
@@ -27,6 +30,7 @@ files:
       - "**/*.js" # Include all JS files...
       - "!renderer/main.js" # ...except renderer entry point...
       - "!renderer/js/**" # ...and its modules.
+      - "!renderer/styles/**" # ...and its modules.
 
 
 icon: assets/icon.png

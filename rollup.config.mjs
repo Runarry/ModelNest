@@ -3,6 +3,9 @@ import resolve from '@rollup/plugin-node-resolve';
 import commonjs from '@rollup/plugin-commonjs';
 import babel from '@rollup/plugin-babel';
 import terser from '@rollup/plugin-terser';
+import postcss from 'rollup-plugin-postcss';
+import cssnano from 'cssnano';
+import postcssImport from 'postcss-import'; // 新增
 import path from 'path'; // Node.js path module
 
 // 检查是否为生产环境构建
@@ -36,10 +39,20 @@ export default {
       exclude: 'node_modules/**' // 排除 node_modules 目录，通常第三方库已转译
     }),
 
+    // 添加 postcss 插件配置
+    postcss({
+      extract: path.resolve('dist/renderer/styles/bundle.css'),
+      plugins: [
+        postcssImport(), // 首先处理 @import
+        isProduction ? cssnano() : undefined // 然后在生产环境进行压缩
+      ].filter(Boolean), // 过滤掉非生产环境下的 undefined cssnano
+      // minimize: isProduction, // 当显式使用 cssnano 时，可以移除这个，或者保留它作为备用
+      sourceMap: !isProduction ? 'inline' : false,
+    }),
+
     // 仅在生产环境启用代码压缩
     isProduction && terser()
   ]
-
   // 外部依赖 (External Dependencies)
   // 如果渲染进程代码明确依赖了通过 preload 脚本暴露的 Electron 或 Node.js 模块，
   // 需要在这里将它们标记为 external，以防止 Rollup 尝试打包它们。
