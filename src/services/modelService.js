@@ -97,25 +97,24 @@ class ModelService {
       log.info(`[ModelService listModels] Found ${models.length} raw models for source ${sourceId} in directory ${directory}`);
 
       // 3. Apply filters if any
-      if (filters) {
-        if (filters.baseModel && Array.isArray(filters.baseModel) && filters.baseModel.length > 0) {
-          const baseModelFilter = filters.baseModel.map(bm => bm.toLowerCase());
-          models = models.filter(model =>
-            model.baseModel &&
-            typeof model.baseModel === 'string' &&
-            baseModelFilter.includes(model.baseModel.toLowerCase())
-          );
-          log.debug(`[ModelService listModels] Filtered by baseModel. Count: ${models.length}`);
-        }
-        if (filters.modelType && Array.isArray(filters.modelType) && filters.modelType.length > 0) {
-          const modelTypeFilter = filters.modelType.map(mt => mt.toLowerCase());
-          models = models.filter(model =>
-            model.modelType &&
-            typeof model.modelType === 'string' &&
-            modelTypeFilter.includes(model.modelType.toLowerCase())
-          );
-          log.debug(`[ModelService listModels] Filtered by modelType. Count: ${models.length}`);
-        }
+      if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) )) {
+        const baseModelFilter = (filters.baseModel && Array.isArray(filters.baseModel)) ? filters.baseModel.map(bm => bm.toLowerCase()) : [];
+        const modelTypeFilter = (filters.modelType && Array.isArray(filters.modelType)) ? filters.modelType.map(mt => mt.toLowerCase()) : [];
+
+        models = models.filter(model => {
+          let passesBaseModel = true;
+          if (baseModelFilter.length > 0) {
+            passesBaseModel = model.baseModel && typeof model.baseModel === 'string' && baseModelFilter.includes(model.baseModel.toLowerCase());
+          }
+
+          let passesModelType = true;
+          if (modelTypeFilter.length > 0) {
+            passesModelType = model.modelType && typeof model.modelType === 'string' && modelTypeFilter.includes(model.modelType.toLowerCase());
+          }
+          
+          return passesBaseModel && passesModelType;
+        });
+        log.debug(`[ModelService listModels] Filtered models. Count: ${models.length}`);
       }
 
       log.info(`[ModelService listModels] Returning ${models.length} filtered models for source ${sourceId} in directory ${directory}`);
