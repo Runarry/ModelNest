@@ -340,6 +340,10 @@ function _renderSingleModelElement(model) {
 
     // --- Image ---
     let imageElement;
+
+    let imageContainer = document.createElement('div');
+    imageContainer.className = 'custom-img-container';
+
     if (model.image) {
         imageElement = document.createElement('img');
         imageElement.setAttribute('data-image-path', model.image);
@@ -348,12 +352,24 @@ function _renderSingleModelElement(model) {
         imageElement.className = 'model-image';
         imageElement.loading = 'lazy';
         imageObserver.observe(imageElement);
+
     } else {
         imageElement = document.createElement('div');
         imageElement.className = 'model-image model-image-placeholder';
         imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="placeholder-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
     }
-    card.appendChild(imageElement);
+
+    imageContainer.appendChild(imageElement);
+    if (model.baseModel)
+    {
+        let overlay = imageElement = document.createElement('span');
+        overlay.className = 'custom-img-overlay';
+        overlay.textContent = model.baseModel;
+        imageContainer.appendChild(overlay)
+
+    }
+
+    card.appendChild(imageContainer);
 
     // --- Content (Name, Type) ---
     const contentDiv = document.createElement('div');
