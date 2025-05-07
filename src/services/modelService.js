@@ -12,6 +12,7 @@ class ModelService {
       throw new Error("ModelService requires a DataSourceService instance.");
     }
     this.dataSourceService = dataSourceService;
+    this.filterOptionsCache = new Map(); // Cache for filter options by sourceId
     log.info('[Service] ModelService initialized.');
   }
 
@@ -119,6 +120,29 @@ class ModelService {
       }
 
       log.info(`[ModelService listModels] Returning ${models.length} filtered models for source ${sourceId} in directory ${directory}`);
+      
+      // Update cache when listing root directory with no filters
+      if ((directory === '' || directory === '/' || directory === './') &&
+          (!filters || (Object.keys(filters).length === 0))) {
+        const baseModels = new Set();
+        const modelTypes = new Set();
+
+        models.forEach(model => {
+          if (model.baseModel && typeof model.baseModel === 'string' && model.baseModel.trim() !== '') {
+            baseModels.add(model.baseModel.trim());
+          }
+          if (model.modelType && typeof model.modelType === 'string' && model.modelType.trim() !== '') {
+            modelTypes.add(model.modelType.trim().toUpperCase());
+          }
+        });
+
+        this.filterOptionsCache.set(sourceId, {
+          baseModels: Array.from(baseModels).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })),
+          modelTypes: Array.from(modelTypes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+        });
+        log.debug(`[ModelService listModels] Updated filter options cache for source ${sourceId}`);
+      }
+
       return models;
     } catch (error) {
       log.error(`[ModelService] Error listing models for source ${sourceId} in directory ${directory}:`, error.message, error.stack);
@@ -198,6 +222,12 @@ class ModelService {
     if (!sourceId) {
       log.debug('[ModelService getAvailableFilterOptions] sourceId is null or undefined, returning empty options immediately.');
       return { baseModels: [], modelTypes: [] };
+    }
+
+    // Check cache first
+    if (this.filterOptionsCache.has(sourceId)) {
+      log.debug(`[ModelService getAvailableFilterOptions] Using cached filter options for source ${sourceId}`);
+      return this.filterOptionsCache.get(sourceId);
     }
 
     try {
