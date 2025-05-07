@@ -4,7 +4,6 @@ import { t } from '../core/i18n.js'; // Import the translation function
 // For now, we'll stick to consoleLog for simplicity in this diff,
 // but ideally, it should use the project's logging mechanism.
 import { logMessage } from '../apiBridge.js';
-const consoleLog = logMessage;
 
 class FilterPanel {
   /**
@@ -26,25 +25,25 @@ class FilterPanel {
     };
 
     if (!this.container) {
-      consoleLog(`[FilterPanel] ERROR: Constructor - Container element with ID '${elementId}' not found.`);
+      logMessage('error', `[FilterPanel] Constructor - Container element with ID '${elementId}' not found.`);
       return; // Stop initialization if container is missing
     }
-    consoleLog(`[FilterPanel] INFO: Constructor - Container element found:`, this.container);
+    logMessage('info', `[FilterPanel] Constructor - Container element found:`, this.container);
 
     let shouldFetchOptions = true;
     if (initialOptions && initialOptions.baseModels && initialOptions.modelTypes) {
-        consoleLog('[FilterPanel] INFO: Constructor - Using provided initial options.');
+        logMessage('info', '[FilterPanel] Constructor - Using provided initial options.');
         this.availableFilters.baseModels = initialOptions.baseModels;
         this.availableFilters.modelTypes = initialOptions.modelTypes;
         shouldFetchOptions = false; // Don't fetch if initial options are provided
         this.render(); // Render immediately with initial options
     } else {
-        consoleLog('[FilterPanel] INFO: Constructor - Initial options not provided or incomplete.');
+        logMessage('info', '[FilterPanel] Constructor - Initial options not provided or incomplete.');
         // Render initially with potentially empty options (or a loading state)
         this.render();
     }
 
-    consoleLog('[FilterPanel] INFO: FilterPanel initialized.');
+    logMessage('info', '[FilterPanel] FilterPanel initialized.');
     // Fetch options only if they weren't provided initially
     if (shouldFetchOptions) {
         this.init(); // Asynchronously fetch options
@@ -55,16 +54,16 @@ class FilterPanel {
    * Asynchronously fetches filter options if they weren't provided initially.
    */
   async init() {
-    consoleLog('[FilterPanel] INFO: init() - Attempting to fetch filter options...');
+    logMessage('info', '[FilterPanel] init() - Attempting to fetch filter options...');
     try {
       const options = await window.api.getFilterOptions();
       this.availableFilters.baseModels = options.baseModels || [];
       this.availableFilters.modelTypes = options.modelTypes || [];
-      consoleLog('[FilterPanel] DEBUG: init() - Fetched filter options:', this.availableFilters);
+      logMessage('debug', '[FilterPanel] init() - Fetched filter options:', this.availableFilters);
       // Re-render with the fetched options
       this.render();
     } catch (error) {
-      consoleLog('[FilterPanel] ERROR: init() - Error fetching filter options:', error.message, error.stack);
+      logMessage('error', '[FilterPanel] init() - Error fetching filter options:', error.message, error.stack);
       // Keep existing (likely empty) options and render state
       this.render();
     }
@@ -72,7 +71,7 @@ class FilterPanel {
 
   render() {
     if (!this.container) {
-        consoleLog('[FilterPanel] ERROR: Render - Container not found.');
+        logMessage('error', '[FilterPanel] Render - Container not found.');
         return;
     }
 
@@ -103,7 +102,7 @@ class FilterPanel {
     `;
 
     this.container.innerHTML = content;
-    consoleLog(`[FilterPanel] DEBUG: Render - Container innerHTML updated with dynamic content.`);
+    logMessage('debug', `[FilterPanel] Render - Container innerHTML updated with dynamic content.`);
     this.addEventListeners(); // Re-attach event listeners to the new content
   }
 
@@ -151,7 +150,7 @@ class FilterPanel {
           } else {
             this.selectedFilters[filterKey] = this.selectedFilters[filterKey].filter(item => item !== value);
           }
-          consoleLog(`[FilterPanel] DEBUG: \${filterKey} selection changed:`, this.selectedFilters[filterKey]);
+          logMessage('debug', `[FilterPanel] ${filterKey} selection changed:`, this.selectedFilters[filterKey]);
           this.triggerFilterChange();
         }
       });
@@ -161,7 +160,7 @@ class FilterPanel {
   clearFilters() {
     this.selectedFilters.baseModel = [];
     this.selectedFilters.modelType = [];
-    consoleLog('[FilterPanel] INFO: Filters cleared.');
+    logMessage('info', '[FilterPanel] Filters cleared.');
     this.render(); // Re-render to uncheck checkboxes
     this.triggerFilterChange();
   }
@@ -170,39 +169,39 @@ class FilterPanel {
     if (this.onFilterChange && typeof this.onFilterChange === 'function') {
       const filtersToApply = JSON.parse(JSON.stringify(this.selectedFilters));
       this.onFilterChange(filtersToApply);
-      consoleLog('[FilterPanel] DEBUG: onFilterChange triggered with:', filtersToApply);
+      logMessage('debug', '[FilterPanel] onFilterChange triggered with:', filtersToApply);
     }
   }
 
   show() {
-    consoleLog('[FilterPanel] DEBUG: show() called.');
+    logMessage('debug', '[FilterPanel] show() called.');
     if (this.container) {
-        consoleLog(`[FilterPanel] DEBUG: show() - Current display: ${this.container.style.display}`);
+        logMessage('debug', `[FilterPanel] show() - Current display: ${this.container.style.display}`);
         this.container.style.display = 'block';
-        consoleLog(`[FilterPanel] DEBUG: show() - New display: ${this.container.style.display}`);
+        logMessage('debug', `[FilterPanel] show() - New display: ${this.container.style.display}`);
     } else {
-        consoleLog('[FilterPanel] WARN: show() - Container not found.');
+        logMessage('warn', '[FilterPanel] show() - Container not found.');
     }
-    consoleLog('[FilterPanel] DEBUG: Shown.'); // Keep original log too
+    logMessage('debug', '[FilterPanel] Shown.'); // Keep original log too
   }
 
   hide() {
-    consoleLog('[FilterPanel] DEBUG: hide() called.');
+    logMessage('debug', '[FilterPanel] hide() called.');
     if (this.container) {
-        consoleLog(`[FilterPanel] DEBUG: hide() - Current display: ${this.container.style.display}`);
+        logMessage('debug', `[FilterPanel] hide() - Current display: ${this.container.style.display}`);
         this.container.style.display = 'none';
-        consoleLog(`[FilterPanel] DEBUG: hide() - New display: ${this.container.style.display}`);
+        logMessage('debug', `[FilterPanel] hide() - New display: ${this.container.style.display}`);
     } else {
-        consoleLog('[FilterPanel] WARN: hide() - Container not found.');
+        logMessage('warn', '[FilterPanel] hide() - Container not found.');
     }
-    consoleLog('[FilterPanel] DEBUG: Hidden.'); // Keep original log too
+    logMessage('debug', '[FilterPanel] Hidden.'); // Keep original log too
   }
 
   toggle() {
-    consoleLog('[FilterPanel] DEBUG: toggle() called.');
+    logMessage('debug', '[FilterPanel] toggle() called.');
     if (this.container) {
         const currentDisplay = this.container.style.display;
-        consoleLog(`[FilterPanel] DEBUG: toggle() - Current display: ${currentDisplay}`);
+        logMessage('debug', `[FilterPanel] toggle() - Current display: ${currentDisplay}`);
         if (currentDisplay === 'none' || !currentDisplay) {
             this.show();
         } else {
@@ -216,16 +215,16 @@ class FilterPanel {
    * @param {object} newOptions - The new filter options { baseModels: [], modelTypes: [] }.
    */
   updateOptions(newOptions) {
-    consoleLog('[FilterPanel] INFO: updateOptions() called with:', newOptions);
+    logMessage('info', '[FilterPanel] updateOptions() called with:', newOptions);
     if (newOptions && newOptions.baseModels && newOptions.modelTypes) {
         this.availableFilters.baseModels = newOptions.baseModels;
         this.availableFilters.modelTypes = newOptions.modelTypes;
         // Optionally reset selected filters when options change, or try to preserve them
         // For now, let's re-render which will preserve valid selections
         this.render();
-        consoleLog('[FilterPanel] INFO: updateOptions() - Panel re-rendered with new options.');
+        logMessage('info', '[FilterPanel] updateOptions() - Panel re-rendered with new options.');
     } else {
-        consoleLog('[FilterPanel] WARN: updateOptions() - Invalid or incomplete options provided.');
+        logMessage('warn', '[FilterPanel] updateOptions() - Invalid or incomplete options provided.');
     }
   }
 }
