@@ -120,10 +120,38 @@ class ModelService {
       }
 
       log.info(`[ModelService listModels] Returning ${models.length} filtered models for source ${sourceId} in directory ${directory}`);
+
+      // Helper function to check if the directory is default or root
+      function _isDefaultDirectory(dir) {
+        return dir === '' || dir === '/' || dir === './' || dir === null;
+      }
+
+      // Helper function to check if filters are empty or not set
+      function _areFiltersEmpty(fltrs) {
+        if (!fltrs || Object.keys(fltrs).length === 0) {
+          return true;
+        }
+        // Check specific filter properties if they exist
+        const { baseModel, modelType } = fltrs;
+        const isBaseModelFilterEmpty = baseModel && Array.isArray(baseModel) && baseModel.length === 0;
+        const isModelTypeFilterEmpty = modelType && Array.isArray(modelType) && modelType.length === 0;
+
+        // This logic implies that if ONLY baseModel and modelType are present and empty,
+        // it's considered as "empty filters" for the purpose of this cache update.
+        // If other filters might exist and have values, this condition might need adjustment.
+        if (Object.keys(fltrs).length === 2 && isBaseModelFilterEmpty && isModelTypeFilterEmpty) {
+          return true;
+        }
+        // If only one of them is present and empty, and it's the only filter
+        if (Object.keys(fltrs).length === 1 && (isBaseModelFilterEmpty || isModelTypeFilterEmpty)) {
+            return true;
+        }
+
+        return false; // Filters are present and not considered empty for caching
+      }
       
       // Update cache when listing root directory with no filters
-      if ((directory === '' || directory === '/' || directory === './') &&
-          (!filters || (Object.keys(filters).length === 0))) {
+      if (_isDefaultDirectory(directory) && _areFiltersEmpty(filters)) {
         const baseModels = new Set();
         const modelTypes = new Set();
 

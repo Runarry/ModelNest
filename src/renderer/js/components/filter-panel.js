@@ -195,16 +195,11 @@ class FilterPanel {
    * Updates the available filter options and re-renders the panel.
    * @param {object} newOptions - The new filter options { baseModels: [], modelTypes: [] }.
    */
-  updateOptions(newOptions) {
-    if (newOptions && newOptions.baseModels && newOptions.modelTypes) {
-        this.availableFilters.baseModels = newOptions.baseModels;
-        this.availableFilters.modelTypes = newOptions.modelTypes;
-        // Optionally reset selected filters when options change, or try to preserve them
-        // For now, let's re-render which will preserve valid selections
-        this.render();
-    } else {
-        logMessage('warn', '[FilterPanel] updateOptions() - Invalid or incomplete options provided.');
-    }
+  async updateOptions(sourceIdToFetch) {
+    const options = await getFilterOptions(sourceIdToFetch);
+    this.availableFilters.baseModels = options.baseModels || [];
+    this.availableFilters.modelTypes = options.modelTypes || [];
+    this.render();
   }
 }
 
