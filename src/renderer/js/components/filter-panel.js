@@ -3,7 +3,7 @@ import { t } from '../core/i18n.js'; // Import the translation function
 // Assuming logMessage is available via apiBridge or directly if preload exposes it
 // For now, we'll stick to consoleLog for simplicity in this diff,
 // but ideally, it should use the project's logging mechanism.
-const consoleLog = console.log;
+const consoleLog = apiBridge.logMessage;
 
 class FilterPanel {
   /**
