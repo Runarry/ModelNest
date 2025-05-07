@@ -237,8 +237,10 @@ export async function loadModels(sourceId, directory = null) {
     const duration = Date.now() - startTime;
     logMessage('info', `[MainView] 模型加载成功: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms, 模型数: ${modelCount}, 子目录数: ${subdirCount}`);
     
-    // Refresh filter options for the current source after models are loaded successfully
-    refreshAndCacheFilterOptions(currentSourceId); // Pass currentSourceId
+    // 使用requestAnimationFrame延迟加载filter options，确保首屏渲染完成
+    requestAnimationFrame(() => {
+      refreshAndCacheFilterOptions(currentSourceId); // Pass currentSourceId
+    });
 
   } catch (e) {
     const duration = Date.now() - startTime;
@@ -250,6 +252,11 @@ export async function loadModels(sourceId, directory = null) {
     // renderFilterTypes(); // Render empty filters - REMOVED
     // Optionally show an error message to the user using showFeedback
     // showFeedback(`Error loading models: ${e.message}`, 'error');
+    
+    // 在错误情况下也延迟加载filter options
+    requestAnimationFrame(() => {
+      refreshAndCacheFilterOptions(currentSourceId);
+    });
   } finally { // Ensure setLoading(false) is always called
       setLoading(false);
   }

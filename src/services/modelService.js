@@ -96,6 +96,7 @@ class ModelService {
       let models = await dataSourceInterface.listModels(sourceConfig, directory, supportedExts);
       log.info(`[ModelService listModels] Found ${models.length} raw models for source ${sourceId} in directory ${directory}`);
 
+
       // 3. Apply filters if any
       if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) )) {
         const baseModelFilter = (filters.baseModel && Array.isArray(filters.baseModel)) ? filters.baseModel.map(bm => bm.toLowerCase()) : [];
