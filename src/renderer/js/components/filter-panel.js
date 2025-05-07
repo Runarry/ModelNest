@@ -28,22 +28,18 @@ class FilterPanel {
       logMessage('error', `[FilterPanel] Constructor - Container element with ID '${elementId}' not found.`);
       return; // Stop initialization if container is missing
     }
-    logMessage('info', `[FilterPanel] Constructor - Container element found:`, this.container);
 
     let shouldFetchOptions = true;
     if (initialOptions && initialOptions.baseModels && initialOptions.modelTypes) {
-        logMessage('info', '[FilterPanel] Constructor - Using provided initial options.');
         this.availableFilters.baseModels = initialOptions.baseModels;
         this.availableFilters.modelTypes = initialOptions.modelTypes;
         shouldFetchOptions = false; // Don't fetch if initial options are provided
         this.render(); // Render immediately with initial options
     } else {
-        logMessage('info', '[FilterPanel] Constructor - Initial options not provided or incomplete.');
         // Render initially with potentially empty options (or a loading state)
         this.render();
     }
 
-    logMessage('info', '[FilterPanel] FilterPanel initialized.');
     // Fetch options only if they weren't provided initially
     if (shouldFetchOptions) {
         this.init(); // Asynchronously fetch options
@@ -54,12 +50,10 @@ class FilterPanel {
    * Asynchronously fetches filter options if they weren't provided initially.
    */
   async init() {
-    logMessage('info', '[FilterPanel] init() - Attempting to fetch filter options...');
     try {
       const options = await window.api.getFilterOptions();
       this.availableFilters.baseModels = options.baseModels || [];
       this.availableFilters.modelTypes = options.modelTypes || [];
-      logMessage('debug', '[FilterPanel] init() - Fetched filter options:', this.availableFilters);
       // Re-render with the fetched options
       this.render();
     } catch (error) {
@@ -102,7 +96,6 @@ class FilterPanel {
     `;
 
     this.container.innerHTML = content;
-    logMessage('debug', `[FilterPanel] Render - Container innerHTML updated with dynamic content.`);
     this.addEventListeners(); // Re-attach event listeners to the new content
   }
 
@@ -150,7 +143,6 @@ class FilterPanel {
           } else {
             this.selectedFilters[filterKey] = this.selectedFilters[filterKey].filter(item => item !== value);
           }
-          logMessage('debug', `[FilterPanel] ${filterKey} selection changed:`, this.selectedFilters[filterKey]);
           this.triggerFilterChange();
         }
       });
@@ -169,39 +161,28 @@ class FilterPanel {
     if (this.onFilterChange && typeof this.onFilterChange === 'function') {
       const filtersToApply = JSON.parse(JSON.stringify(this.selectedFilters));
       this.onFilterChange(filtersToApply);
-      logMessage('debug', '[FilterPanel] onFilterChange triggered with:', filtersToApply);
     }
   }
 
   show() {
-    logMessage('debug', '[FilterPanel] show() called.');
     if (this.container) {
-        logMessage('debug', `[FilterPanel] show() - Current display: ${this.container.style.display}`);
         this.container.style.display = 'block';
-        logMessage('debug', `[FilterPanel] show() - New display: ${this.container.style.display}`);
     } else {
         logMessage('warn', '[FilterPanel] show() - Container not found.');
     }
-    logMessage('debug', '[FilterPanel] Shown.'); // Keep original log too
   }
 
   hide() {
-    logMessage('debug', '[FilterPanel] hide() called.');
     if (this.container) {
-        logMessage('debug', `[FilterPanel] hide() - Current display: ${this.container.style.display}`);
         this.container.style.display = 'none';
-        logMessage('debug', `[FilterPanel] hide() - New display: ${this.container.style.display}`);
     } else {
         logMessage('warn', '[FilterPanel] hide() - Container not found.');
     }
-    logMessage('debug', '[FilterPanel] Hidden.'); // Keep original log too
   }
 
   toggle() {
-    logMessage('debug', '[FilterPanel] toggle() called.');
     if (this.container) {
         const currentDisplay = this.container.style.display;
-        logMessage('debug', `[FilterPanel] toggle() - Current display: ${currentDisplay}`);
         if (currentDisplay === 'none' || !currentDisplay) {
             this.show();
         } else {
@@ -215,14 +196,12 @@ class FilterPanel {
    * @param {object} newOptions - The new filter options { baseModels: [], modelTypes: [] }.
    */
   updateOptions(newOptions) {
-    logMessage('info', '[FilterPanel] updateOptions() called with:', newOptions);
     if (newOptions && newOptions.baseModels && newOptions.modelTypes) {
         this.availableFilters.baseModels = newOptions.baseModels;
         this.availableFilters.modelTypes = newOptions.modelTypes;
         // Optionally reset selected filters when options change, or try to preserve them
         // For now, let's re-render which will preserve valid selections
         this.render();
-        logMessage('info', '[FilterPanel] updateOptions() - Panel re-rendered with new options.');
     } else {
         logMessage('warn', '[FilterPanel] updateOptions() - Invalid or incomplete options provided.');
     }
