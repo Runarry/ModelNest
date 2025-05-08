@@ -661,7 +661,6 @@ select:hover {
   scrollbar-gutter: stable;
   /* Reserve space for scrollbar to prevent layout shifts */
   scroll-behavior: smooth;
-  -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
   will-change: transform; /* 提示浏览器优化 */
   transform: translateZ(0); /* 触发硬件加速 */
   scrollbar-width: thin;
