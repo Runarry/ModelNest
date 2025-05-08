@@ -143,8 +143,79 @@
       <div class="Model-content">
         <button id="detailClose" class="Model-close">&times;</button>
         <h4 id="detailName" class="Model-title"></h4>
-        <img id="detailImage" class="Model-image" alt="" />
-        <div id="detailDescription" class="Model-description"></div>
+        <img id="detailImage" class="Model-image" alt="" style="display: none;" /> <!-- Initially hidden -->
+        <div id="detailDescription" class="Model-description">
+          <!-- Static skeleton for detail modal content -->
+          <div class="detail-Model-content-wrapper"> <!-- New wrapper for better control -->
+            <div class="detail-tabs">
+              <button class="tab-btn active" data-tab="image" data-i18n-key="detail.tabs.image">Image</button>
+              <button class="tab-btn" data-tab="basic" data-i18n-key="detail.tabs.basic">Basic Info</button>
+              <button class="tab-btn" data-tab="description" data-i18n-key="detail.tabs.description">Description</button>
+              <button class="tab-btn" data-tab="extra" data-i18n-key="detail.tabs.extra">Extra Info</button>
+            </div>
+
+            <!-- Image Tab Content Pane -->
+            <div class="tab-content active" id="image-tab">
+              <div class="detail-info image-container">
+                <!-- The #detailImage element will be moved here by JS when its tab is active -->
+              </div>
+            </div>
+
+            <!-- Basic Info Tab Content Pane -->
+            <div class="tab-content" id="basic-tab">
+              <div class="detail-info">
+                <!-- Type -->
+                <div class="detail-row editable">
+                  <label for="detail-model-type" data-i18n-key="detail.type">Type:</label>
+                  <input type="text" id="detail-model-type" value="" class="editable-input">
+                </div>
+                <!-- File Path -->
+                <div class="detail-row readonly">
+                  <label data-i18n-key="detail.filePath">File Path:</label>
+                  <span id="detail-model-file" class="readonly-text"></span>
+                </div>
+                <!-- JSON Path -->
+                <div class="detail-row readonly">
+                  <label data-i18n-key="detail.jsonPath">JSON Path:</label>
+                  <span id="detail-model-jsonPath" class="readonly-text"></span>
+                </div>
+                <!-- Trigger Word -->
+                <div class="detail-row editable">
+                  <label for="detail-model-trigger" data-i18n-key="detail.triggerWord">Trigger Word:</label>
+                  <input type="text" id="detail-model-trigger" value="" class="editable-input">
+                </div>
+                <!-- Tags -->
+                <div class="detail-row editable">
+                  <label for="detail-model-tags" data-i18n-key="detail.tags">Tags:</label>
+                  <input type="text" id="detail-model-tags" value="" class="editable-input">
+                </div>
+              </div>
+            </div>
+
+            <!-- Description Tab Content Pane -->
+            <div class="tab-content" id="description-tab">
+              <div class="detail-info">
+                <textarea id="detail-model-description" class="description-textarea"></textarea>
+              </div>
+            </div>
+
+            <!-- Extra Info Tab Content Pane -->
+            <div class="tab-content" id="extra-tab">
+              <div class="detail-info">
+                <div id="detail-model-extra-info-group" class="extra-info-group">
+                  <!-- Extra fields will be dynamically generated here if needed, or pre-populate simple ones -->
+                </div>
+                <p id="detail-model-no-extra-info" class="no-extra-info" style="display: none;" data-i18n-key="detail.noExtraInfo">No extra information available.</p>
+              </div>
+            </div>
+
+            <div class="Model-actions">
+              <span id="detailReadOnlyIndicator" class="readonly-indicator" style="display: none;" data-i18n-key="readOnlyMode">Read-only Mode</span>
+              <span id="detailModelFeedback" class="Model-feedback"></span>
+              <button id="detailSaveBtn" class="btn btn-primary" data-i18n-key="detail.save">Save</button>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 

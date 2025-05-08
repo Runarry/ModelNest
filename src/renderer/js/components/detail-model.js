@@ -8,6 +8,10 @@ let detailModel;
 let detailName;
 let detailImage;
 let detailDescriptionContainer; // The element where description/tabs/inputs are rendered
+// References to pre-defined input elements in detailModel
+let modelTypeInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput, modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP;
+let detailSaveBtn, detailFeedbackEl, detailReadOnlyIndicatorEl;
+
 let detailCloseBtn;
 
 // ===== Module State =====
@@ -30,12 +34,49 @@ export function initDetailModel(config) {
     detailModel = document.getElementById(config.ModelId);
     detailName = document.getElementById(config.nameId);
     detailImage = document.getElementById(config.imageId);
-    detailDescriptionContainer = document.getElementById(config.descriptionContainerId);
+    detailDescriptionContainer = document.getElementById(config.descriptionContainerId); // This is the main container for tabs and content
     detailCloseBtn = document.getElementById(config.closeBtnId);
 
-    if (!detailModel || !detailName || !detailImage || !detailDescriptionContainer || !detailCloseBtn) {
+    // Get references to specific pre-defined elements within the detailModel
+    // These IDs are now defined in index.html for the static skeleton
+    modelTypeInput = detailModel.querySelector('#detail-model-type');
+    modelFileInput = detailModel.querySelector('#detail-model-file');
+    modelJsonPathInput = detailModel.querySelector('#detail-model-jsonPath');
+    modelTriggerInput = detailModel.querySelector('#detail-model-trigger');
+    modelTagsInput = detailModel.querySelector('#detail-model-tags');
+    modelDescriptionTextarea = detailModel.querySelector('#detail-model-description');
+    extraInfoGroupContainer = detailModel.querySelector('#detail-model-extra-info-group');
+    noExtraInfoP = detailModel.querySelector('#detail-model-no-extra-info');
+    
+    detailSaveBtn = detailModel.querySelector('#detailSaveBtn'); // Corrected ID from HTML
+    detailFeedbackEl = detailModel.querySelector('#detailModelFeedback'); // Corrected ID from HTML
+    detailReadOnlyIndicatorEl = detailModel.querySelector('#detailReadOnlyIndicator'); // Corrected ID from HTML
+
+
+    if (!detailModel || !detailName || !detailImage || !detailDescriptionContainer || !detailCloseBtn ||
+        !modelTypeInput || !modelFileInput || !modelJsonPathInput || !modelTriggerInput || !modelTagsInput ||
+        !modelDescriptionTextarea || !extraInfoGroupContainer || !noExtraInfoP || !detailSaveBtn || !detailFeedbackEl || !detailReadOnlyIndicatorEl
+    ) {
         // Task 1: Error Logging
-        logMessage('error', "[DetailModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID:", config);
+        logMessage('error', "[DetailModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置和 HTML 中的 ID:", {
+            config,
+            detailModelExists: !!detailModel,
+            detailNameExists: !!detailName,
+            detailImageExists: !!detailImage,
+            detailDescriptionContainerExists: !!detailDescriptionContainer,
+            detailCloseBtnExists: !!detailCloseBtn,
+            modelTypeInputExists: !!modelTypeInput,
+            modelFileInputExists: !!modelFileInput,
+            modelJsonPathInputExists: !!modelJsonPathInput,
+            modelTriggerInputExists: !!modelTriggerInput,
+            modelTagsInputExists: !!modelTagsInput,
+            modelDescriptionTextareaExists: !!modelDescriptionTextarea,
+            extraInfoGroupContainerExists: !!extraInfoGroupContainer,
+            noExtraInfoPExists: !!noExtraInfoP,
+            detailSaveBtnExists: !!detailSaveBtn,
+            detailFeedbackElExists: !!detailFeedbackEl,
+            detailReadOnlyIndicatorElExists: !!detailReadOnlyIndicatorEl
+        });
         return;
     }
 
@@ -166,13 +207,32 @@ export function hideDetailModel() {
         }
         // --- End Release Blob URL ---
 
-        if(detailDescriptionContainer) detailDescriptionContainer.innerHTML = ''; // Clear dynamic content
-        
-        // Clear stored model and sourceId AFTER potential use in releaseBlobUrl
-        currentModel = null;
-        currentSourceId = null;
+        const performCleanup = () => {
+            clearModelInputs(); // Clear specific input fields
+            currentModel = null;
+            currentSourceId = null;
+            logMessage('info', '[DetailModel] 模型详情已隐藏和清理完毕');
+        };
 
-        logMessage('info', '[DetailModel] 模型详情已隐藏');
+        // Check if there's a transition defined for the modal.
+        // This is a simple check; a more robust way might involve checking computed styles.
+        const style = window.getComputedStyle(detailModel);
+        if (style.transitionDuration && parseFloat(style.transitionDuration) > 0) {
+            detailModel.addEventListener('transitionend', function cleanupAfterTransition() {
+                // Ensure this listener only acts on the 'opacity' or 'transform' transition,
+                // or whatever property is used for the hide animation.
+                // For simplicity, we assume any transitionend after removing 'active' is the one we want.
+                performCleanup();
+                detailModel.removeEventListener('transitionend', cleanupAfterTransition); // Clean up listener
+            }, { once: true }); // Use {once: true} if appropriate, or manage removal manually.
+                               // Note: {once: true} might not be suitable if multiple properties transition.
+                               // A more robust approach might be needed if multiple transitions occur.
+                               // For now, we'll rely on a single 'transitionend' or a timeout.
+        } else {
+            // If no transition, or to be safe, also use a short timeout.
+            // This also acts as a fallback if transitionend doesn't fire for some reason.
+            setTimeout(performCleanup, 300); // Adjust timeout as needed, e.g., to match typical transition duration
+        }
     } else {
         logMessage('warn', '[DetailModel] hideDetailModel 调用时弹窗元素未初始化');
     }
@@ -181,216 +241,248 @@ export function hideDetailModel() {
 // ===== Internal Rendering and Logic =====
 
 /**
- * Renders the tabbed content within the Model.
- * @param {object} model - The model data.
+ * Clears all input fields in the detail modal.
  */
-function renderModelContent(model) {
-    if (!detailDescriptionContainer) return;
+function clearModelInputs() {
+    if (modelTypeInput) modelTypeInput.value = '';
+    if (modelFileInput) modelFileInput.textContent = '';
+    if (modelJsonPathInput) modelJsonPathInput.textContent = '';
+    if (modelTriggerInput) modelTriggerInput.value = '';
+    if (modelTagsInput) modelTagsInput.value = '';
+    if (modelDescriptionTextarea) modelDescriptionTextarea.value = '';
+    if (extraInfoGroupContainer) extraInfoGroupContainer.innerHTML = ''; // Clear dynamically added extra fields
+    if (noExtraInfoP) noExtraInfoP.style.display = 'none';
+    if (detailFeedbackEl) detailFeedbackEl.textContent = '';
 
-    const extraEntries = Object.entries(model.extra || {});
-    // Filter out standard fields from the 'extra' section display
-    const filteredExtraEntries = extraEntries.filter(([key]) =>
-        !['name', 'type', 'modelType', 'description', 'triggerWord', 'image', 'file', 'jsonPath', 'tags', 'id', 'sourceId'].includes(key) // Added modelType, id, sourceId
-    );
-
-    const extraHtml = filteredExtraEntries.length > 0
-        ? filteredExtraEntries.map(([key, value]) => renderExtraField(key, value)).join('')
-        : `<p class="no-extra-info">${t('detail.noExtraInfo')}</p>`;
-
-    detailDescriptionContainer.innerHTML = `
-      <div class="detail-Model-content">
-        <div class="detail-tabs">
-          <button class="tab-btn active" data-tab="image">${t('detail.tabs.image')}</button> <!-- Image Tab first and active -->
-          <button class="tab-btn" data-tab="basic">${t('detail.tabs.basic')}</button> <!-- Basic tab no longer active -->
-          <button class="tab-btn" data-tab="description">${t('detail.tabs.description')}</button>
-          <button class="tab-btn" data-tab="extra">${t('detail.tabs.extra')}</button>
-        </div>
-
-        <!-- Image Tab Content Pane (Now first content, and active by default) -->
-        <div class="tab-content active" id="image-tab">
-          <div class="detail-info image-container">
-            <!-- Image will be moved here dynamically -->
-          </div>
-        </div>
-
-        <div class="tab-content" id="basic-tab"> <!-- Basic tab content no longer active -->
-          <div class="detail-info">
-            ${renderEditableField(t('detail.type'), 'model-type', model.modelType || '')}
-            ${renderReadonlyField(t('detail.filePath'), model.file || t('notAvailable'))}
-            ${renderReadonlyField(t('detail.jsonPath'), model.jsonPath || t('notAvailable'))}
-            ${renderEditableField(t('detail.triggerWord'), 'model-trigger', model.triggerWord || '')}
-            ${renderEditableField(t('detail.tags'), 'model-tags', (model.tags || []).join(', '))}
-          </div>
-        </div>
-
-        <div class="tab-content" id="description-tab">
-          <div class="detail-info">
-            <textarea id="model-description" class="description-textarea">${model.description || ''}</textarea>
-          </div>
-        </div>
-
-        <div class="tab-content" id="extra-tab">
-          <div class="detail-info">
-            <div class="extra-info-group">
-              ${extraHtml}
-            </div>
-          </div>
-        </div>
-
-        <div class="Model-actions">
-             <span id="readOnlyIndicator" class="readonly-indicator" style="display: none;">${t('readOnlyMode')}</span>
-             <span id="detailFeedback" class="Model-feedback"></span>
-             <button id="saveDetailBtn" class="btn btn-primary">${t('detail.save')}</button>
-        </div>
-      </div>
-    `;
-
-    // Use setTimeout to ensure elements are in the DOM before attaching listeners
-    setTimeout(() => {
-        // Move the existing detailImage element into the image tab
-        const imageTabContent = detailDescriptionContainer.querySelector('#image-tab .image-container');
-        if (imageTabContent && detailImage) {
-            imageTabContent.appendChild(detailImage);
-            // Ensure image is visible because image tab is now default active
-            detailImage.style.display = 'block';
-        } else {
-            logMessage('warn', '[DetailModel] Could not find image tab container or detailImage element to move.');
+    // Reset image
+    if (detailImage) {
+        const imageTabContainer = detailModel.querySelector('#image-tab .image-container');
+        if (imageTabContainer && imageTabContainer.contains(detailImage)) {
+            // Only remove if it's currently in the image tab
+            // It might have already been removed or not added yet if no image
         }
-
-        attachTabListeners(); // Attach listeners AFTER moving the image and setting initial display
-        attachSaveListener();
-        applyReadOnlyState(); // Apply read-only state
-
-        // --- Textarea Auto Height ---
-        const descriptionTextarea = detailDescriptionContainer.querySelector('#model-description');
-        if (descriptionTextarea) {
-            // 用 requestAnimationFrame 确保渲染后再调整高度
-            function autoResize() {
-                descriptionTextarea.style.height = 'auto';
-                descriptionTextarea.style.height = (descriptionTextarea.scrollHeight+10) + 'px';
-            }
-            requestAnimationFrame(autoResize);
-            descriptionTextarea.addEventListener('input', autoResize);
-            // 切换tab时也要调整
-            const tabBtns = detailDescriptionContainer.querySelectorAll('.tab-btn');
-            tabBtns.forEach(btn => {
-                btn.addEventListener('click', () => {
-                    setTimeout(autoResize, 0);
-                });
-            });
-            // 禁止手动调整
-            descriptionTextarea.style.resize = 'none';
-            // 隐藏滚动条
-            descriptionTextarea.style.overflowY = 'hidden';
-            // 只读状态
-            descriptionTextarea.disabled = currentIsReadOnly;
-        } else {
-            logMessage('warn', '[DetailModel] Could not find description textarea #model-description for auto-height.');
-        }
-        // --- End Textarea Auto Height ---
-    }, 0);
-}
-
-/** Renders a simple readonly field row. */
-function renderReadonlyField(label, value) {
-    return `
-        <div class="detail-row readonly">
-            <label>${label}:</label>
-            <span class="readonly-text">${value}</span>
-        </div>
-    `;
-}
-
-/** Renders an editable text input field row. */
-function renderEditableField(label, inputId, value) {
-     // Only render tags input if model actually had tags initially or it's a standard field
-     if (inputId === 'model-tags' && !currentModel?.tags?.length && label === t('detail.tags')) {
-         // If tags are empty initially, maybe don't show the field unless explicitly needed
-         // Or provide a button to add tags? For now, let's show it based on label.
-         // return ''; // Option: Hide if no tags initially
-     }
-    return `
-        <div class="detail-row editable">
-            <label for="${inputId}">${label}:</label>
-            <input type="text" id="${inputId}" value="${value}" class="editable-input">
-        </div>
-    `;
+        detailImage.src = '';
+        detailImage.style.display = 'none';
+        detailImage.removeAttribute('data-image-path');
+        detailImage.removeAttribute('data-source-id');
+        detailImage.alt = '';
+    }
 }
 
 
 /**
- * Recursively renders fields for the 'extra' data section.
+ * Populates the pre-defined DOM elements with model data.
+ * @param {object} model - The model data.
+ */
+function renderModelContent(model) {
+    if (!detailModel) { // Check if the main modal element is available
+        logMessage('error', "[DetailModel] renderModelContent called but detailModel is not initialized.");
+        return;
+    }
+
+    // --- Populate Basic Info Tab ---
+    if (modelTypeInput) modelTypeInput.value = model.modelType || '';
+    if (modelFileInput) modelFileInput.textContent = model.file || t('notAvailable');
+    if (modelJsonPathInput) modelJsonPathInput.textContent = model.jsonPath || t('notAvailable');
+    if (modelTriggerInput) modelTriggerInput.value = model.triggerWord || '';
+    if (modelTagsInput) modelTagsInput.value = (model.tags || []).join(', ');
+
+    // --- Populate Description Tab ---
+    if (modelDescriptionTextarea) {
+        modelDescriptionTextarea.value = model.description || '';
+    }
+
+    // --- Populate Extra Info Tab ---
+    if (extraInfoGroupContainer && noExtraInfoP) {
+        extraInfoGroupContainer.innerHTML = ''; // Clear previous extra fields
+        const extraEntries = Object.entries(model.extra || {});
+        const filteredExtraEntries = extraEntries.filter(([key]) =>
+            !['name', 'type', 'modelType', 'description', 'triggerWord', 'image', 'file', 'jsonPath', 'tags', 'id', 'sourceId'].includes(key)
+        );
+
+        if (filteredExtraEntries.length > 0) {
+            renderExtraFieldsContainer(filteredExtraEntries, extraInfoGroupContainer);
+            noExtraInfoP.style.display = 'none';
+        } else {
+            noExtraInfoP.textContent = t('detail.noExtraInfo');
+            noExtraInfoP.style.display = 'block';
+        }
+    } else {
+        logMessage('warn', "[DetailModel] Extra info container or noExtraInfoP element not found.");
+    }
+
+
+    // Use setTimeout to ensure elements are in the DOM and populated before further actions
+    setTimeout(() => {
+        // Move the existing detailImage element into the image tab's container
+        const imageTabPane = detailModel.querySelector('#image-tab .image-container');
+        if (imageTabPane && detailImage) {
+            if (!imageTabPane.contains(detailImage)) { // Append only if not already there
+                imageTabPane.appendChild(detailImage);
+            }
+            // Visibility is controlled by tab logic and image loading success
+            // Ensure it's visible if the image tab is active and image is loaded
+            const imageTabButton = detailModel.querySelector('.tab-btn[data-tab="image"]');
+            if (detailImage.src && detailImage.src !== window.location.href && imageTabButton && imageTabButton.classList.contains('active')) {
+                detailImage.style.display = 'block';
+            } else if (!detailImage.src || detailImage.src === window.location.href) {
+                 detailImage.style.display = 'none';
+            }
+        } else {
+            logMessage('warn', '[DetailModel] Could not find image tab container or detailImage element to move.');
+        }
+
+        attachTabListeners();
+        attachSaveListener(); // Ensure save listener is (re)attached or correctly configured
+        applyReadOnlyState();
+
+        // --- Textarea Auto Height ---
+        if (modelDescriptionTextarea) {
+            function autoResize() {
+                modelDescriptionTextarea.style.height = 'auto';
+                modelDescriptionTextarea.style.height = (modelDescriptionTextarea.scrollHeight + 10) + 'px';
+            }
+            requestAnimationFrame(autoResize); // Initial resize
+            modelDescriptionTextarea.removeEventListener('input', autoResize); // Remove previous if any
+            modelDescriptionTextarea.addEventListener('input', autoResize);
+
+            // Adjust on tab switch (ensure this doesn't add multiple listeners over time)
+            // This part of tab listener should be idempotent or managed carefully
+            // For now, we assume attachTabListeners handles tab switching correctly and autoResize is called if description tab becomes active.
+            // Or, better, trigger resize when the description tab becomes active.
+            // The existing tab listener logic in attachTabListeners might need a hook for this,
+            // or we can rely on the description tab itself to trigger resize when it becomes visible.
+            // For simplicity, the input event is the primary trigger.
+
+            modelDescriptionTextarea.style.resize = 'none';
+            modelDescriptionTextarea.style.overflowY = 'hidden';
+            // Read-only state for textarea is handled by applyReadOnlyState
+        } else {
+            logMessage('warn', '[DetailModel] Could not find description textarea #detail-model-description for auto-height.');
+        }
+        // --- End Textarea Auto Height ---
+         // Ensure the first tab (image) is active and its content visible
+        const firstTabButton = detailModel.querySelector('.tab-btn[data-tab="image"]');
+        const firstTabContent = detailModel.querySelector('#image-tab');
+        if (firstTabButton && firstTabContent) {
+            detailModel.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            detailModel.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            firstTabButton.classList.add('active');
+            firstTabContent.classList.add('active');
+            if (detailImage.src && detailImage.src !== window.location.href) {
+                 detailImage.style.display = 'block';
+            } else {
+                 detailImage.style.display = 'none';
+            }
+        }
+
+
+    }, 0);
+}
+
+
+/**
+ * Renders the container for extra fields.
+ * @param {Array} entries - Array of [key, value] pairs for extra data.
+ * @param {HTMLElement} parentElement - The DOM element to append the fields to.
+ */
+function renderExtraFieldsContainer(entries, parentElement) {
+    entries.forEach(([key, value]) => {
+        createExtraFieldElement(key, value, parentElement);
+    });
+}
+
+/**
+ * Creates and appends DOM elements for a single extra field (can be nested).
  * @param {string} key - The key/label for the field.
  * @param {any} value - The value, which can be a primitive or a nested object.
- * @param {string} [parentKey=''] - The prefix for nested input IDs.
+ * @param {HTMLElement} parentElement - The DOM element to append the new field to.
+ * @param {string} [parentKey=''] - The prefix for nested input IDs and keys.
  */
-function renderExtraField(key, value, parentKey = '') {
-    const inputId = `extra-${parentKey}${key.replace(/\s+/g, '-')}`; // Create a unique ID
-    if (typeof value === 'object' && value !== null && !Array.isArray(value)) { // Render nested object
-        const nestedEntries = Object.entries(value);
-        return `
-          <div class="extra-item nested">
-            <label class="nested-label">${key}:</label>
-            <div class="nested-content">
-              ${nestedEntries.map(([k, v]) => renderExtraField(k, v, `${parentKey}${key}.`)).join('')}
-            </div>
-          </div>
-        `;
-    } else { // Render simple input for primitives or arrays (arrays rendered as comma-separated string)
-        const displayValue = Array.isArray(value) ? value.join(', ') : value;
-        return `
-          <div class="extra-item simple">
-            <label for="${inputId}">${key}:</label>
-            <input type="text" id="${inputId}" value="${displayValue}" class="extra-input editable-input">
-          </div>
-        `;
+function createExtraFieldElement(key, value, parentElement, parentKey = '') {
+    const fieldContainer = document.createElement('div');
+    const label = document.createElement('label');
+    label.textContent = `${key}:`;
+
+    const fullKeyPath = parentKey ? `${parentKey}.${key}` : key;
+    // Sanitize key for use in ID - replace non-alphanumeric with underscore
+    const sanitizedKeyForId = fullKeyPath.replace(/[^a-zA-Z0-9_]/g, '_');
+    const inputId = `extra-${sanitizedKeyForId}`;
+
+
+    if (typeof value === 'object' && value !== null && !Array.isArray(value)) { // Nested object
+        fieldContainer.className = 'extra-item nested';
+        label.className = 'nested-label';
+        fieldContainer.appendChild(label);
+
+        const nestedContentDiv = document.createElement('div');
+        nestedContentDiv.className = 'nested-content';
+        Object.entries(value).forEach(([k, v]) => {
+            createExtraFieldElement(k, v, nestedContentDiv, fullKeyPath);
+        });
+        fieldContainer.appendChild(nestedContentDiv);
+    } else { // Simple input (primitive or array)
+        fieldContainer.className = 'extra-item simple';
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = inputId;
+        input.value = Array.isArray(value) ? value.join(', ') : (value !== null && value !== undefined ? String(value) : '');
+        input.className = 'extra-input editable-input'; // Keep class for styling and read-only logic
+        label.htmlFor = inputId;
+
+        fieldContainer.appendChild(label);
+        fieldContainer.appendChild(input);
     }
+    parentElement.appendChild(fieldContainer);
 }
 
 
 /** Attaches event listeners to the tab buttons. */
 function attachTabListeners() {
-    const tabButtons = detailModel.querySelectorAll('.tab-btn');
+    const tabButtons = detailModel.querySelectorAll('.detail-tabs .tab-btn'); // More specific selector
+    // Remove existing listeners to prevent duplication if called multiple times
+    // This is a simple way; a more robust way would be to store and remove specific listeners.
     tabButtons.forEach(button => {
-        button.addEventListener('click', () => {
-            const tabId = button.getAttribute('data-tab');
-            // Task 4: Click Event Logging
+        const newButton = button.cloneNode(true); // Clone to remove old listeners
+        button.parentNode.replaceChild(newButton, button);
+        newButton.addEventListener('click', () => {
+            const tabId = newButton.getAttribute('data-tab');
             logMessage('info', `[UI] 点击了详情弹窗的标签页按钮: ${tabId}`);
 
-            // Remove active class from all buttons and content
-            detailModel.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            detailModel.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-                // Hide image if it's inside this content area and not the image tab itself
-                const img = content.querySelector('#detailImage');
-                if (img && content.id !== 'image-tab') {
-                    img.style.display = 'none';
-                }
-            });
+            // Deactivate all tabs and content
+            detailModel.querySelectorAll('.detail-tabs .tab-btn').forEach(btn => btn.classList.remove('active'));
+            detailModel.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
 
-            // Add active class to the clicked button and corresponding content
-            button.classList.add('active');
-            const contentToShow = detailModel.querySelector(`#${tabId}-tab`);
+            // Activate clicked tab and its content
+            newButton.classList.add('active');
+            const contentToShow = detailModel.querySelector(`.tab-content#${tabId}-tab`);
             if (contentToShow) {
                 contentToShow.classList.add('active');
-                // Special handling for image tab visibility
-                if (tabId === 'image' && detailImage) {
-                    detailImage.style.display = 'block'; // Show image only when image tab is active
-                } else if (detailImage) {
-                     // Ensure image is hidden if another tab is selected
-                     // This check might be redundant due to the loop above, but ensures correctness
-                     const imageInOtherTab = detailModel.querySelector(`.tab-content:not(#image-tab) #detailImage`);
-                     if (!imageInOtherTab) { // Only hide if it's not supposed to be shown in another (incorrectly placed) tab
-                         detailImage.style.display = 'none';
-                     }
+
+                // Image visibility logic
+                if (detailImage) { // Ensure detailImage is defined
+                    if (tabId === 'image' && detailImage.src && detailImage.src !== window.location.href) {
+                        detailImage.style.display = 'block';
+                    } else {
+                        detailImage.style.display = 'none';
+                    }
                 }
+
+                // Auto-resize textarea if description tab is activated
+                if (tabId === 'description' && modelDescriptionTextarea) {
+                    requestAnimationFrame(() => { // Ensure DOM is updated
+                        modelDescriptionTextarea.style.height = 'auto';
+                        modelDescriptionTextarea.style.height = (modelDescriptionTextarea.scrollHeight + 10) + 'px';
+                    });
+                }
+
             } else {
-                 // Task 1: Error Logging
-                 logMessage('error', `[DetailModel] Could not find content element for tab: #${tabId}-tab`);
+                logMessage('error', `[DetailModel] Could not find content element for tab: #${tabId}-tab`);
             }
         });
     });
 }
+
 
 /** Applies disabled state to inputs and button if the source is read-only. */
 function applyReadOnlyState() {
@@ -398,32 +490,37 @@ function applyReadOnlyState() {
     const isReadOnly = currentIsReadOnly;
     logMessage('debug', `[DetailModel] Applying read-only state: ${isReadOnly}`);
 
-    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, .description-textarea');
-    const saveBtn = detailModel.querySelector('#saveDetailBtn');
-    const readOnlyIndicator = detailModel.querySelector('#readOnlyIndicator');
+    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, #detail-model-description'); // Use specific ID for textarea
+    // const saveBtn = detailModel.querySelector('#detailSaveBtn'); // Already referenced as detailSaveBtn
+    // const readOnlyIndicator = detailModel.querySelector('#detailReadOnlyIndicator'); // Already referenced as detailReadOnlyIndicatorEl
 
     inputs.forEach(input => {
-        input.disabled = isReadOnly;
+        if (input) input.disabled = isReadOnly;
     });
 
-    if (saveBtn) {
-        saveBtn.disabled = isReadOnly;
-        saveBtn.style.display = isReadOnly ? 'none' : 'inline-block'; // Hide save button if read-only
+    if (detailSaveBtn) {
+        detailSaveBtn.disabled = isReadOnly;
+        detailSaveBtn.style.display = isReadOnly ? 'none' : 'inline-block';
     }
 
-    if (readOnlyIndicator) {
-        readOnlyIndicator.style.display = isReadOnly ? 'inline' : 'none'; // Show indicator if read-only
+    if (detailReadOnlyIndicatorEl) {
+        detailReadOnlyIndicatorEl.style.display = isReadOnly ? 'inline' : 'none';
     }
 }
 
 
 /** Attaches the event listener to the save button. */
 function attachSaveListener() {
-    const saveBtn = detailModel.querySelector('#saveDetailBtn');
-    const feedbackEl = detailModel.querySelector('#detailFeedback'); // Get feedback element
+    // const saveBtn = detailModel.querySelector('#detailSaveBtn'); // Already referenced as detailSaveBtn
+    // const feedbackEl = detailModel.querySelector('#detailModelFeedback'); // Already referenced as detailFeedbackEl
 
-    if (saveBtn) {
-        saveBtn.onclick = async () => {
+    if (detailSaveBtn) {
+        // Remove previous listener before adding a new one to prevent multiple executions
+        const newSaveBtn = detailSaveBtn.cloneNode(true);
+        detailSaveBtn.parentNode.replaceChild(newSaveBtn, detailSaveBtn);
+        detailSaveBtn = newSaveBtn; // Update reference
+
+        detailSaveBtn.addEventListener('click', async () => {
             // --- Read-only Check ---
             if (currentIsReadOnly) {
                 logMessage('warn', `[DetailModel] 保存操作被阻止，因为数据源是只读的 (Model: ${currentModel?.name})`);
@@ -437,41 +534,40 @@ function attachSaveListener() {
             if (!currentModel || !currentSourceId) {
                 // Task 1: Error Logging
                 logMessage('error', "[DetailModel] 保存失败：currentModel 或 currentSourceId 丢失");
-                if (feedbackEl) {
-                    feedbackEl.textContent = t('detail.saveErrorMissingData');
-                    feedbackEl.className = 'Model-feedback feedback-error';
+                if (detailFeedbackEl) {
+                    detailFeedbackEl.textContent = t('detail.saveErrorMissingData');
+                    detailFeedbackEl.className = 'Model-feedback feedback-error';
                 }
                 return;
             }
 
-            saveBtn.disabled = true;
-            if (feedbackEl) {
-                feedbackEl.textContent = t('detail.saving'); // Indicate saving
-                feedbackEl.className = 'Model-feedback feedback-info'; // Use info class
+            detailSaveBtn.disabled = true;
+            if (detailFeedbackEl) {
+                detailFeedbackEl.textContent = t('detail.saving'); // Indicate saving
+                detailFeedbackEl.className = 'Model-feedback feedback-info'; // Use info class
             }
 
             // --- Collect Updated Data ---
             logMessage('debug', '[DetailModel] 开始收集更新后的模型数据');
             // --- Collect Standard Data ---
             const standardData = {
-                id: currentModel.id, // Ensure ID is preserved
-                sourceId: currentSourceId, // Include sourceId for the backend
-                jsonPath: currentModel.jsonPath, // Make sure jsonPath is included for saving
-                name: detailName.textContent, // Name is from the title element
-                modelType: detailModel.querySelector('#model-type')?.value || currentModel.modelType, // Use modelType
-                triggerWord: detailModel.querySelector('#model-trigger')?.value || currentModel.triggerWord,
-                description: detailModel.querySelector('#model-description')?.value || currentModel.description,
-                tags: (detailModel.querySelector('#model-tags')?.value || '')
-                        .split(',')
-                        .map(tag => tag.trim())
-                        .filter(tag => tag.length > 0),
-                // DO NOT include file and image when saving metadata
-                // file: currentModel.file, // Removed
-                // image: currentModel.image, // Removed
+                id: currentModel.id,
+                sourceId: currentSourceId,
+                jsonPath: currentModel.jsonPath, // Preserved from original model
+                name: detailName.textContent, // Name is from the modal title
+                modelType: modelTypeInput?.value || currentModel.modelType,
+                triggerWord: modelTriggerInput?.value || currentModel.triggerWord,
+                description: modelDescriptionTextarea?.value || currentModel.description,
+                tags: (modelTagsInput?.value || '')
+                    .split(',')
+                    .map(tag => tag.trim())
+                    .filter(tag => tag.length > 0),
+                // file and image are not part of the editable form, they are part of model identity
             };
 
             // --- Collect Extra Data ---
-            const extraData = collectExtraData(detailModel.querySelector('.extra-info-group'));
+            // extraInfoGroupContainer is the direct parent of .extra-item elements
+            const extraData = collectExtraData(extraInfoGroupContainer);
             logMessage('debug', "[DetailModel] 收集到的额外数据:", extraData);
 
             // --- Combine Data ---
@@ -495,9 +591,9 @@ function attachSaveListener() {
                 await saveModel(updatedModelData); // 使用导入的函数
                 const saveDuration = Date.now() - saveStartTime;
                 logMessage('info', `[DetailModel] API 保存模型成功: ${updatedModelData.name}, 耗时: ${saveDuration}ms`);
-                if (feedbackEl) {
-                    feedbackEl.textContent = t('detail.saveSuccess');
-                    feedbackEl.className = 'Model-feedback feedback-success';
+                if (detailFeedbackEl) {
+                    detailFeedbackEl.textContent = t('detail.saveSuccess');
+                    detailFeedbackEl.className = 'Model-feedback feedback-success';
                 }
                 // Optionally close Model after a short delay
                 setTimeout(() => {
@@ -520,27 +616,19 @@ function attachSaveListener() {
                  const saveDuration = Date.now() - saveStartTime;
                 // Task 1: Error Logging
                 logMessage('error', `[DetailModel] API 保存模型失败: ${updatedModelData.name}, 耗时: ${saveDuration}ms`, e.message, e.stack, e);
-                if (feedbackEl) {
-                    // --- ReadOnlyError Handling ---
-                    // 检查错误名称是否为我们定义的 ReadOnlyError
-                    // 注意：由于错误可能跨进程传递，直接检查 e.name === 'ReadOnlyError' 可能不可靠。
-                    // 更好的方法是检查错误消息或约定一个特定的错误代码。
-                    // 这里我们暂时依赖错误消息中包含 "read-only" 或 "只读"。
+                if (detailFeedbackEl) {
                     if (e.message && (e.message.includes('read-only') || e.message.includes('只读'))) {
-                         feedbackEl.textContent = t('errors.readOnlyDataSource'); // 使用新的 i18n key
+                        detailFeedbackEl.textContent = t('errors.readOnlyDataSource');
                     } else {
-                         feedbackEl.textContent = t('detail.saveFail', { message: e.message });
+                        detailFeedbackEl.textContent = t('detail.saveFail', { message: e.message });
                     }
-                    // --- End ReadOnlyError Handling ---
-                    feedbackEl.className = 'Model-feedback feedback-error';
+                    detailFeedbackEl.className = 'Model-feedback feedback-error';
                 }
-                saveBtn.disabled = false; // Re-enable button on error
+                if (detailSaveBtn) detailSaveBtn.disabled = false; // Re-enable button on error
             }
-            // Do not re-enable button on success, as Model will close
-        };
+        });
     } else {
-         // Task 1: Error Logging
-        logMessage('error', '[DetailModel] 初始化保存监听器失败：找不到保存按钮 #saveDetailBtn');
+        logMessage('error', '[DetailModel] 初始化保存监听器失败：找不到保存按钮 #detailSaveBtn');
     }
 }
 
