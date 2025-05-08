@@ -482,49 +482,15 @@ select:hover {
   background-color: var(--secondary-color);
 }
 
+/* 响应式调整 for modelList */
 @media (max-width: 768px) {
-  #app {
-    padding: 1rem;
-  }
-
   #modelList {
     grid-template-columns: 1fr;
   }
-
-  header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 1rem;
-  }
 }
 
-
-/* 移动端适配 */
-@media (max-width: 768px) {
-
-  .detail-Modal-content .detail-row,
-  .detail-Modal-content .extra-info-item {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 6px;
-  }
-
-  .detail-Modal-content .detail-row label,
-  .detail-Modal-content .extra-info-item label {
-    width: 100%;
-    padding-top: 0;
-  }
-
-  .detail-Modal-content .detail-row input[type="text"],
-  .detail-Modal-content .detail-row textarea,
-  .detail-Modal-content .extra-info-item input[type="text"] {
-    width: 100%;
-  }
-
-  .detail-Modal-content .extra-info-group {
-    padding: 16px;
-  }
-}
+/* 移除其他移动端特定适配 */
+/* 保留 content-main 的响应式布局，如果下面有的话 */
 
 .detail-Modal-content .btn-save {
   align-self: flex-end;
@@ -712,7 +678,7 @@ select:hover {
   border-radius: 4px;
 }
 
-/* 响应式调整 */
+/* 响应式调整 for content-main (and related .content-layout, .directory-tabs if needed) */
 @media (max-width: 768px) {
   .content-layout {
     flex-direction: column;
@@ -720,8 +686,13 @@ select:hover {
 
   .directory-tabs {
     width: 100%;
-    order: -1;
-    /* 移动端将目录栏放在顶部 */
+    margin-right: 0; /* 移除右边距 */
+    margin-bottom: 1rem; /* 在垂直布局时添加底部边距 */
+    /* order: -1; /* 保持目录在顶部 */
+  }
+
+  .content-main {
+    /* 确保 content-main 在小屏幕上正确显示 */
   }
 }
 
