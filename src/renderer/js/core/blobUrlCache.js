@@ -1,8 +1,9 @@
 import { getModelImage, logMessage } from '../apiBridge.js'; // 假设 apiBridge.js 提供 getModelImage 和 logMessage
 
-const cache = new Map();
+const cache = new Map(); // Stores { blob, blobUrl, refCount, mimeType, revocationTimerId }
 // pendingRequests 用于处理对同一资源并发请求的情况
 const pendingRequests = new Map();
+const REVOCATION_DELAY_MS = 30000; 
 
 /**
  * 生成缓存键.
@@ -33,6 +34,12 @@ async function getOrCreateBlobUrl(sourceId, imagePath) {
 
     if (cache.has(cacheKey)) {
         const entry = cache.get(cacheKey);
+        // If a revocation timer is pending for this entry, cancel it
+        if (entry.revocationTimerId) {
+            clearTimeout(entry.revocationTimerId);
+            entry.revocationTimerId = null;
+            logMessage('debug', `${logPrefix} Cancelled pending revocation timer.`);
+        }
         entry.refCount++;
         logMessage('debug', `${logPrefix} Cache HIT. New refCount: ${entry.refCount}. URL: ${entry.blobUrl}`);
         return entry.blobUrl;
@@ -53,7 +60,8 @@ async function getOrCreateBlobUrl(sourceId, imagePath) {
                     blob: blob,
                     blobUrl: blobUrl,
                     refCount: 1,
-                    mimeType: imageData.mimeType || 'application/octet-stream'
+                    mimeType: imageData.mimeType || 'application/octet-stream',
+                    revocationTimerId: null // Initialize revocation timer ID
                 });
                 logMessage('info', `${logPrefix} Created and cached. refCount: 1. URL: ${blobUrl}`);
                 return blobUrl;
@@ -80,23 +88,8 @@ async function getOrCreateBlobUrl(sourceId, imagePath) {
  * @param {string} imagePath - 图片在数据源中的路径.
  */
 function releaseBlobUrl(sourceId, imagePath) {
-    return;
     const cacheKey = generateCacheKey(sourceId, imagePath);
-    const logPrefix = `[BlobUrlCache ${cacheKey}]`;
-
-    if (cache.has(cacheKey)) {
-        const entry = cache.get(cacheKey);
-        entry.refCount--;
-        logMessage('debug', `${logPrefix} Released. New refCount: ${entry.refCount}.`);
-
-        if (entry.refCount === 0) {
-            logMessage('info', `${logPrefix} refCount is 0. Revoking URL: ${entry.blobUrl} and removing from cache.`);
-            URL.revokeObjectURL(entry.blobUrl);
-            cache.delete(cacheKey);
-        }
-    } else {
-        logMessage('warn', `${logPrefix} Attempted to release a non-cached or already fully released URL.`);
-    }
+    _performRelease(cacheKey);
 }
 
 /**
@@ -104,7 +97,16 @@ function releaseBlobUrl(sourceId, imagePath) {
  * @param {string} cacheKey - 由 generateCacheKey 生成的缓存键.
  */
 function releaseBlobUrlByKey(cacheKey) {
-    const logPrefix = `[BlobUrlCache Key: ${cacheKey}]`;
+    _performRelease(cacheKey);
+}
+
+/**
+ * 内部函数，处理实际的释放和延迟撤销逻辑.
+ * @param {string} cacheKey
+ */
+function _performRelease(cacheKey) {
+    const logPrefix = `[BlobUrlCache Release for ${cacheKey}]`;
+
     if (!cacheKey) {
         logMessage('warn', `${logPrefix} Attempted to release with an undefined or empty cacheKey.`);
         return;
@@ -112,18 +114,39 @@ function releaseBlobUrlByKey(cacheKey) {
 
     if (cache.has(cacheKey)) {
         const entry = cache.get(cacheKey);
-        entry.refCount--;
-        logMessage('debug', `${logPrefix} Released by key. New refCount: ${entry.refCount}.`);
+        if (entry.refCount > 0) { // Only decrement if refCount is positive
+            entry.refCount--;
+        }
+        logMessage('debug', `${logPrefix} Decremented refCount. New refCount: ${entry.refCount}.`);
 
         if (entry.refCount === 0) {
-            logMessage('info', `${logPrefix} refCount is 0. Revoking URL: ${entry.blobUrl} and removing from cache by key.`);
-            URL.revokeObjectURL(entry.blobUrl);
-            cache.delete(cacheKey);
+            // Clear any existing timer for this key before starting a new one
+            if (entry.revocationTimerId) {
+                clearTimeout(entry.revocationTimerId);
+                logMessage('debug', `${logPrefix} Cleared existing revocation timer.`);
+            }
+
+            logMessage('info', `${logPrefix} refCount is 0. Scheduling revocation for URL: ${entry.blobUrl} in ${REVOCATION_DELAY_MS}ms.`);
+            entry.revocationTimerId = setTimeout(() => {
+                // Re-fetch entry from cache in case it was modified (e.g., re-referenced)
+                const currentEntry = cache.get(cacheKey);
+                if (currentEntry && currentEntry.refCount === 0) {
+                    logMessage('info', `${logPrefix} Revocation timer expired. refCount still 0. Revoking URL: ${currentEntry.blobUrl} and removing from cache.`);
+                    URL.revokeObjectURL(currentEntry.blobUrl);
+                    cache.delete(cacheKey);
+                } else if (currentEntry) {
+                    logMessage('debug', `${logPrefix} Revocation timer expired, but refCount is now ${currentEntry.refCount}. URL will not be revoked.`);
+                    currentEntry.revocationTimerId = null; // Clear the timerId as it's no longer pending
+                } else {
+                    logMessage('debug', `${logPrefix} Revocation timer expired, but entry no longer in cache (possibly cleared by clearAll).`);
+                }
+            }, REVOCATION_DELAY_MS);
         }
     } else {
-        logMessage('warn', `${logPrefix} Attempted to release by key a non-cached or already fully released URL.`);
+        logMessage('warn', `${logPrefix} Attempted to release a non-cached or already fully released URL.`);
     }
 }
+
 
 /**
  * (可选) 清除所有缓存的 Blob URL.
@@ -132,6 +155,9 @@ function releaseBlobUrlByKey(cacheKey) {
 function clearAllBlobUrls() {
     logMessage('info', '[BlobUrlCache] Clearing all cached Blob URLs.');
     for (const [key, entry] of cache) {
+        if (entry.revocationTimerId) {
+            clearTimeout(entry.revocationTimerId); // Clear any pending revocation timers
+        }
         logMessage('debug', `[BlobUrlCache ClearAll] Revoking ${entry.blobUrl} for key ${key}`);
         URL.revokeObjectURL(entry.blobUrl);
     }
