@@ -354,7 +354,7 @@ select:hover {
   visibility: visible;
 }
 
-.Model-content {
+.Modal-content {
   background-color: var(--card-bg);
   border-radius: 8px;
   width: 90%;
@@ -498,38 +498,38 @@ select:hover {
 /* 移动端适配 */
 @media (max-width: 768px) {
 
-  .detail-Model-content .detail-row,
-  .detail-Model-content .extra-info-item {
+  .detail-Modal-content .detail-row,
+  .detail-Modal-content .extra-info-item {
     flex-direction: column;
     align-items: flex-start;
     gap: 6px;
   }
 
-  .detail-Model-content .detail-row label,
-  .detail-Model-content .extra-info-item label {
+  .detail-Modal-content .detail-row label,
+  .detail-Modal-content .extra-info-item label {
     width: 100%;
     padding-top: 0;
   }
 
-  .detail-Model-content .detail-row input[type="text"],
-  .detail-Model-content .detail-row textarea,
-  .detail-Model-content .extra-info-item input[type="text"] {
+  .detail-Modal-content .detail-row input[type="text"],
+  .detail-Modal-content .detail-row textarea,
+  .detail-Modal-content .extra-info-item input[type="text"] {
     width: 100%;
   }
 
-  .detail-Model-content .extra-info-group {
+  .detail-Modal-content .extra-info-group {
     padding: 16px;
   }
 }
 
-.detail-Model-content .btn-save {
+.detail-Modal-content .btn-save {
   align-self: flex-end;
   /* 保存按钮右对齐 */
   margin-top: 20px;
   /* 增加与上方内容的间距 */
 }
 
-.detail-Model-content hr.separator {
+.detail-Modal-content hr.separator {
   margin: 20px 0;
   /* 增加分隔线上下的间距 */
   border: none;
@@ -732,7 +732,7 @@ select:hover {
 }
 
 /* Settings Model Specific Styles */
-.settings-Model-content {
+.settings-Modal-content {
   max-width: 800px;
   /* Allow settings Model to be wider */
   display: flex;

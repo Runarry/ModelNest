@@ -4,7 +4,7 @@ import { initThemeSwitcher } from './js/utils/theme.js';
 // Import updateSingleModelCard along with other functions
 import { initMainView, loadModels as loadModelsForView, renderSources, updateSingleModelCard } from './js/components/main-view.js';
 import { initDetailModel, showDetailModel, hideDetailModel } from './js/components/detail-model.js';
-import { initSettingsModel } from './js/components/settings-model.js';
+import { initsettingsModal } from './js/components/settings-modal.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './js/utils/ui-utils.js';
 // Import initializeI18n, t, and updateUIWithTranslations.
@@ -105,8 +105,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   initDetailModel(detailModelConfig);
 
    // Configuration for settings Model module, including sub-Model config
-   const settingsModelConfig = {
-       ModelId: 'settingsModel',
+   const settingsModalConfig = {
+       ModelId: 'settingsModal',
        openBtnId: 'settingsBtn',
        closeBtnId: 'settingsClose',
        // Removed: saveBtnId, cancelBtnId, formId, feedbackElementId as they are no longer used globally
@@ -130,7 +130,7 @@ document.addEventListener('DOMContentLoaded', async () => {
        cancelBtnId: 'sourceEditCancelBtn',
        feedbackElementId: 'sourceEditFeedback'
    };
-   initSettingsModel(settingsModelConfig, sourceEditModelConfig); // Logging inside initSettingsModel if needed
+   initsettingsModal(settingsModalConfig, sourceEditModelConfig); // Logging inside initsettingsModal if needed
 
    logMessage('info', "[Renderer] UI 模块初始化完成");
 

@@ -40,7 +40,7 @@ function formatBytes(bytes, decimals = 2) {
     return parseFloat((bytes / Math.pow(k, unitIndex)).toFixed(dm)) + ' ' + sizes[unitIndex];
 }
 // ===== DOM Element References =====
-let settingsModel;
+let settingsModal;
 let settingsBtn; // The button that opens the settings Model
 let settingsCloseBtn;
 let settingsNav; // Left navigation container
@@ -71,25 +71,25 @@ let currentConfigData = null; // Store loaded config temporarily
  * @param {string} config.openBtnId - ID of the button that opens this Model.
  * @param {string} config.closeBtnId
  */
-export function initSettingsModel(config) { // 移除 sourceEditModelConfig
-    settingsModel = document.getElementById(config.ModelId);
+export function initsettingsModal(config) { // 移除 sourceEditModelConfig
+    settingsModal = document.getElementById(config.ModelId);
     settingsBtn = document.getElementById(config.openBtnId);
     settingsCloseBtn = document.getElementById(config.closeBtnId);
 
-    if (!settingsModel || !settingsBtn || !settingsCloseBtn) {
-        logMessage('error', "[SettingsModel] 初始化失败：弹窗、打开或关闭按钮未找到。请检查配置中的 ID:", config);
+    if (!settingsModal || !settingsBtn || !settingsCloseBtn) {
+        logMessage('error', "[settingsModal] 初始化失败：弹窗、打开或关闭按钮未找到。请检查配置中的 ID:", config);
         return;
     }
 
     // Get references to the new layout elements within the Model
-    settingsNav = settingsModel.querySelector('.settings-nav ul');
-    settingsContent = settingsModel.querySelector('.settings-content');
-    dataSourceListEl = settingsModel.querySelector('#dataSourceList'); // 数据源列表 UL
-    addDataSourceBtn = settingsModel.querySelector('#addDataSourceBtn'); // 添加按钮
-    addDataSourceFormContainer = settingsModel.querySelector('#addDataSourceFormContainer'); // 添加表单的容器
+    settingsNav = settingsModal.querySelector('.settings-nav ul');
+    settingsContent = settingsModal.querySelector('.settings-content');
+    dataSourceListEl = settingsModal.querySelector('#dataSourceList'); // 数据源列表 UL
+    addDataSourceBtn = settingsModal.querySelector('#addDataSourceBtn'); // 添加按钮
+    addDataSourceFormContainer = settingsModal.querySelector('#addDataSourceFormContainer'); // 添加表单的容器
 
     if (!settingsNav || !settingsContent || !dataSourceListEl || !addDataSourceBtn || !addDataSourceFormContainer) {
-        logMessage('error', "[SettingsModel] 初始化失败：导航、内容区域、数据源列表、添加按钮或添加表单容器未找到。请检查 index.html 结构。");
+        logMessage('error', "[settingsModal] 初始化失败：导航、内容区域、数据源列表、添加按钮或添加表单容器未找到。请检查 index.html 结构。");
         return;
     }
 
@@ -100,20 +100,20 @@ export function initSettingsModel(config) { // 移除 sourceEditModelConfig
     // Open Model Button
     settingsBtn.addEventListener('click', () => {
         logMessage('info', '[UI] 点击了设置按钮');
-        openSettingsModel();
+        opensettingsModal();
     });
 
     // Close Model Button
     settingsCloseBtn.addEventListener('click', () => {
         logMessage('info', '[UI] 点击了设置弹窗的关闭按钮');
-        closeSettingsModel();
+        closesettingsModal();
     });
 
     // Close Model on backdrop click
-    settingsModel.addEventListener('click', (event) => {
-        if (event.target === settingsModel) {
+    settingsModal.addEventListener('click', (event) => {
+        if (event.target === settingsModal) {
             logMessage('info', '[UI] 点击了设置弹窗的背景遮罩');
-            closeSettingsModel();
+            closesettingsModal();
         }
     });
 
@@ -178,40 +178,40 @@ export function initSettingsModel(config) { // 移除 sourceEditModelConfig
      // Check Updates Button Click (Specific to Update Pane)
      // Listener attached dynamically in setupUpdateSection
 
-    logMessage('info', "[SettingsModel] 新设置界面初始化完成");
+    logMessage('info', "[settingsModal] 新设置界面初始化完成");
 }
 
 // ===== Core Functions =====
 
 /** Opens the settings Model and loads the current configuration. */
-async function openSettingsModel() {
-    if (!settingsModel) {
-        logMessage('error', "[SettingsModel] openSettingsModel 失败：弹窗元素未初始化");
+async function opensettingsModal() {
+    if (!settingsModal) {
+        logMessage('error', "[settingsModal] opensettingsModal 失败：弹窗元素未初始化");
         return;
     }
-    logMessage('info', "[SettingsModel] 开始打开设置弹窗");
+    logMessage('info', "[settingsModal] 开始打开设置弹窗");
     // Clear any previous feedback? (No global feedback area anymore)
-    settingsModel.classList.add('active');
+    settingsModal.classList.add('active');
 
     document.title = t('settings.title'); // Set page title
     // Set default tab and load data
     switchSettingsTab('data-sources'); // Default to data sources
     await loadAndDisplaySettings();
 
-    logMessage('info', "[SettingsModel] 设置弹窗已打开并加载数据");
+    logMessage('info', "[settingsModal] 设置弹窗已打开并加载数据");
 }
 
 /** Closes the settings Model. */
-function closeSettingsModel() {
-    logMessage('info', "[SettingsModel] 开始关闭设置弹窗");
-    if (settingsModel) {
-        settingsModel.classList.remove('active');
+function closesettingsModal() {
+    logMessage('info', "[settingsModal] 开始关闭设置弹窗");
+    if (settingsModal) {
+        settingsModal.classList.remove('active');
         // Clear temporary state
         tempModelSources = [];
         currentConfigData = null;
         // Clean up IPC listener
         if (unsubscribeUpdateStatus) {
-            logMessage('info', "[SettingsModel] 取消订阅更新状态事件");
+            logMessage('info', "[settingsModal] 取消订阅更新状态事件");
             unsubscribeUpdateStatus();
             unsubscribeUpdateStatus = null;
         }
@@ -219,10 +219,10 @@ function closeSettingsModel() {
         dataSourceListEl.querySelectorAll('.edit-form').forEach(form => form.style.display = 'none');
         dataSourceListEl.querySelectorAll('.data-source-item > *:not(.edit-form)').forEach(el => el.style.display = ''); // Show original content
 
-        logMessage('info', "[SettingsModel] 设置弹窗已关闭");
+        logMessage('info', "[settingsModal] 设置弹窗已关闭");
         document.title = t('appTitle'); // Restore original page title on close
     } else {
-        logMessage('warn', "[SettingsModel] closeSettingsModel 调用时弹窗元素未初始化");
+        logMessage('warn', "[settingsModal] closesettingsModal 调用时弹窗元素未初始化");
     }
 }
 
@@ -231,7 +231,7 @@ function closeSettingsModel() {
 /** Switches the active tab and content pane in the settings Model. */
 function switchSettingsTab(category) {
     if (!settingsNav || !settingsContent) return;
-    logMessage('debug', `[SettingsModel] 切换到设置标签页: ${category}`);
+    logMessage('debug', `[settingsModal] 切换到设置标签页: ${category}`);
 
     // Update navigation active state
     settingsNav.querySelectorAll('a.nav-item').forEach(link => {
@@ -260,13 +260,13 @@ function switchSettingsTab(category) {
 
 /** Loads config and populates all setting panes. */
 async function loadAndDisplaySettings() {
-    logMessage('info', "[SettingsModel] 开始加载并显示所有设置");
+    logMessage('info', "[settingsModal] 开始加载并显示所有设置");
     setLoading(true); // Consider a loading indicator for the content area
     const startTime = Date.now();
 
     try {
         currentConfigData = await getConfig();
-        logMessage('info', "[SettingsModel] 从主进程获取的配置:", currentConfigData);
+        logMessage('info', "[settingsModal] 从主进程获取的配置:", currentConfigData);
 
         // Deep clone sources into temporary state for editing
         tempModelSources = currentConfigData.modelSources ? JSON.parse(JSON.stringify(currentConfigData.modelSources)) : [];
@@ -281,11 +281,11 @@ async function loadAndDisplaySettings() {
         // populateLanguageSetting(); // Language dropdown is part of populateGeneralPane now
 
         const duration = Date.now() - startTime;
-        logMessage('info', `[SettingsModel] 所有设置面板填充完成, 耗时: ${duration}ms`);
+        logMessage('info', `[settingsModal] 所有设置面板填充完成, 耗时: ${duration}ms`);
 
     } catch (error) {
         const duration = Date.now() - startTime;
-        logMessage('error', `[SettingsModel] 加载或显示设置失败, 耗时: ${duration}ms`, error.message, error.stack, error);
+        logMessage('error', `[settingsModal] 加载或显示设置失败, 耗时: ${duration}ms`, error.message, error.stack, error);
         // Display error in a relevant pane or a general error message area if added
         const dataSourcesPane = settingsContent.querySelector('#settingsDataSources');
         if (dataSourcesPane) {
@@ -299,12 +299,12 @@ async function loadAndDisplaySettings() {
 // --- Pane Population Functions ---
 
 function populateDataSourcesPane() {
-    logMessage('debug', "[SettingsModel] 填充数据源面板");
+    logMessage('debug', "[settingsModal] 填充数据源面板");
     renderSourceListForSettings(); // Render the list using temp state
 }
 
 function populateGeneralPane() {
-    logMessage('debug', "[SettingsModel] 填充常规设置面板");
+    logMessage('debug', "[settingsModal] 填充常规设置面板");
     const pane = settingsContent.querySelector('#settingsGeneral');
     if (!pane || !currentConfigData) return;
     const langSelect = pane.querySelector('#languageSelector');
@@ -324,12 +324,12 @@ function populateGeneralPane() {
         langSelect.removeEventListener('change', handleLanguageChange); // Ensure no duplicate listeners
         langSelect.addEventListener('change', handleLanguageChange);
     } else {
-        logMessage('warn', "[SettingsModel] 未找到常规设置面板中的 #languageSelector");
+        logMessage('warn', "[settingsModal] 未找到常规设置面板中的 #languageSelector");
     }
 }
 
 function populateFileRecognitionPane() {
-    logMessage('debug', "[SettingsModel] 填充文件识别面板");
+    logMessage('debug', "[settingsModal] 填充文件识别面板");
     const pane = settingsContent.querySelector('#settingsFileRecognition');
     if (!pane || !currentConfigData) return;
     const textarea = pane.querySelector('#supportedFileExtensions'); // Corrected ID from HTML
@@ -339,12 +339,12 @@ function populateFileRecognitionPane() {
         const currentExtensions = currentConfigData.supportedExtensions || defaultExtensions;
         textarea.value = currentExtensions.join(', ');
     } else {
-         logMessage('warn', "[SettingsModel] 未找到文件识别面板中的 #supportedFileExtensions 文本区域");
+         logMessage('warn', "[settingsModal] 未找到文件识别面板中的 #supportedFileExtensions 文本区域");
     }
 }
 
 function populateImageCachePane() {
-    logMessage('debug', "[SettingsModel] 填充图片缓存面板");
+    logMessage('debug', "[settingsModal] 填充图片缓存面板");
     const pane = settingsContent.querySelector('#settingsImageCache');
     if (!pane || !currentConfigData) return;
     const cacheConfig = currentConfigData.imageCache || currentConfigData.defaults?.imageCache || {}; // Use defaults if available
@@ -354,7 +354,7 @@ function populateImageCachePane() {
     if (sizeInput) {
         sizeInput.value = cacheConfig.maxCacheSizeMB ?? 500; // Default to 500MB if not set
     } else {
-        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheSizeLimit 输入框");
+        logMessage('warn', "[settingsModal] 未找到图片缓存面板中的 #imageCacheSizeLimit 输入框");
     }
 
     // --- Compression Quality ---
@@ -368,7 +368,7 @@ function populateImageCachePane() {
         qualityInput.removeEventListener('input', handleQualitySliderChange); // Prevent duplicates
         qualityInput.addEventListener('input', handleQualitySliderChange);
     } else {
-        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheCompressQuality 或 #imageCacheCompressQualityValue");
+        logMessage('warn', "[settingsModal] 未找到图片缓存面板中的 #imageCacheCompressQuality 或 #imageCacheCompressQualityValue");
     }
 
     // --- Current Cache Size Display ---
@@ -384,18 +384,18 @@ function populateImageCachePane() {
                     cacheSizeDisplay.classList.remove('error');
                 } else {
                     // Handle cases where the API might return non-numeric or error states (though it should return 0 on error now)
-                    logMessage('warn', `[SettingsModel] getImageCacheSize 返回了无效值: ${sizeBytes}`);
+                    logMessage('warn', `[settingsModal] getImageCacheSize 返回了无效值: ${sizeBytes}`);
                     cacheSizeDisplay.textContent = t('settings.imageCache.sizeError');
                     cacheSizeDisplay.classList.add('error');
                 }
             })
             .catch(error => {
-                logMessage('error', "[SettingsModel] 获取缓存大小失败:", error);
+                logMessage('error', "[settingsModal] 获取缓存大小失败:", error);
                 cacheSizeDisplay.textContent = t('settings.imageCache.sizeError');
                 cacheSizeDisplay.classList.add('error');
             });
     } else {
-        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #currentCacheSizeDisplay 元素");
+        logMessage('warn', "[settingsModal] 未找到图片缓存面板中的 #currentCacheSizeDisplay 元素");
     }
 
     // --- Preferred Cache Format --- (Keep this section as is)
@@ -416,7 +416,7 @@ function populateImageCachePane() {
         // Set current value
         formatSelect.value = cacheConfig.preferredFormat || 'Original'; // Default to Original
     } else {
-        logMessage('warn', "[SettingsModel] 未找到图片缓存面板中的 #imageCacheFormatSelect 下拉菜单");
+        logMessage('warn', "[settingsModal] 未找到图片缓存面板中的 #imageCacheFormatSelect 下拉菜单");
     }
 
     // --- Clear Cache Button & Status ---
@@ -435,7 +435,7 @@ function populateImageCachePane() {
 function setupImageCacheSection() {
     const pane = settingsContent?.querySelector('#settingsImageCache');
     if (!pane) {
-         logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：面板未找到");
+         logMessage('warn', "[settingsModal] 无法设置图片缓存部分：面板未找到");
          return;
     }
 
@@ -444,9 +444,9 @@ function setupImageCacheSection() {
     if (clearImageCacheBtn) {
         clearImageCacheBtn.removeEventListener('click', handleClearImageCache); // Prevent duplicates
         clearImageCacheBtn.addEventListener('click', handleClearImageCache);
-        logMessage('debug', "[SettingsModel] 已附加清除缓存按钮的事件监听器");
+        logMessage('debug', "[settingsModal] 已附加清除缓存按钮的事件监听器");
     } else {
-        logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：清除按钮未找到");
+        logMessage('warn', "[settingsModal] 无法设置图片缓存部分：清除按钮未找到");
     }
 
     // --- Format Select Dropdown ---
@@ -455,9 +455,9 @@ function setupImageCacheSection() {
     if (formatSelect) {
         formatSelect.removeEventListener('change', handleFormatChange); // Prevent duplicates
         formatSelect.addEventListener('change', handleFormatChange);
-        logMessage('debug', "[SettingsModel] 已附加缓存格式选择下拉菜单的事件监听器");
+        logMessage('debug', "[settingsModal] 已附加缓存格式选择下拉菜单的事件监听器");
     } else {
-         logMessage('warn', "[SettingsModel] 无法设置图片缓存部分：格式选择下拉菜单未找到");
+         logMessage('warn', "[settingsModal] 无法设置图片缓存部分：格式选择下拉菜单未找到");
     }
 
     // Ensure status element reference is updated
@@ -482,7 +482,7 @@ async function handleFormatChange(event) {
     logMessage('info', `[UI] 图片缓存格式更改为: ${newFormat}`);
 
     if (!currentConfigData) {
-        logMessage('error', "[SettingsModel] 无法保存格式更改：当前配置数据不可用");
+        logMessage('error', "[settingsModal] 无法保存格式更改：当前配置数据不可用");
         if (feedbackArea) showFeedback(feedbackArea, t('settings.saveError', { message: '配置数据丢失' }), 'error');
         return;
     }
@@ -504,16 +504,16 @@ async function handleFormatChange(event) {
             imageCache: updatedImageCacheConfig
         };
 
-        logMessage('info', `[SettingsModel] 调用 API 保存图片缓存格式: ${newFormat}`, fullConfigToSend);
+        logMessage('info', `[settingsModal] 调用 API 保存图片缓存格式: ${newFormat}`, fullConfigToSend);
         await saveConfig(fullConfigToSend);
 
         // Update local config state
         currentConfigData = fullConfigToSend;
-        logMessage('info', `[SettingsModel] 图片缓存格式保存成功: ${newFormat}`);
+        logMessage('info', `[settingsModal] 图片缓存格式保存成功: ${newFormat}`);
         if (feedbackArea) showFeedback(feedbackArea, t('settings.imageCache.formatSaveSuccess'), 'success', 1500);
 
     } catch (error) {
-        logMessage('error', `[SettingsModel] 保存图片缓存格式失败: ${newFormat}`, error.message, error.stack);
+        logMessage('error', `[settingsModal] 保存图片缓存格式失败: ${newFormat}`, error.message, error.stack);
         if (feedbackArea) showFeedback(feedbackArea, t('settings.saveError', { message: error.message }), 'error');
         // Revert dropdown selection on error?
         selectElement.value = currentConfigData.imageCache?.preferredFormat || 'Original';
@@ -524,7 +524,7 @@ async function handleFormatChange(event) {
 
 
 function populateUpdatesPane() {
-    logMessage('debug', "[SettingsModel] 填充更新面板");
+    logMessage('debug', "[settingsModal] 填充更新面板");
     const pane = settingsContent.querySelector('#settingsUpdates');
     if (!pane) return;
     const versionDisplay = pane.querySelector('#appVersionDisplay');
@@ -532,17 +532,17 @@ function populateUpdatesPane() {
         getAppVersion().then(version => {
             versionDisplay.textContent = version || t('settings.updates.versionUnknown');
         }).catch(err => {
-            logMessage('error', "[SettingsModel] 获取应用版本失败 (更新面板):", err);
+            logMessage('error', "[settingsModal] 获取应用版本失败 (更新面板):", err);
             versionDisplay.textContent = t('settings.updates.versionError');
         });
     } else {
-        logMessage('warn', "[SettingsModel] 未找到更新面板中的 #appVersionDisplay 元素");
+        logMessage('warn', "[settingsModal] 未找到更新面板中的 #appVersionDisplay 元素");
     }
     // Button listener and status element are handled by setupUpdateSection
 }
 
 async function populateAboutPane() { // Make function async
-    logMessage('debug', "[SettingsModel] 填充关于面板");
+    logMessage('debug', "[settingsModal] 填充关于面板");
     const pane = settingsContent.querySelector('#settingsAbout');
     if (!pane) return;
 
@@ -585,9 +585,9 @@ async function populateAboutPane() { // Make function async
             // getProcessVersions(), // Removed
             getAppVersion()
         ]);
-        logMessage('info', "[SettingsModel] 获取到的 packageInfo:", packageInfo);
-        // logMessage('info', "[SettingsModel] 获取到的 processVersions:", processVersions); // Removed
-        logMessage('info', "[SettingsModel] 获取到的 appVersion:", appVersion);
+        logMessage('info', "[settingsModal] 获取到的 packageInfo:", packageInfo);
+        // logMessage('info', "[settingsModal] 获取到的 processVersions:", processVersions); // Removed
+        logMessage('info', "[settingsModal] 获取到的 appVersion:", appVersion);
 
         // --- 填充 Package Info ---
         if (packageInfo) {
@@ -620,9 +620,9 @@ async function populateAboutPane() { // Make function async
                     feedbackEmailEl.removeAttribute('href');
                 }
             }
-            logMessage('info', "[SettingsModel] package.json 信息已成功显示 (包括链接)");
+            logMessage('info', "[settingsModal] package.json 信息已成功显示 (包括链接)");
         } else {
-            logMessage('warn', "[SettingsModel] getPackageInfo 返回了 null 或 undefined");
+            logMessage('warn', "[settingsModal] getPackageInfo 返回了 null 或 undefined");
             // Set error text for package info fields
             const setErrorText = (el) => { if (el) el.textContent = t('settings.about.loadError'); };
             setErrorText(nameEl);
@@ -635,11 +635,11 @@ async function populateAboutPane() { // Make function async
         // --- 填充 App Version ---
         if (appVersionDisplay) {
             appVersionDisplay.textContent = appVersion || t('settings.updates.versionUnknown');
-            logMessage('info', `[SettingsModel] 应用版本已更新为: ${appVersionDisplay.textContent}`);
+            logMessage('info', `[settingsModal] 应用版本已更新为: ${appVersionDisplay.textContent}`);
         }
 
     } catch (error) {
-        logMessage('error', "[SettingsModel] 填充关于面板时获取信息失败:", error);
+        logMessage('error', "[settingsModal] 填充关于面板时获取信息失败:", error);
         // Set error text for all fields if any promise fails
         const setErrorText = (el) => { if (el) el.textContent = t('settings.about.loadError'); };
         setErrorText(nameEl);
@@ -675,14 +675,14 @@ async function populateAboutPane() { // Make function async
 function renderSourceListForSettings() {
     try {
         if (!dataSourceListEl) {
-            logMessage('error', "[SettingsModel] renderSourceListForSettings 失败：数据源列表元素 (#dataSourceList) 未初始化");
+            logMessage('error', "[settingsModal] renderSourceListForSettings 失败：数据源列表元素 (#dataSourceList) 未初始化");
             // 尝试在 settingsContent 区域显示错误提示，避免页面全白
             if (settingsContent) {
                 settingsContent.innerHTML = `<div class="feedback error" style="display:block;">${t('settings.modelSources.renderError', { message: '数据源列表元素未初始化' })}</div>`;
             }
             return;
         }
-        logMessage('debug', "[SettingsModel] 开始渲染数据源列表");
+        logMessage('debug', "[settingsModal] 开始渲染数据源列表");
 
         clearChildren(dataSourceListEl); // Clear existing list items
 
@@ -761,9 +761,9 @@ function renderSourceListForSettings() {
             item.appendChild(editForm);
             dataSourceListEl.appendChild(item);
         });
-        logMessage('debug', "[SettingsModel] 数据源列表渲染完成");
+        logMessage('debug', "[settingsModal] 数据源列表渲染完成");
     } catch (err) {
-        logMessage('error', "[SettingsModel] 渲染数据源列表时发生异常：", err);
+        logMessage('error', "[settingsModal] 渲染数据源列表时发生异常：", err);
         if (settingsContent) {
             settingsContent.innerHTML = `<div class="feedback error" style="display:block;">${t('settings.modelSources.renderError', { message: err.message })}</div>`;
         }
@@ -773,7 +773,7 @@ function renderSourceListForSettings() {
 /** Handles showing the inline edit form for a data source. */
 function handleEditSourceInline(listItem) {
      if (!listItem) return;
-     logMessage('debug', `[SettingsModel] 显示行内编辑表单: ${listItem.dataset.id}`);
+     logMessage('debug', `[settingsModal] 显示行内编辑表单: ${listItem.dataset.id}`);
      // Hide main content, show edit form
      const mainContent = listItem.querySelector('.source-details-actions');
      const editForm = listItem.querySelector('.edit-form');
@@ -792,13 +792,13 @@ function handleEditSourceInline(listItem) {
 function handleSaveSourceInline(listItem) {
     if (!listItem) return;
     const sourceId = listItem.dataset.id;
-    logMessage('info', `[SettingsModel] 尝试保存行内编辑: ${sourceId}`);
+    logMessage('info', `[settingsModal] 尝试保存行内编辑: ${sourceId}`);
     const editForm = listItem.querySelector('.edit-form');
     if (!editForm) return;
 
     const sourceIndex = tempModelSources.findIndex(s => s.id === sourceId);
     if (sourceIndex === -1) {
-        logMessage('error', `[SettingsModel] 行内保存失败：未找到源 ID ${sourceId}`);
+        logMessage('error', `[settingsModal] 行内保存失败：未找到源 ID ${sourceId}`);
         return;
     }
 
@@ -831,7 +831,7 @@ function handleSaveSourceInline(listItem) {
             const subDirectoryValue = subdirectoryInput.value.trim();
             if (subDirectoryValue && !subDirectoryValue.startsWith('/')) {
                 // TODO: Show validation error within the inline form
-                logMessage('error', `[SettingsModel] 行内保存验证失败 (WebDAV): 子目录必须以 / 开头 - ${subDirectoryValue}`);
+                logMessage('error', `[settingsModal] 行内保存验证失败 (WebDAV): 子目录必须以 / 开头 - ${subDirectoryValue}`);
                 alert(t('settings.validation.subdirectoryInvalidFormat')); // Simple alert for now
                 subdirectoryInput.focus();
                 return; // Stop saving
@@ -850,7 +850,7 @@ function handleSaveSourceInline(listItem) {
     if (readOnlyCheckbox) updatedSource.readOnly = readOnlyCheckbox.checked;
 
     // --- Update temporary state and re-render ---
-    logMessage('debug', `[SettingsModel] 更新后的行内数据:`, updatedSource);
+    logMessage('debug', `[settingsModal] 更新后的行内数据:`, updatedSource);
     tempModelSources[sourceIndex] = updatedSource;
     renderSourceListForSettings(); // Re-render the entire list to reflect changes
 
@@ -863,7 +863,7 @@ function handleSaveSourceInline(listItem) {
 /** Handles canceling the inline edit form. */
 function handleCancelSourceInline(listItem) {
      if (!listItem) return;
-     logMessage('debug', `[SettingsModel] 取消行内编辑: ${listItem.dataset.id}`);
+     logMessage('debug', `[settingsModal] 取消行内编辑: ${listItem.dataset.id}`);
      // Hide edit form, show main content
      const mainContent = listItem.querySelector('.source-details-actions');
      const editForm = listItem.querySelector('.edit-form');
@@ -875,25 +875,25 @@ function handleCancelSourceInline(listItem) {
 
 /** Handles the deletion of a model source from the temporary list. */
 function handleDeleteSource(sourceId) {
-    logMessage('info', `[SettingsModel] 尝试删除临时列表中的数据源: ${sourceId}`);
+    logMessage('info', `[settingsModal] 尝试删除临时列表中的数据源: ${sourceId}`);
     const sourceToDelete = tempModelSources.find(s => s.id === sourceId);
     const sourceName = sourceToDelete?.name || sourceId;
 
     showConfirmationDialog(
         t('settings.modelSources.deleteConfirm', { name: sourceName }),
         () => { // onConfirm callback
-            logMessage('info', `[SettingsModel] 用户确认删除数据源: ${sourceId} (${sourceName})`);
+            logMessage('info', `[settingsModal] 用户确认删除数据源: ${sourceId} (${sourceName})`);
             const index = tempModelSources.findIndex(s => s.id === sourceId);
             if (index !== -1) {
                 tempModelSources.splice(index, 1);
-                logMessage('info', `[SettingsModel] 已从临时列表中删除数据源: ${sourceId}`);
+                logMessage('info', `[settingsModal] 已从临时列表中删除数据源: ${sourceId}`);
                 renderSourceListForSettings(); // Re-render the list
             } else {
-                logMessage('error', `[SettingsModel] 删除失败：在临时列表中未找到数据源 ID: ${sourceId} (确认后)`);
+                logMessage('error', `[settingsModal] 删除失败：在临时列表中未找到数据源 ID: ${sourceId} (确认后)`);
             }
         },
         () => { // onCancel callback
-            logMessage('info', `[SettingsModel] 用户取消删除数据源: ${sourceId} (${sourceName})`);
+            logMessage('info', `[settingsModal] 用户取消删除数据源: ${sourceId} (${sourceName})`);
         } // Closing brace for onCancel callback
     ); // Closing parenthesis for showConfirmationDialog
 } // Closing brace for handleDeleteSource function
@@ -903,10 +903,10 @@ function handleDeleteSource(sourceId) {
 /** Shows the form to add a new data source below the list. */
 function showAddDataSourceForm() {
     if (!addDataSourceFormContainer) {
-        logMessage('error', "[SettingsModel] 无法显示添加表单：容器元素未找到");
+        logMessage('error', "[settingsModal] 无法显示添加表单：容器元素未找到");
         return;
     }
-    logMessage('debug', "[SettingsModel] 显示添加数据源表单");
+    logMessage('debug', "[settingsModal] 显示添加数据源表单");
 
     // Clear previous content and create the form
     clearChildren(addDataSourceFormContainer);
@@ -994,7 +994,7 @@ function showAddDataSourceForm() {
         if (subdirectoryField) {
             subdirectoryField.style.display = isLocal ? 'none' : ''; // Show only for WebDAV
         }
-        logMessage('debug', `[SettingsModel] 添加表单类型切换为: ${event.target.value}`);
+        logMessage('debug', `[settingsModal] 添加表单类型切换为: ${event.target.value}`);
     });
     // Initial setup based on default selection
     const initialIsLocal = typeSelect.value === 'local';
@@ -1029,13 +1029,13 @@ function hideAddDataSourceForm() {
         addDataSourceFormContainer.style.display = 'none';
     }
      if (addDataSourceBtn) addDataSourceBtn.style.display = ''; // Show the main button again
-     logMessage('debug', "[SettingsModel] 隐藏添加数据源表单");
+     logMessage('debug', "[settingsModal] 隐藏添加数据源表单");
 }
 
 /** Handles the submission of the add data source form. */
 function handleAddDataSourceSubmit(event) {
     event.preventDefault(); // Prevent default form submission
-    logMessage('info', "[SettingsModel] 尝试提交添加数据源表单");
+    logMessage('info', "[settingsModal] 尝试提交添加数据源表单");
     const form = event.target;
     const feedbackArea = form.querySelector('#addSourceFeedback');
     clearFeedback(feedbackArea);
@@ -1083,7 +1083,7 @@ function handleAddDataSourceSubmit(event) {
                  throw new Error(t('settings.validation.urlSchemeInvalid')); // Use translation key
             }
         } catch (e) {
-            logMessage('warn', `[SettingsModel] WebDAV URL 验证失败: ${url}`, e.message);
+            logMessage('warn', `[settingsModal] WebDAV URL 验证失败: ${url}`, e.message);
             showFeedback(feedbackArea, t('settings.validation.urlInvalid', { message: e.message }), 'error');
             form.querySelector('#addSourceUrl').focus();
             return;
@@ -1106,7 +1106,7 @@ function handleAddDataSourceSubmit(event) {
         // No need to delete if empty, as it wasn't added in the first place
     }
 
-    logMessage('info', "[SettingsModel] 创建新的数据源对象:", newSource);
+    logMessage('info', "[settingsModal] 创建新的数据源对象:", newSource);
 
     // Add to temporary list and re-render
     tempModelSources.push(newSource);
@@ -1119,20 +1119,20 @@ function handleAddDataSourceSubmit(event) {
     if (paneFeedbackArea) {
         showFeedback(paneFeedbackArea, t('settings.modelSources.addSuccess', { name: newSource.name }), 'success', 2000);
     } else {
-        logMessage('warn', '[SettingsModel] 未找到数据源面板的反馈区域 (#dataSourceFeedbackArea)，无法显示添加成功消息。');
+        logMessage('warn', '[settingsModal] 未找到数据源面板的反馈区域 (#dataSourceFeedbackArea)，无法显示添加成功消息。');
         // Fallback: maybe use alert or log? For now, just log.
     }
 }
 
 /** Handles the cancellation of the add data source form. */
 function handleAddDataSourceCancel() {
-    logMessage('info', "[SettingsModel] 取消添加数据源表单");
+    logMessage('info', "[settingsModal] 取消添加数据源表单");
     hideAddDataSourceForm();
 }
 
 /** Handles the 'Browse...' button click for the add form. */
 async function handleAddBrowse() {
-    logMessage('debug', "[SettingsModel] 点击添加表单的浏览按钮");
+    logMessage('debug', "[settingsModal] 点击添加表单的浏览按钮");
     const pathInput = addDataSourceFormContainer.querySelector('#addSourcePath');
     if (!pathInput) return;
 
@@ -1142,13 +1142,13 @@ async function handleAddBrowse() {
         });
         // Check if a non-empty string path was returned
         if (typeof selectedPath === 'string' && selectedPath.trim() !== '') {
-            logMessage('info', `[SettingsModel] 用户选择的目录 (添加表单): ${selectedPath}`);
+            logMessage('info', `[settingsModal] 用户选择的目录 (添加表单): ${selectedPath}`);
             pathInput.value = selectedPath;
         } else {
-             logMessage('debug', "[SettingsModel] 用户取消了目录选择或未返回有效路径 (添加表单)");
+             logMessage('debug', "[settingsModal] 用户取消了目录选择或未返回有效路径 (添加表单)");
         }
     } catch (error) {
-        logMessage('error', "[SettingsModel] 浏览目录时出错 (添加表单):", error);
+        logMessage('error', "[settingsModal] 浏览目录时出错 (添加表单):", error);
         // Show error feedback in the add form's feedback area
         const feedbackArea = addDataSourceFormContainer.querySelector('#addSourceFeedback');
         if(feedbackArea) {
@@ -1162,10 +1162,10 @@ async function handleAddBrowse() {
 async function handleBrowseInline(listItem) {
      if (!listItem) return;
      const sourceId = listItem.dataset.id;
-     logMessage('debug', `[SettingsModel] 点击行内编辑的浏览按钮: ${sourceId}`);
+     logMessage('debug', `[settingsModal] 点击行内编辑的浏览按钮: ${sourceId}`);
      const pathInput = listItem.querySelector('.edit-form .edit-path');
      if (!pathInput) {
-         logMessage('warn', `[SettingsModel] 未找到 ID ${sourceId} 的行内编辑路径输入框`);
+         logMessage('warn', `[settingsModal] 未找到 ID ${sourceId} 的行内编辑路径输入框`);
          return;
      }
  
@@ -1176,13 +1176,13 @@ async function handleBrowseInline(listItem) {
          });
          // Check if a non-empty string path was returned
          if (typeof selectedPath === 'string' && selectedPath.trim() !== '') {
-            logMessage('info', `[SettingsModel] 用户选择的目录 (行内编辑 ${sourceId}): ${selectedPath}`);
+            logMessage('info', `[settingsModal] 用户选择的目录 (行内编辑 ${sourceId}): ${selectedPath}`);
             pathInput.value = selectedPath;
         } else {
-             logMessage('debug', `[SettingsModel] 用户取消了目录选择或未返回有效路径 (行内编辑 ${sourceId})`);
+             logMessage('debug', `[settingsModal] 用户取消了目录选择或未返回有效路径 (行内编辑 ${sourceId})`);
         }
     } catch (error) {
-        logMessage('error', `[SettingsModel] 浏览目录时出错 (行内编辑 ${sourceId}):`, error);
+        logMessage('error', `[settingsModal] 浏览目录时出错 (行内编辑 ${sourceId}):`, error);
         // Show error feedback within the inline form? Needs a dedicated area or use alert.
         // For now, log it. Consider adding a small feedback span in the inline form later.
         alert(t('settings.browseError', { message: error.message })); // Simple alert for now
@@ -1195,10 +1195,10 @@ async function handleBrowseInline(listItem) {
 /** Handles saving the settings for a specific section/pane. */
 async function handleSaveSection(category, paneElement) {
     if (!paneElement || !currentConfigData) {
-        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：面板元素或当前配置不可用`);
+        logMessage('error', `[settingsModal] 保存分区 ${category} 失败：面板元素或当前配置不可用`);
         return;
     }
-    logMessage('info', `[SettingsModel] 开始保存分区: ${category}`);
+    logMessage('info', `[settingsModal] 开始保存分区: ${category}`);
     const saveButton = paneElement.querySelector('.settings-save-section');
     // Find the dedicated feedback area within the pane using specific IDs where possible
     let feedbackArea;
@@ -1214,7 +1214,7 @@ async function handleSaveSection(category, paneElement) {
         // Fallback for truly unknown sections, though unlikely
         feedbackArea = paneElement.querySelector('.feedback-area');
         if (!feedbackArea) { // Add a specific log if fallback fails
-             logMessage('warn', `[SettingsModel] 未能为未知分区 ${category} 找到通用的 .feedback-area`);
+             logMessage('warn', `[settingsModal] 未能为未知分区 ${category} 找到通用的 .feedback-area`);
         }
     }
     const startTime = Date.now();
@@ -1227,7 +1227,7 @@ async function handleSaveSection(category, paneElement) {
                            category === 'file-recognition' ? '#fileRecognitionFeedbackArea' :
                            category === 'image-cache' ? '#imageCacheFeedbackArea' :
                            '.feedback-area (fallback)'; // Default message part
-        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败：未找到预期的反馈元素 (${expectedId})。`);
+        logMessage('error', `[settingsModal] 保存分区 ${category} 失败：未找到预期的反馈元素 (${expectedId})。`);
         // Optionally show an alert or log, but don't proceed with saving if feedback area is crucial
         // For now, just log and return to prevent further errors using a null feedbackArea
         return;
@@ -1248,15 +1248,15 @@ async function handleSaveSection(category, paneElement) {
             case 'data-sources':
                 // Use the temporary list directly
                 configUpdate.modelSources = tempModelSources;
-                logMessage('debug', `[SettingsModel] 保存数据源:`, configUpdate.modelSources);
+                logMessage('debug', `[settingsModal] 保存数据源:`, configUpdate.modelSources);
                 break;
             case 'general':
                 const langSelect = paneElement.querySelector('#languageSelector');
                 if (langSelect) {
                     configUpdate.locale = langSelect.value;
-                    logMessage('debug', `[SettingsModel] 保存常规设置 - 语言: ${configUpdate.language}`);
+                    logMessage('debug', `[settingsModal] 保存常规设置 - 语言: ${configUpdate.language}`);
                 } else {
-                    logMessage('warn', `[SettingsModel] 保存常规设置失败：未找到 #languageSelector`);
+                    logMessage('warn', `[settingsModal] 保存常规设置失败：未找到 #languageSelector`);
                     // Decide if this should be a validation failure
                 }
                 // Add logic here if other general settings are added in the future
@@ -1268,7 +1268,7 @@ async function handleSaveSection(category, paneElement) {
                     .filter(ext => ext.length > 0 && ext.startsWith('.')); // Basic validation: non-empty and starts with '.'
                 // Further validation could be added here (e.g., regex for valid chars)
                 configUpdate.supportedExtensions = extensionsArray;
-                logMessage('debug', `[SettingsModel] 保存文件识别扩展名:`, configUpdate.supportedExtensions);
+                logMessage('debug', `[settingsModal] 保存文件识别扩展名:`, configUpdate.supportedExtensions);
                 break;
             case 'image-cache':
                 configUpdate.imageCache = { ...(currentConfigData.imageCache || {}) }; // Start with existing cache settings
@@ -1281,7 +1281,7 @@ async function handleSaveSection(category, paneElement) {
                 // Validate Size
                 if (isNaN(size) || size < 0) {
                     const errorMsg = t('settings.validation.sizeError');
-                    logMessage('error', `[SettingsModel] 保存图片缓存失败：大小验证错误 - ${errorMsg}`);
+                    logMessage('error', `[settingsModal] 保存图片缓存失败：大小验证错误 - ${errorMsg}`);
                     showFeedback(feedbackArea, errorMsg, 'error');
                     sizeInput?.focus();
                     validationFailed = true;
@@ -1290,7 +1290,7 @@ async function handleSaveSection(category, paneElement) {
                 // Validate Quality
                 if (isNaN(quality) || quality < 0 || quality > 100) {
                     const errorMsg = t('settings.validation.qualityError'); // Need to add this key to locales
-                    logMessage('error', `[SettingsModel] 保存图片缓存失败：质量验证错误 - ${errorMsg}`);
+                    logMessage('error', `[settingsModal] 保存图片缓存失败：质量验证错误 - ${errorMsg}`);
                     // Show feedback only if size validation passed or focus quality input
                     if (!validationFailed) {
                         showFeedback(feedbackArea, errorMsg, 'error');
@@ -1304,17 +1304,17 @@ async function handleSaveSection(category, paneElement) {
                     configUpdate.imageCache.compressQuality = quality;
                     // preferredFormat is saved separately via handleFormatChange
                 }
-                logMessage('debug', `[SettingsModel] 保存图片缓存设置 (大小和质量):`, configUpdate.imageCache);
+                logMessage('debug', `[settingsModal] 保存图片缓存设置 (大小和质量):`, configUpdate.imageCache);
                 break;
             // Updates and About typically don't have save buttons
             default:
-                logMessage('warn', `[SettingsModel] 未知的保存分区: ${category}`);
+                logMessage('warn', `[settingsModal] 未知的保存分区: ${category}`);
                 return; // Don't proceed if category is unknown
         } // End of switch(category)
 
         // --- Perform validation check AFTER collecting data from the switch ---
         if (validationFailed) {
-             logMessage('error', `[SettingsModel] 保存分区 ${category} 因验证失败而中止`);
+             logMessage('error', `[settingsModal] 保存分区 ${category} 因验证失败而中止`);
              throw new Error(t('settings.validation.failed')); // Throw error to be caught by outer catch block
         }
 
@@ -1335,23 +1335,23 @@ async function handleSaveSection(category, paneElement) {
          }
 
 
-        logMessage('info', `[SettingsModel] 调用 API 保存配置 (分区: ${category})`, fullConfigToSend);
+        logMessage('info', `[settingsModal] 调用 API 保存配置 (分区: ${category})`, fullConfigToSend);
         const apiStartTime = Date.now();
         await saveConfig(fullConfigToSend); // Send the merged full config
         const apiDuration = Date.now() - apiStartTime;
-        logMessage('info', `[SettingsModel] API 保存配置成功 (分区: ${category}), 耗时: ${apiDuration}ms`);
+        logMessage('info', `[settingsModal] API 保存配置成功 (分区: ${category}), 耗时: ${apiDuration}ms`);
 
         // Update our local copy of the config
         currentConfigData = fullConfigToSend;
 
         const duration = Date.now() - startTime;
-        logMessage('info', `[SettingsModel] 分区 ${category} 保存成功, 总耗时: ${duration}ms`);
+        logMessage('info', `[settingsModal] 分区 ${category} 保存成功, 总耗时: ${duration}ms`);
         showFeedback(feedbackArea, t('settings.saveSectionSuccess'), 'success', 2000); // Use the found feedbackArea
         // Optionally close Model after saving a section? Or just show feedback.
 
     } catch (error) {
         const duration = Date.now() - startTime;
-        logMessage('error', `[SettingsModel] 保存分区 ${category} 失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
+        logMessage('error', `[settingsModal] 保存分区 ${category} 失败, 总耗时: ${duration}ms`, error.message, error.stack, error);
         // Show feedback only if validation didn't already (check the specific feedbackArea)
         if (!feedbackArea.classList.contains('feedback-error')) { // Check class on the feedbackArea itself
              showFeedback(feedbackArea, t('settings.saveError', { message: error.message }), 'error'); // Use the found feedbackArea
@@ -1374,20 +1374,20 @@ async function handleLanguageChange(event) {
     // Store the currently active category *before* potential UI changes
     const activeNav = settingsNav?.querySelector('a.nav-item.active');
     const activeCategoryBeforeChange = activeNav?.dataset.category;
-    logMessage('debug', `[SettingsModel] Active category before language change: ${activeCategoryBeforeChange}`);
+    logMessage('debug', `[settingsModal] Active category before language change: ${activeCategoryBeforeChange}`);
 
     if (newLocale !== currentLocale) {
         setLoading(true); // Show loading indicator
         const generalPaneBefore = settingsContent?.querySelector('#settingsGeneral');
-        logMessage('debug', `[SettingsModel] Before loadLocale/updateUI, #settingsGeneral innerHTML: ${generalPaneBefore?.innerHTML?.substring(0, 100)}...`);
+        logMessage('debug', `[settingsModal] Before loadLocale/updateUI, #settingsGeneral innerHTML: ${generalPaneBefore?.innerHTML?.substring(0, 100)}...`);
         try {
-            logMessage('info', `[SettingsModel] 调用 loadLocale 加载新语言: ${newLocale}`);
+            logMessage('info', `[settingsModal] 调用 loadLocale 加载新语言: ${newLocale}`);
             await loadLocale(newLocale); // Re-enable save on language change (default is true)
-            logMessage('info', `[SettingsModel] loadLocale 完成，调用 updateUIWithTranslations 更新 UI`);
+            logMessage('info', `[settingsModal] loadLocale 完成，调用 updateUIWithTranslations 更新 UI`);
             updateUIWithTranslations(); // Update the entire UI
-            logMessage('info', `[SettingsModel] 语言切换和 UI 更新成功: ${newLocale}`);
+            logMessage('info', `[settingsModal] 语言切换和 UI 更新成功: ${newLocale}`);
             const generalPaneAfter = settingsContent?.querySelector('#settingsGeneral');
-            logMessage('debug', `[SettingsModel] After loadLocale/updateUI, #settingsGeneral innerHTML: ${generalPaneAfter?.innerHTML?.substring(0, 100)}...`);
+            logMessage('debug', `[settingsModal] After loadLocale/updateUI, #settingsGeneral innerHTML: ${generalPaneAfter?.innerHTML?.substring(0, 100)}...`);
             // Update the dropdown in settings if it's open
             const langSelect = settingsContent?.querySelector('#settingsLanguageSelect'); // Corrected ID based on HTML
             if (langSelect) {
@@ -1400,10 +1400,10 @@ async function handleLanguageChange(event) {
                 showFeedback(feedbackArea, t('settings.general.changeSuccess', { lang: newLocale }), 'info', 1500); // Pass feedbackArea instead of generalPane
             } else if (generalPane) {
                 // Fallback or log error if feedback area is missing
-                 logMessage('warn', '[SettingsModel] #generalFeedbackArea not found in #settingsGeneral. Cannot display language change feedback.');
+                 logMessage('warn', '[settingsModal] #generalFeedbackArea not found in #settingsGeneral. Cannot display language change feedback.');
             }
         } catch (error) {
-            logMessage('error', `[SettingsModel] 切换语言失败: ${newLocale}`, error.message, error.stack);
+            logMessage('error', `[settingsModal] 切换语言失败: ${newLocale}`, error.message, error.stack);
              const generalPane = settingsContent?.querySelector('#settingsGeneral');
              if (generalPane) {
                  showFeedback(generalPane, t('settings.general.changeError', { message: error.message }), 'error');
@@ -1425,26 +1425,26 @@ async function handleLanguageChange(event) {
                     });
                     // Then ensure the target pane is visible
                     targetPane.style.display = ''; // Reset to default (usually block or flex)
-                    logMessage('info', `[SettingsModel] 语言切换后，已确保面板 '${activeCategoryBeforeChange}' 可见`);
+                    logMessage('info', `[settingsModal] 语言切换后，已确保面板 '${activeCategoryBeforeChange}' 可见`);
                 } else {
-                    logMessage('warn', `[SettingsModel] 语言切换后，无法找到目标面板: ${activeCategoryBeforeChange}`);
+                    logMessage('warn', `[settingsModal] 语言切换后，无法找到目标面板: ${activeCategoryBeforeChange}`);
                     // Fallback: maybe show the default 'data-sources' pane?
                     switchSettingsTab('data-sources');
                 }
             } else {
-                 logMessage('warn', `[SettingsModel] 语言切换后，无法确定先前活动的面板类别`);
+                 logMessage('warn', `[settingsModal] 语言切换后，无法确定先前活动的面板类别`);
                  // Fallback: show default
                  switchSettingsTab('data-sources');
             }
             // --- End of visibility fix ---
 
             const generalPaneFinal = settingsContent?.querySelector('#settingsGeneral');
-            logMessage('debug', `[SettingsModel] handleLanguageChange finally #settingsGeneral display: ${generalPaneFinal?.style.display}, innerHTML: ${generalPaneFinal?.innerHTML?.substring(0,100)}...`);
+            logMessage('debug', `[settingsModal] handleLanguageChange finally #settingsGeneral display: ${generalPaneFinal?.style.display}, innerHTML: ${generalPaneFinal?.innerHTML?.substring(0,100)}...`);
         }
         // This log might be less relevant now as we explicitly set the display style above
-        // logMessage('debug', `[SettingsModel] handleLanguageChange 结束时 #settingsGeneral display: ${settingsContent?.querySelector('#settingsGeneral')?.style.display}, innerHTML: ${settingsContent?.querySelector('#settingsGeneral')?.innerHTML?.substring(0,100)}...`);
+        // logMessage('debug', `[settingsModal] handleLanguageChange 结束时 #settingsGeneral display: ${settingsContent?.querySelector('#settingsGeneral')?.style.display}, innerHTML: ${settingsContent?.querySelector('#settingsGeneral')?.innerHTML?.substring(0,100)}...`);
     } else {
-        logMessage('debug', '[SettingsModel] 选择的语言与当前语言相同，无需操作');
+        logMessage('debug', '[settingsModal] 选择的语言与当前语言相同，无需操作');
     }
 }
 
@@ -1453,7 +1453,7 @@ async function handleLanguageChange(event) {
 /** Handles the click event for the "Clear Image Cache" button. */
 async function handleClearImageCache() {
     if (!clearImageCacheBtn || !clearCacheStatusEl) {
-        logMessage('error', "[SettingsModel] 清除缓存失败：按钮或状态元素未找到");
+        logMessage('error', "[settingsModal] 清除缓存失败：按钮或状态元素未找到");
         return;
     }
     logMessage('info', "[UI] 点击了清除图片缓存按钮");
@@ -1463,23 +1463,23 @@ async function handleClearImageCache() {
     clearCacheStatusEl.className = 'status-message info'; // Use info class
 
     try {
-        logMessage('info', "[SettingsModel] 调用 clearImageCache API...");
+        logMessage('info', "[settingsModal] 调用 clearImageCache API...");
         const result = await clearImageCache(); // Call the imported async function
-        logMessage('info', "[SettingsModel] clearImageCache API 返回结果:", result);
+        logMessage('info', "[settingsModal] clearImageCache API 返回结果:", result);
 
         if (result.success) {
             clearCacheStatusEl.textContent = t('settings.imageCache.clearSuccess');
             clearCacheStatusEl.className = 'status-message success';
-            logMessage('info', '[SettingsModel] 图片缓存已成功清除。');
+            logMessage('info', '[settingsModal] 图片缓存已成功清除。');
             // Optionally update cache size display if available
         } else {
             const errorMessage = result.error || t('settings.imageCache.unknownError'); // Use unknown error key as fallback
             clearCacheStatusEl.textContent = t('settings.imageCache.clearError', { message: errorMessage });
             clearCacheStatusEl.className = 'status-message error';
-            logMessage('error', `[SettingsModel] 清除图片缓存失败: ${errorMessage}`);
+            logMessage('error', `[settingsModal] 清除图片缓存失败: ${errorMessage}`);
         }
     } catch (error) {
-        logMessage('error', "[SettingsModel] 调用 clearImageCache 时发生意外错误:", error.message, error.stack);
+        logMessage('error', "[settingsModal] 调用 clearImageCache 时发生意外错误:", error.message, error.stack);
         clearCacheStatusEl.textContent = t('settings.imageCache.clearError', { message: error.message });
         clearCacheStatusEl.className = 'status-message error';
     } finally {
@@ -1502,7 +1502,7 @@ async function handleClearImageCache() {
 function setupUpdateSection() {
     const pane = settingsContent.querySelector('#settingsUpdates');
     if (!pane) {
-        logMessage('warn', "[SettingsModel] 无法设置更新部分：面板未找到");
+        logMessage('warn', "[settingsModal] 无法设置更新部分：面板未找到");
         return;
     }
 
@@ -1510,7 +1510,7 @@ function setupUpdateSection() {
     checkUpdatesBtn = pane.querySelector('#checkUpdatesBtn'); // Corrected ID
 
     if (!updateStatusInfoEl || !checkUpdatesBtn) {
-        logMessage('error', "[SettingsModel] 初始化更新 UI 失败：状态 (#updateStatusInfo) 或按钮 (#checkUpdatesBtn) 元素在更新面板中未找到");
+        logMessage('error', "[settingsModal] 初始化更新 UI 失败：状态 (#updateStatusInfo) 或按钮 (#checkUpdatesBtn) 元素在更新面板中未找到");
         return;
     }
 
@@ -1525,7 +1525,7 @@ function setupUpdateSection() {
         unsubscribeUpdateStatus = null; // Reset before re-subscribing
     }
     unsubscribeUpdateStatus = onUpdateStatus(handleUpdateStatus);
-    logMessage('info', "[SettingsModel] 已订阅更新状态事件 (更新面板激活)");
+    logMessage('info', "[settingsModal] 已订阅更新状态事件 (更新面板激活)");
 
     // Optionally, trigger a status check or display current known status here?
     // For now, it relies on the main process sending status updates.
@@ -1545,7 +1545,7 @@ function handleUpdateButtonClick() {
     const currentUpdateStatusInfoEl = aboutPane?.querySelector('#updateStatusInfo');
 
     if (!currentCheckUpdatesBtn || !currentUpdateStatusInfoEl) {
-        logMessage('error', "[SettingsModel] handleUpdateButtonClick 失败：无法在 #settingsAbout 面板中找到更新按钮 (#checkUpdatesBtn) 或状态元素 (#updateStatusInfo)。");
+        logMessage('error', "[settingsModal] handleUpdateButtonClick 失败：无法在 #settingsAbout 面板中找到更新按钮 (#checkUpdatesBtn) 或状态元素 (#updateStatusInfo)。");
         return;
     }
 
@@ -1555,7 +1555,7 @@ function handleUpdateButtonClick() {
     switch (action) {
         case 'check':
             checkForUpdate().catch(err => {
-                logMessage('error', "[SettingsModel] 调用 checkForUpdate 失败:", err);
+                logMessage('error', "[settingsModal] 调用 checkForUpdate 失败:", err);
                 currentUpdateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message });
             });
             break;
@@ -1567,7 +1567,7 @@ function handleUpdateButtonClick() {
             currentUpdateStatusInfoEl.textContent = t('settings.updates.statusDownloading'); // Use correct key
 
             downloadUpdate().catch(err => {
-                logMessage('error', "[SettingsModel] 调用 downloadUpdate 失败:", err);
+                logMessage('error', "[settingsModal] 调用 downloadUpdate 失败:", err);
                 currentUpdateStatusInfoEl.textContent = t('settings.updates.statusError', { message: err.message }); // Need downloadError key
                 // Re-enable button or revert state? Maybe revert to 'available' state?
                 handleUpdateStatus({ status: 'available', info: {} }); // Revert to available state on download error
@@ -1575,15 +1575,15 @@ function handleUpdateButtonClick() {
             break;
         case 'install':
             quitAndInstall().catch(err => {
-                logMessage('error', "[SettingsModel] 调用 quitAndInstall 失败:", err);
+                logMessage('error', "[settingsModal] 调用 quitAndInstall 失败:", err);
                 currentUpdateStatusInfoEl.textContent = t('settings.updates.installError', { message: err.message });
             });
             break;
         default:
-            logMessage('warn', `[SettingsModel] 未知的更新按钮操作: ${action}`);
+            logMessage('warn', `[settingsModal] 未知的更新按钮操作: ${action}`);
             // Optionally default to check for updates
             checkForUpdate().catch(err => {
-                logMessage('error', "[SettingsModel] 调用 checkForUpdate (默认) 失败:", err);
+                logMessage('error', "[settingsModal] 调用 checkForUpdate (默认) 失败:", err);
                 currentUpdateStatusInfoEl.textContent = t('settings.updates.checkError', { message: err.message });
             });
             break;
@@ -1602,12 +1602,12 @@ function handleUpdateStatus(status, ...args) {
     const currentCheckUpdatesBtn = settingsContent?.querySelector('#settingsAbout #checkUpdatesBtn');
 
     if (!currentUpdateStatusInfoEl || !currentCheckUpdatesBtn) {
-        logMessage('warn', `[SettingsModel] 无法处理更新状态 '${status}'：更新面板的 UI 元素 (#updateStatusInfo 或 #checkUpdatesBtn) 不可用`);
+        logMessage('warn', `[settingsModal] 无法处理更新状态 '${status}'：更新面板的 UI 元素 (#updateStatusInfo 或 #checkUpdatesBtn) 不可用`);
         // If the pane isn't visible, we might not want to log an error, just ignore.
         return;
     }
     // Log the entire status object for better debugging
-    logMessage('info', `[SettingsModel] 收到更新状态对象:`, status, args);
+    logMessage('info', `[settingsModal] 收到更新状态对象:`, status, args);
 
     // Use the current references
     updateStatusInfoEl = currentUpdateStatusInfoEl; // Update module-level reference
@@ -1656,7 +1656,7 @@ function handleUpdateStatus(status, ...args) {
         case 'error':
             const error = status.info; // Assuming error info is in status.info
             const errorMessage = error instanceof Error ? error.message : String(error || t('settings.updates.unknownError')); // Use correct key path
-            logMessage('error', `[SettingsModel] 更新过程中发生错误: ${errorMessage}`, error);
+            logMessage('error', `[settingsModal] 更新过程中发生错误: ${errorMessage}`, error);
             updateStatusInfoEl.textContent = t('settings.updates.statusError', { message: errorMessage });
             checkUpdatesBtn.disabled = false; // Re-enable check button on error
             checkUpdatesBtn.textContent = t('settings.updates.checkButton');
@@ -1664,7 +1664,7 @@ function handleUpdateStatus(status, ...args) {
             break;
         default:
             // Log the entire status object for better debugging
-            logMessage('warn', `[SettingsModel] 未处理的更新状态对象:`, status);
+            logMessage('warn', `[settingsModal] 未处理的更新状态对象:`, status);
             updateStatusInfoEl.textContent = t('settings.updates.statusIdle'); // Reset to idle
             checkUpdatesBtn.disabled = false;
             checkUpdatesBtn.textContent = t('settings.updates.checkButton');

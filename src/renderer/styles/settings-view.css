@@ -1,5 +1,5 @@
 /* Settings Model Specific Styles */
-.settings-Model-content {
+.settings-Modal-content {
   width: 80vw; /* Wider Model for settings */
   max-width: 900px;
   height: 70vh; /* Taller Model */
@@ -9,7 +9,7 @@
   padding: 0; /* Remove padding to allow full control */
 }
 
-.settings-Model-content .Model-title {
+.settings-Modal-content .Model-title {
   padding: 15px 20px; /* Add padding back to title */
   border-bottom: 1px solid var(--border-color); /* Separator */
   margin-bottom: 0; /* Remove default margin */
@@ -159,7 +159,7 @@
 }
 
 /* Hide original Model actions if needed, or repurpose */
-/* #settingsModel .Model-actions { display: none; } */
+/* #settingsModal .Model-actions { display: none; } */
 
 /* Ensure buttons have consistent styling */
 /* 按钮样式全部继承 main.css，避免冲突，仅保留 btn-sm 微调 */
@@ -169,7 +169,7 @@
 }
 
 /* Adjust close button position */
-.settings-Model-content .Model-close {
+.settings-Modal-content .Model-close {
     position: absolute;
     top: 10px;
     right: 15px;
@@ -180,7 +180,7 @@
     color: var(--text-color-muted);
     cursor: pointer;
 }
-.settings-Model-content .Model-close:hover {
+.settings-Modal-content .Model-close:hover {
     color: var(--text-color);
 }
 /* --- Data Source Specific Enhancements --- */

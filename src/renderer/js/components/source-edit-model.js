@@ -339,7 +339,7 @@ function handleSourceEditFormSubmit(event) {
 
     // --- Call the Save Callback ---
     logMessage('info', `[SourceEditModel] 验证通过，调用保存回调函数，数据:`, newSourceData);
-    // The callback provided by settings-Model will handle updating the temp list
+    // The callback provided by settings-modal will handle updating the temp list
     _onSaveCallback(newSourceData);
 
     closeSourceEditModel(); // Close the Model on successful save

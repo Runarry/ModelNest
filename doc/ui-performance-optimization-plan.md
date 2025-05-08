@@ -46,7 +46,7 @@
             *   将填充好的DOM片段追加到 `detailDescriptionContainer`。
             *   事件监听（如标签页切换、保存按钮）在稳定的父元素上进行委托，或者在克隆并填充内容后，针对性地添加到必要的元素上。
 
-### 3.2. 设置页弹窗 - 数据源部分 ([`src/renderer/js/components/settings-model.js`](src/renderer/js/components/settings-model.js))
+### 3.2. 设置页弹窗 - 数据源部分 ([`src/renderer/js/components/settings-modal.js`](src/renderer/js/components/settings-modal.js))
 
 *   **核心策略：对数据源列表采用增量DOM更新，对添加/编辑表单可考虑模板克隆或DOM API构建。**
     *   **目标**：优化数据源列表的渲染，特别是当数据源数量较多时。
