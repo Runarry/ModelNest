@@ -656,8 +656,8 @@ select:hover {
   padding-top: 0;
   height: 100%;
   /* Take full height */
-  overflow-y: auto;
-  /* Enable vertical scrolling ONLY for this area */
+  /* overflow-y: auto; <-- REMOVED: Scrolling is handled by the inner virtual scroll container */
+  overflow: hidden; /* Prevent this container itself from scrolling */
   scrollbar-gutter: stable;
   /* Reserve space for scrollbar to prevent layout shifts */
   scroll-behavior: smooth;

@@ -1,435 +1,441 @@
 import { clearChildren, setLoading, imageObserver, loadImage } from '../utils/ui-utils.js';
-import { t } from '../core/i18n.js'; // 导入 i18n 函数
-import { logMessage, listModels, listSubdirectories,getAllSourceConfigs } from '../apiBridge.js'; // 导入 API 桥接
-import { CrawlStatusModal } from './crawl-status-modal.js'; // 导入弹窗组件 (稍后创建)
-import FilterPanel from './filter-panel.js'; // New: Import FilterPanel component
+import { t } from '../core/i18n.js';
+import { logMessage, listModels, listSubdirectories, getAllSourceConfigs } from '../apiBridge.js';
+import { CrawlStatusModal } from './crawl-status-modal.js';
+import FilterPanel from './filter-panel.js';
 import { BlobUrlCache } from '../core/blobUrlCache.js';
+import { VirtualScroll } from 'js-booster'; // Assuming js-booster is available
 
 // ===== DOM Element References =====
-// These might be passed during initialization or queried within functions
 let sourceSelect;
-// let filterSelect; // This will be removed/phased out - REMOVED
-let openFilterPanelBtn; // New: Button to open the filter panel
-let filterPanelContainer; // New: Container for the FilterPanel component
+let openFilterPanelBtn;
+let filterPanelContainer;
 let modelList;
 let cardViewBtn;
 let listViewBtn;
-let directoryTabsContainer; // The container for directory tabs (e.g., '.directory-tabs')
-let crawlInfoButton; // 新增：补全模型信息按钮
-let sourceReadonlyIndicator; // 新增：只读状态指示器
+let directoryTabsContainer;
+let crawlInfoButton;
+let sourceReadonlyIndicator;
 
 // ===== Module State =====
 let models = [];
-// let filterType = ''; // This will be removed/phased out - REMOVED
-let currentAppliedFilters = { baseModel: [], modelType: [] }; // New: Applied filters
-let filterPanelInstance = null; // New: Instance of FilterPanel
+let currentAppliedFilters = { baseModel: [], modelType: [] };
+let filterPanelInstance = null;
 let displayMode = 'card'; // 'card' or 'list'
-let currentDirectory = null; // Currently selected directory
-let subdirectories = []; // List of subdirectories for the current source
-let currentSourceId = null; // Keep track of the currently selected source ID
-let allSourceConfigs = []; // 新增：存储所有数据源的完整配置
-let currentSourceConfig = null; // 新增：存储当前选定数据源的配置
-let crawlStatusModal = null; // 新增：弹窗实例
-let cachedFilterOptionsBySource = {}; // New: Cache for filter options, keyed by sourceId
-let globalTagsTooltip = null; // For the global tags tooltip
+let currentDirectory = null;
+let subdirectories = [];
+let currentSourceId = null;
+let allSourceConfigs = [];
+let currentSourceConfig = null;
+let crawlStatusModal = null;
+let globalTagsTooltip = null;
+
+// ===== Virtual Scroll State & Constants =====
+let virtualScrollInstance = null;
+let cardViewResizeObserver = null;
+
+// Card View Constants
+const CARD_APPROX_WIDTH = 180;
+const CARD_HEIGHT = 374;
+const HORIZONTAL_CARD_GAP = 12;
+const VERTICAL_ROW_GAP = 12;
+const CARD_ROW_ITEM_HEIGHT = CARD_HEIGHT + VERTICAL_ROW_GAP;
+
+// List View Constants
+const LIST_ITEM_HEIGHT = 70; // Example height for a list item, adjust as needed
 
 // ===== Initialization =====
-
-/**
- * Initializes the main view module, setting up references and event listeners.
- * @param {object} config - Configuration object.
- * @param {string} config.sourceSelectId - ID of the source select element.
- * @param {string} config.filterSelectId - ID of the filter select element. (Will be removed)
- * @param {string} config.openFilterPanelBtnId - ID of the button to open the filter panel.
- * @param {string} config.filterPanelContainerId - ID of the container for the filter panel.
- * @param {string} config.modelListId - ID of the model list container.
- * @param {string} config.cardViewBtnId - ID of the card view button.
- * @param {string} config.listViewBtnId - ID of the list view button.
- * @param {string} config.directoryTabsSelector - Selector for the directory tabs container.
- * @param {string} config.crawlInfoButtonId - ID of the crawl info button.
- * @param {string} config.sourceReadonlyIndicatorId - ID of the source readonly indicator span.
- * @param {function} showDetailCallback - Callback function to show model details.
- */
 export function initMainView(config, showDetailCallback) {
     sourceSelect = document.getElementById(config.sourceSelectId);
-    // filterSelect = document.getElementById(config.filterSelectId); // To be removed - REMOVED
     openFilterPanelBtn = document.getElementById(config.openFilterPanelBtnId);
     filterPanelContainer = document.getElementById(config.filterPanelContainerId);
     modelList = document.getElementById(config.modelListId);
     cardViewBtn = document.getElementById(config.cardViewBtnId);
     listViewBtn = document.getElementById(config.listViewBtnId);
     directoryTabsContainer = document.querySelector(config.directoryTabsSelector);
-    crawlInfoButton = document.getElementById(config.crawlInfoButtonId); // 获取按钮
-    sourceReadonlyIndicator = document.getElementById(config.sourceReadonlyIndicatorId); // 获取只读指示器
+    crawlInfoButton = document.getElementById(config.crawlInfoButtonId);
+    sourceReadonlyIndicator = document.getElementById(config.sourceReadonlyIndicatorId);
 
-    // Updated error check to remove filterSelect
     if (!sourceSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton || !sourceReadonlyIndicator || !openFilterPanelBtn || !filterPanelContainer) {
-        // Task 1: Error Logging
-        logMessage('error', "[MainView] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置中的 ID/选择器:", config);
+        logMessage('error', "[MainView] Initialization failed: DOM elements missing.", config);
         return;
     }
 
-    // Attach event listeners
-    sourceSelect.addEventListener('change', handleSourceChange); // Logged within handler
-    // filterSelect.addEventListener('change', handleFilterChange); // Old filter - REMOVED
-
-
-    // 事件委托：在 modelList 上监听点击事件
-    modelList.addEventListener('click', (event) => {
-        const cardElement = event.target.closest('.model-card');
-        if (cardElement && cardElement.dataset.modelFile) {
-            // 注意：dataset.modelFile 存储的是字符串化的 model.file
-            const modelFile = JSON.parse(cardElement.dataset.modelFile);
-            const model = models.find(m => m.file === modelFile);
-            if (model && _showDetail) {
-                logMessage('info', `[UI] 点击了模型卡片 (通过事件委托): ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
-                const isReadOnly = currentSourceConfig?.readOnly === true;
-                _showDetail(model, currentSourceId, isReadOnly);
-            }
-        }
-    });
-
-    // 事件委托：处理 tags tooltip
+    sourceSelect.addEventListener('change', handleSourceChange);
+    modelList.addEventListener('click', handleModelClick);
     modelList.addEventListener('mouseover', handleModelListMouseOverForTagsTooltip);
     modelList.addEventListener('mouseout', handleModelListMouseOutOfTagsTooltip);
-
-    openFilterPanelBtn.addEventListener('click', async () => {
-        logMessage('info', '[UI] 点击了打开/关闭筛选面板按钮');
-        if (filterPanelInstance) {
-            if (filterPanelContainer.style.display != 'block')
-            {
-                await filterPanelInstance.updateOptions(currentSourceId);
-            }
-            filterPanelInstance.toggle();
-            // After toggling, check visibility to add/remove outside click listener
-            if (filterPanelContainer.style.display === 'block') {
-                document.addEventListener('mousedown', handleOutsideClickForFilterPanel);
-                logMessage('debug', '[MainView] Filter panel shown, added outside click listener.');
-              
-            } else {
-                document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
-                logMessage('debug', '[MainView] Filter panel hidden, removed outside click listener.');
-            }
-        } else {
-            // 首次点击时初始化 filter-panel，初始化完成后再显示
-            try {
-                filterPanelInstance = new FilterPanel(
-                    filterPanelContainer.id,
-                    handleFiltersApplied,
-                    null
-                );
-                // 先隐藏，等 options 加载后再显示
-                filterPanelInstance.hide();
-                logMessage('info', '[MainView] 首次点击已初始化 FilterPanel，开始加载筛选项...');
-                // 异步加载 filter options，加载完成后再显示
-                await filterPanelInstance.updateOptions(currentSourceId);
-                filterPanelInstance.show();
-                document.addEventListener('mousedown', handleOutsideClickForFilterPanel);
-                logMessage('debug', '[MainView] 首次点击后 FilterPanel 初始化并显示，已添加 outside click listener。');
-            } catch (error) {
-                logMessage('error', '[MainView] 首次点击初始化 FilterPanel 失败:', error.message, error.stack);
-                filterPanelInstance = null;
-            }
-        }
-    });
-
-    // Task 4: Click Event Logging
-    cardViewBtn.addEventListener('click', () => {
-        logMessage('info', '[UI] 点击了卡片视图按钮');
-        switchViewMode('card');
-    });
-    listViewBtn.addEventListener('click', () => {
-        logMessage('info', '[UI] 点击了列表视图按钮');
-        switchViewMode('list');
-    });
+    openFilterPanelBtn.addEventListener('click', toggleFilterPanel);
+    cardViewBtn.addEventListener('click', () => switchViewMode('card'));
+    listViewBtn.addEventListener('click', () => switchViewMode('list'));
     crawlInfoButton.addEventListener('click', () => {
-        logMessage('info', '[UI] 点击了补全模型信息按钮');
-        if (crawlStatusModal) {
-            // 传递当前数据源 ID 和目录给弹窗
-            crawlStatusModal.show(currentSourceId, currentDirectory);
-        }
+        if (crawlStatusModal) crawlStatusModal.show(currentSourceId, currentDirectory);
     });
 
-    // Set initial active view button
-    if (displayMode === 'card') {
-        cardViewBtn.classList.add('active');
-        listViewBtn.classList.remove('active');
-    } else {
-        listViewBtn.classList.add('active');
-        cardViewBtn.classList.remove('active');
-    }
-
-    // Store the callback for showing details
+    updateViewModeButtons();
     _showDetail = showDetailCallback;
-
-    // 初始化弹窗实例 (稍后创建 CrawlStatusModal 类)
     crawlStatusModal = new CrawlStatusModal();
+    setupGlobalTagsTooltip();
 
-    // 初始化新的筛选面板实例 (使用导入的类，并传入可能的缓存选项)
-    // 延后 FilterPanel 的初始化到模型加载和主页面渲染完毕后
-    filterPanelInstance = null;
-
-    // Create and append the global tags tooltip
-    globalTagsTooltip = document.createElement('div');
-    globalTagsTooltip.className = 'global-tags-tooltip'; // Will be styled in CSS
-    globalTagsTooltip.style.display = 'none'; // Initially hidden
-    globalTagsTooltip.style.position = 'absolute'; // For positioning near mouse/element
-    globalTagsTooltip.style.zIndex = '1001'; // Ensure it's on top (higher than card-view z-index if any)
-    document.body.appendChild(globalTagsTooltip);
-
-    // Initial fetch of filter options will be triggered by the first call to loadModels
-    // (e.g., via handleSourceChange after renderSources sets an initial source)
-}
-
-// Internal reference to the showDetail function provided by the main module
-let _showDetail = (model) => {
-    logMessage('warn', "showDetailCallback not initialized in main-view.js");
-};
-
-
-// Callback function for FilterPanel
-function handleFiltersApplied(newFilters) {
-    logMessage('info', '[MainView] Filters applied from panel:', newFilters);
-    currentAppliedFilters = newFilters || { baseModel: [], modelType: [] }; // Ensure it's always an object
-    // Reload models with the new filters for the current source and directory
-    if (currentSourceId) {
-        loadModels(currentSourceId, currentDirectory);
+    if (window.ResizeObserver && typeof VirtualScroll !== 'undefined') {
+        cardViewResizeObserver = new ResizeObserver(entries => {
+            for (let entry of entries) {
+                if (entry.target === modelList && displayMode === 'card') { // Only for card view resize
+                    logMessage('debug', '[MainView] modelList resized (card view), re-calculating virtual scroll.');
+                    setupOrUpdateVirtualScroll();
+                }
+            }
+        });
+        cardViewResizeObserver.observe(modelList);
     } else {
-        logMessage('warn', '[MainView] Cannot apply filters: currentSourceId is not set.');
+        logMessage('warn', '[MainView] ResizeObserver or VirtualScroll not available.');
+    }
+
+    // Initial setup for virtual scroll based on current displayMode
+    if (typeof VirtualScroll !== 'undefined') {
+        setupOrUpdateVirtualScroll();
     }
 }
 
-// ===== Click Outside Handler for Filter Panel =====
-/**
- * Handles clicks outside the filter panel to close it.
- * @param {MouseEvent} event - The mousedown event.
- */
+let _showDetail = (model) => logMessage('warn', "showDetailCallback not initialized.");
+
+function handleModelClick(event) {
+    // Find the closest row container first, then get the model file
+    const rowElement = event.target.closest('.list-item-row, .virtual-scroll-row'); // Card rows also have this class now
+    if (!rowElement) return;
+
+    // Find the interactive element within the row (card or list item structure)
+    const targetElement = rowElement.querySelector('.model-card, [data-model-file]'); // Prefer specific inner element if possible
+
+    // Use dataset from the row as fallback if inner element not found or lacks dataset
+    const modelFileStr = targetElement?.dataset.modelFile || rowElement.dataset.modelFile;
+
+    if (modelFileStr) {
+        try {
+            const modelFile = JSON.parse(modelFileStr);
+            // Find model in the flat 'models' array
+            const model = models.find(m => JSON.stringify(m.file) === JSON.stringify(modelFile));
+            if (model && _showDetail) {
+                logMessage('info', `[UI] Clicked model: ${model.name}`);
+                const isReadOnly = currentSourceConfig?.readOnly === true;
+                _showDetail(model, currentSourceId, isReadOnly);
+            } else {
+                logMessage('warn', '[MainView] Clicked model not found in state or _showDetail missing.', modelFile);
+            }
+        } catch (e) {
+            logMessage('error', '[MainView] Error parsing modelFile from dataset:', e, modelFileStr);
+        }
+    }
+}
+
+
+async function toggleFilterPanel() {
+    logMessage('info', '[UI] Toggling filter panel.');
+    if (filterPanelInstance) {
+        if (filterPanelContainer.style.display !== 'block') {
+            await filterPanelInstance.updateOptions(currentSourceId);
+        }
+        filterPanelInstance.toggle();
+        if (filterPanelContainer.style.display === 'block') {
+            document.addEventListener('mousedown', handleOutsideClickForFilterPanel);
+        } else {
+            document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
+        }
+    } else {
+        try {
+            filterPanelInstance = new FilterPanel(filterPanelContainer.id, handleFiltersApplied, null);
+            filterPanelInstance.hide();
+            await filterPanelInstance.updateOptions(currentSourceId);
+            filterPanelInstance.show();
+            document.addEventListener('mousedown', handleOutsideClickForFilterPanel);
+        } catch (error) {
+            logMessage('error', '[MainView] FilterPanel init failed:', error);
+            filterPanelInstance = null;
+        }
+    }
+}
+
+function setupGlobalTagsTooltip() {
+    globalTagsTooltip = document.createElement('div');
+    globalTagsTooltip.className = 'global-tags-tooltip';
+    Object.assign(globalTagsTooltip.style, { display: 'none', position: 'absolute', zIndex: '1001' });
+    document.body.appendChild(globalTagsTooltip);
+}
+
+function handleFiltersApplied(newFilters) {
+    logMessage('info', '[MainView] Filters applied:', newFilters);
+    currentAppliedFilters = newFilters || { baseModel: [], modelType: [] };
+    if (currentSourceId) loadModels(currentSourceId, currentDirectory);
+}
+
 function handleOutsideClickForFilterPanel(event) {
-    if (!filterPanelInstance || !filterPanelContainer || !openFilterPanelBtn) return;
-
-    // Check if the click is outside the filter panel and not on the toggle button
-    const isClickInsidePanel = filterPanelContainer.contains(event.target);
-    const isClickOnToggleButton = openFilterPanelBtn.contains(event.target);
-
-    if (!isClickInsidePanel && !isClickOnToggleButton) {
-        logMessage('debug', '[MainView] Clicked outside filter panel and toggle button. Hiding panel.');
+    if (!filterPanelInstance || !filterPanelContainer.contains(event.target) && !openFilterPanelBtn.contains(event.target)) {
         filterPanelInstance.hide();
         document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
-        logMessage('debug', '[MainView] Filter panel hidden by outside click, removed listener.');
     }
 }
 
-// ===== UI Update Functions =====
-
-/**
- * Updates UI elements related to write actions based on the read-only status.
- * @param {boolean} isReadOnly - Whether the current source is read-only.
- */
-function updateWriteActionUI(isReadOnly) {
-    // 假设“添加模型”按钮的 ID 是 'add-model-button'
-    // TODO: 未来可以在这里添加对其他写入操作 UI（如添加、删除、重命名按钮）的控制
-    // 目前没有 'add-model-button'，因此移除相关代码。
-    // 未来可以在这里添加对其他写入操作 UI（如删除、重命名按钮）的控制
-}
-
-// ===== Data Loading & Source Management =====
-
-/**
- * Fetches all source configurations and stores them.
- * @returns {Promise<void>}
- */
 async function fetchAndStoreSourceConfigs() {
     try {
-        logMessage('info', '[MainView] 开始获取所有数据源配置');
-        // 假设 apiBridge 提供了 getAllSourceConfigs 方法
-        const configs = await getAllSourceConfigs();
-        allSourceConfigs = configs || [];
-        logMessage('info', `[MainView] 获取到 ${allSourceConfigs.length} 个数据源配置`);
+        allSourceConfigs = await getAllSourceConfigs() || [];
+        logMessage('info', `[MainView] Fetched ${allSourceConfigs.length} source configs.`);
     } catch (error) {
-        logMessage('error', '[MainView] 获取所有数据源配置失败:', error);
-        allSourceConfigs = []; // 出错时清空
+        logMessage('error', '[MainView] Failed to fetch source configs:', error);
+        allSourceConfigs = [];
     }
 }
 
-/**
- * Loads models for a given source and optional directory.
- * Updates the internal state and triggers UI rendering.
- * @param {string} sourceId - The ID of the source to load models from.
- * @param {string|null} [directory=null] - The specific directory to load, or null for the root.
- */
 export async function loadModels(sourceId, directory = null) {
-  const startTime = Date.now();
-  logMessage('info', `[MainView] 开始加载模型: sourceId=${sourceId}, directory=${directory ?? 'root'}`);
-  setLoading(true);
-  currentSourceId = sourceId; // Update current source ID
-  currentDirectory = directory; // Update current directory
-  let modelCount = 0;
-  let subdirCount = 0;
-  try {
-    // Pass currentAppliedFilters to listModels
-    models = await listModels(sourceId, directory, currentAppliedFilters);
-    modelCount = models.length;
-    // If loading the root directory, also fetch subdirectories
-    if (directory === null) {
-      logMessage('debug', `[MainView] 加载根目录，同时获取子目录: sourceId=${sourceId}`);
-      subdirectories = await listSubdirectories(sourceId); // 使用导入的函数
-      subdirCount = subdirectories.length;
-      logMessage('debug', `[MainView] 获取到 ${subdirCount} 个子目录`);
-      renderDirectoryTabs(); // Render tabs only when loading root
+    logMessage('info', `[MainView] Loading models: sourceId=${sourceId}, directory=${directory ?? 'root'}`);
+    setLoading(true);
+    currentSourceId = sourceId;
+    currentDirectory = directory;
+
+    try {
+        models = await listModels(sourceId, directory, currentAppliedFilters);
+        if (directory === null) {
+            subdirectories = await listSubdirectories(sourceId);
+            renderDirectoryTabs();
+        }
+        // Setup or update virtual scroll regardless of mode, as it handles both now
+        if (typeof VirtualScroll !== 'undefined') {
+            setupOrUpdateVirtualScroll();
+        }
+        renderModels(); // This will now mostly defer to VirtualScroll or handle empty
+        logMessage('info', `[MainView] Loaded ${models.length} models.`);
+    } catch (e) {
+        logMessage('error', `[MainView] Failed to load models:`, e);
+        models = [];
+        subdirectories = [];
+        if (typeof VirtualScroll !== 'undefined') {
+            setupOrUpdateVirtualScroll(); // Update with empty models
+        }
+        renderModels();
+        renderDirectoryTabs();
+    } finally {
+        setLoading(false);
     }
-    // renderFilterTypes(); // Update filters based on loaded models - REMOVED
-    renderModels(); // Render the models
-    const duration = Date.now() - startTime;
-    logMessage('info', `[MainView] 模型加载成功: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms, 模型数: ${modelCount}, 子目录数: ${subdirCount}`);
-
-    // 主页面和模型渲染完毕后再初始化 FilterPanel
-    // 懒加载模式下，不在模型加载后自动初始化 FilterPanel
-
-    // 使用requestAnimationFrame延迟加载filter options，确保首屏渲染完成
-    // 懒加载模式下，不在模型加载后自动刷新筛选项
-
-  } catch (e) {
-    const duration = Date.now() - startTime;
-    logMessage('error', `[MainView] 加载模型失败: sourceId=${sourceId}, directory=${directory ?? 'root'}, 耗时: ${duration}ms`, e.message, e.stack, e);
-    models = []; // Clear models on error
-    subdirectories = []; // Clear subdirectories on error
-    renderModels(); // Render empty list
-    renderDirectoryTabs(); // Render empty tabs
-    // renderFilterTypes(); // Render empty filters - REMOVED
-    // Optionally show an error message to the user using showFeedback
-    // showFeedback(`Error loading models: ${e.message}`, 'error');
-    
-    // 在错误情况下也延迟加载filter options
-    // 懒加载模式下，不在模型加载失败后自动刷新筛选项
-  } finally { // Ensure setLoading(false) is always called
-      setLoading(false);
-  }
 }
+
+// ===== Virtual Scroll Helper Functions =====
+
+/** Transforms models into items suitable for VirtualScroll based on displayMode. */
+function _transformModelsToVirtualScrollItems() {
+    if (displayMode === 'card') {
+        if (!models || models.length === 0) return [];
+        const containerWidth = modelList.clientWidth;
+        // Ensure effectiveCardWidth is positive to avoid division by zero or negative results
+        const effectiveCardWidth = Math.max(1, CARD_APPROX_WIDTH + HORIZONTAL_CARD_GAP);
+        const itemsPerRow = containerWidth > 0 ? Math.max(1, Math.floor(containerWidth / effectiveCardWidth)) : 1;
+
+        const rows = [];
+        for (let i = 0; i < models.length; i += itemsPerRow) {
+            rows.push(models.slice(i, i + itemsPerRow));
+        }
+        return rows;
+    } else if (displayMode === 'list') {
+        return models; // For list view, each model is an item
+    }
+    return [];
+}
+
+/** Renders a row of cards for card view. */
+function _renderVirtualCardRow(rowModels) {
+    const rowElement = document.createElement('div');
+    // Use a more specific class for card rows if needed, or keep generic
+    rowElement.className = 'virtual-scroll-row card-row-container';
+    rowModels.forEach(model => {
+        const cardElement = _renderSingleModelElement(model); // Returns <li>
+        rowElement.appendChild(cardElement);
+    });
+    return rowElement;
+}
+
+/** Renders a single list item for list view by wrapping the original model card structure. */
+function _renderVirtualListItem(model) {
+    // 1. Create the outer container for virtual scroll positioning
+    const listItemRow = document.createElement('div');
+    listItemRow.className = 'list-item-row'; // Class for the virtual scroll item row
+    // Set dataset on the row for click handling delegation
+    listItemRow.dataset.modelFile = JSON.stringify(model.file);
+
+    // 2. Render the original card structure using the existing function
+    //    _renderSingleModelElement returns an <li> element with class 'model-card'
+    //    This element will be styled by `.list-view .model-card` rules from list-view.css
+    const modelCardElement = _renderSingleModelElement(model);
+
+    // 3. Append the original card structure inside the virtual scroll row container
+    listItemRow.appendChild(modelCardElement);
+
+    // IMPORTANT:
+    // - CSS must style `.list-item-row` with `height: LIST_ITEM_HEIGHT;` (e.g., 70px)
+    //   and potentially `overflow: hidden;`
+    // - CSS in list-view.css targeting `.list-view .model-card` should now apply
+    //   to the element inside `.list-item-row`.
+    // - Ensure the rendered height of the inner `.model-card` (styled by list-view.css)
+    //   does not exceed LIST_ITEM_HEIGHT. If it can, apply `max-height` and `overflow: hidden`
+    //   to `.list-view .list-item-row .model-card` or specific inner elements like the tags container.
+
+    return listItemRow;
+}
+
+
+function setupOrUpdateVirtualScroll() {
+    if (!modelList || typeof VirtualScroll === 'undefined') {
+        logMessage('warn', '[MainView] VirtualScroll setup skipped: modelList or VirtualScroll lib not available.');
+        if (virtualScrollInstance) { // If lib was available but now isn't, or modelList gone
+            virtualScrollInstance.destroy();
+            virtualScrollInstance = null;
+        }
+        return;
+    }
+
+    const itemsData = _transformModelsToVirtualScrollItems();
+    const itemHeight = displayMode === 'card' ? CARD_ROW_ITEM_HEIGHT : LIST_ITEM_HEIGHT;
+    const renderFunction = displayMode === 'card' ? _renderVirtualCardRow : _renderVirtualListItem;
+
+    logMessage('debug', `[MainView] VirtualScroll setup: mode=${displayMode}, items=${itemsData.length}, itemHeight=${itemHeight}`);
+
+    if (models.length === 0) {
+        if (virtualScrollInstance) {
+            virtualScrollInstance.updateItems([]);
+        }
+        // renderModels will handle showing the empty message
+        return;
+    }
+
+    // If instance exists and config (itemHeight/renderFn) might change due to mode switch, destroy and recreate
+    let needsRecreation = false;
+    if (virtualScrollInstance) {
+        // Check if critical parameters that require recreation have changed
+        // Note: Accessing internal properties like _itemHeight might be fragile.
+        // A safer approach is to always recreate if the mode changes, as handled in switchViewMode.
+        // Here, we only check if an instance exists but maybe wasn't configured for the current mode yet.
+        if (virtualScrollInstance._itemHeight !== itemHeight || virtualScrollInstance._renderItem !== renderFunction) {
+             logMessage('debug', '[MainView] VirtualScroll config mismatch detected, scheduling recreation.');
+             needsRecreation = true;
+        }
+    }
+
+    if (needsRecreation && virtualScrollInstance) {
+        logMessage('debug', '[MainView] Recreating VirtualScroll instance due to config mismatch.');
+        virtualScrollInstance.destroy();
+        virtualScrollInstance = null;
+    }
+
+    if (!virtualScrollInstance) {
+        logMessage('info', `[MainView] Initializing VirtualScroll for ${displayMode} view.`);
+        virtualScrollInstance = new VirtualScroll({
+            container: modelList,
+            items: itemsData,
+            itemHeight: itemHeight,
+            renderItem: renderFunction,
+            bufferSize: displayMode === 'card' ? 4 : 10, // Different buffer for card vs list
+        });
+    } else {
+        logMessage('debug', `[MainView] Updating VirtualScroll items for ${displayMode} view.`);
+        virtualScrollInstance.updateItems(itemsData);
+    }
+    // Always refresh after creation or update to ensure correct rendering
+    if (virtualScrollInstance) {
+        virtualScrollInstance.refresh();
+    }
+}
+
 
 // ===== Rendering Functions =====
-
-/**
- * Renders the source options in the source select dropdown.
- * @param {Array<object>} sourcesData - Array of source objects {id, name, type}. (Note: This might become redundant if we fetch configs separately)
- */
-export async function renderSources(sourcesData) { // Make async to fetch configs
-  if (!sourceSelect) return;
-
-  // --- 获取并存储完整配置 ---
-  await fetchAndStoreSourceConfigs();
-  // 使用 allSourceConfigs 作为数据源，而不是传入的 sourcesData，以确保包含 readOnly 标志
-  const sourcesToRender = allSourceConfigs;
-  // ---
-
-  const currentVal = sourceSelect.value; // Preserve selection if possible
-  clearChildren(sourceSelect);
-  sourcesToRender.forEach(src => {
-    const option = document.createElement('option');
-    option.value = src.id;
-    option.textContent = src.name;
-    // Add CSS class based on source type
-    if (src.type === 'local') {
-      option.classList.add('source-option-local');
-    } else if (src.type === 'webdav') {
-      option.classList.add('source-option-webdav');
+export async function renderSources() {
+    if (!sourceSelect) return;
+    await fetchAndStoreSourceConfigs();
+    const sourcesToRender = allSourceConfigs;
+    const currentVal = sourceSelect.value;
+    clearChildren(sourceSelect);
+    sourcesToRender.forEach(src => {
+        const option = document.createElement('option');
+        option.value = src.id;
+        option.textContent = src.name;
+        option.classList.add(src.type === 'local' ? 'source-option-local' : 'source-option-webdav');
+        sourceSelect.appendChild(option);
+    });
+    if (sourcesToRender.some(s => s.id === currentVal)) {
+        sourceSelect.value = currentVal;
+    } else if (sourcesToRender.length > 0) {
+        sourceSelect.value = sourcesToRender[0].id;
+        handleSourceChange();
+    } else {
+        if (crawlInfoButton) crawlInfoButton.style.display = 'none';
+        if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
     }
-    sourceSelect.appendChild(option);
-  });
-  // Restore selection or select first if previous value is gone
-  // --- 使用 sourcesToRender 进行判断 ---
-  if (sourcesToRender.some(s => s.id === currentVal)) {
-      sourceSelect.value = currentVal;
-  } else if (sourcesToRender.length > 0) {
-      sourceSelect.value = sourcesToRender[0].id;
-      // Trigger change event manually if selection defaulted to first
-      // This ensures the initial models are loaded when the app starts or sources change
-      handleSourceChange();
-  } else {
-      // No sources available, ensure write actions are disabled
-      // 并且隐藏爬虫按钮
-      updateWriteActionUI(true);
-      if (crawlInfoButton) crawlInfoButton.style.display = 'none';
-      if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
-  }
 }
 
+const MAX_VISIBLE_TAGS = 6; // Keep consistent or define separately for list/card if needed
 
-// Old renderFilterTypes function is removed.
+function _renderSingleModelElement(model) { // Renders the core card structure, used by both views now
+    const card = document.createElement('li'); // Use LI as it was likely styled as such
+    card.className = 'model-card'; // Keep the original class for styling
+    // Do NOT set dataset here if the parent row (.list-item-row or .virtual-scroll-row) handles it
+    // card.dataset.modelFile = JSON.stringify(model.file);
 
-/**
- * Renders a single model card/list item element.
- * @param {object} model - The model data object.
- * @returns {HTMLElement} The created list item element.
- */
-function _renderSingleModelElement(model) {
-    const card = document.createElement('li');
-    card.className = 'model-card'; // Base class, specific styles handled by parent view class
-    // 确保 model 数据能通过 dataset 等方式从 cardElement 获取到
-
-    card.dataset.modelFile = JSON.stringify(model.file); // 存储模型文件路径作为标识
-
-    const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
     const fragment = document.createDocumentFragment();
 
     // --- Image ---
+    const imageContainer = document.createElement('div');
+    // Use specific class if list view image container needs different styles than card view's .custom-img-container
+    imageContainer.className = 'model-card-image-container'; // Example: use a more generic name or specific one
     let imageElement;
-    let imageContainer = document.createElement('div');
-    imageContainer.className = 'custom-img-container';
-
     if (model.image) {
         imageElement = document.createElement('img');
+        imageElement.className = 'model-image'; // Shared class for image itself
         imageElement.setAttribute('data-image-path', model.image);
         imageElement.setAttribute('data-source-id', currentSourceId);
         imageElement.alt = model.name || t('modelImageAlt');
-        imageElement.className = 'model-image';
         imageElement.loading = 'lazy';
         imageObserver.observe(imageElement);
     } else {
         imageElement = document.createElement('div');
         imageElement.className = 'model-image model-image-placeholder';
-        imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="placeholder-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
+        imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
     }
     imageContainer.appendChild(imageElement);
-
-    if (model.baseModel) {
-        let overlay = document.createElement('span'); // Corrected: imageElement was reassigned
+    // Overlay logic might differ between views, handle in CSS or conditionally here if needed
+    if (displayMode === 'card' && model.baseModel) { // Example: Only show overlay in card view
+        let overlay = document.createElement('span');
         overlay.className = 'custom-img-overlay';
         overlay.textContent = model.baseModel;
         imageContainer.appendChild(overlay);
     }
     fragment.appendChild(imageContainer);
 
-    // --- Content (Name, Type) ---
+    // --- Info ---
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'model-info';
-
+    contentDiv.className = 'model-info'; // Shared class for info section
     const nameH3 = document.createElement('h3');
-    nameH3.className = 'model-name';
+    nameH3.className = 'model-name'; // Shared class
     nameH3.textContent = model.name;
-
     const typeSpan = document.createElement('span');
-    typeSpan.className = 'model-type';
+    typeSpan.className = 'model-type'; // Shared class
     typeSpan.textContent = model.modelType ? model.modelType.toUpperCase() : t('uncategorized').toUpperCase();
-
     contentDiv.appendChild(nameH3);
     contentDiv.appendChild(typeSpan);
+    // Add description conditionally for list view if needed
+    // if (displayMode === 'list' && model.description) { ... }
     fragment.appendChild(contentDiv);
 
     // --- Tags ---
     const tagsContainer = document.createElement('div');
-    tagsContainer.className = 'tags-container';
-
+    tagsContainer.className = 'tags-container'; // Shared class for tags section
     if (model.tags && model.tags.length > 0) {
+        const maxTags = displayMode === 'card' ? MAX_VISIBLE_TAGS : 10; // Show more tags in list view?
         model.tags.forEach((tagText, index) => {
-            if (index < MAX_VISIBLE_TAGS) {
+            if (index < maxTags) {
                 const tagElementVisible = document.createElement('span');
-                tagElementVisible.className = 'tag';
+                tagElementVisible.className = 'tag'; // Shared tag class
                 tagElementVisible.textContent = tagText;
                 tagsContainer.appendChild(tagElementVisible);
             }
         });
-
-        if (displayMode === 'card' && model.tags.length > MAX_VISIBLE_TAGS) {
+        // Ellipsis logic might differ
+        if (model.tags.length > maxTags) {
             const ellipsis = document.createElement('span');
             ellipsis.className = 'tag tag-ellipsis';
             ellipsis.textContent = '...';
@@ -437,306 +443,194 @@ function _renderSingleModelElement(model) {
         }
     }
     fragment.appendChild(tagsContainer);
+
     card.appendChild(fragment);
-
-    // --- Click Event (已通过事件委托在 initMainView 中处理) ---
-    // card.addEventListener('click', () => {
-    //     logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
-    //     if (_showDetail) {
-    //         const isReadOnly = currentSourceConfig?.readOnly === true;
-    //         logMessage('debug', `[MainView] 打开详情，传递 readOnly 状态: ${isReadOnly}`);
-    //         _showDetail(model, currentSourceId, isReadOnly);
-    //     } else {
-    //         logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
-    //     }
-    // });
-
     return card;
 }
 
-/**
- * Releases the Blob URL associated with the image in a given card element.
- * @param {HTMLElement} cardElement - The model card element.
- */
-function _releaseBlobUrlForCardElement(cardElement) {
+
+function _releaseBlobUrlForCardElement(cardElement) { // This is generic enough
     if (!cardElement) return;
-    // Card element itself might be the li, image is a child img.
-    const imgElement = cardElement.querySelector('img[data-blob-cache-key]');
+    // Find image within the card/list item structure
+    const imgElement = cardElement.querySelector('.model-image[data-blob-cache-key]');
     if (imgElement) {
         const cacheKey = imgElement.dataset.blobCacheKey;
-        if (cacheKey) {
-            BlobUrlCache.releaseBlobUrlByKey(cacheKey);
-            logMessage('debug', `[MainView] Released Blob URL for card via key: ${cacheKey}`);
-            delete imgElement.dataset.blobCacheKey; // Clean up the attribute
-        }
+        if (cacheKey) BlobUrlCache.releaseBlobUrlByKey(cacheKey);
+        delete imgElement.dataset.blobCacheKey;
     }
 }
 
-/** Renders the model list based on the current filter, display mode, and models data. */
 function renderModels() {
-  if (!modelList) return;
+    if (!modelList) return;
+    const mainSection = modelList.closest('#mainSection') || document.body;
 
-  // Before clearing children, release any existing blob URLs
-  if (modelList.childNodes.length > 0) {
-    logMessage('debug', '[MainView] Releasing Blob URLs for existing model list items before clearing in renderModels.');
-    modelList.childNodes.forEach(cardNode => {
-        // Ensure we are only processing element nodes (model cards)
-        if (cardNode.nodeType === Node.ELEMENT_NODE) {
-            _releaseBlobUrlForCardElement(cardNode);
-        }
-    });
-  }
+    // Add/remove view-specific classes on mainSection and modelList
+    if (displayMode === 'card') {
+        mainSection.classList.add('card-view');
+        mainSection.classList.remove('list-view');
+        modelList.classList.add('virtual-scroll-container'); // Ensure this class is present for CSS
+        modelList.classList.remove('list-view-virtual-scroll'); // Remove list specific if any
+    } else if (displayMode === 'list') {
+        mainSection.classList.add('list-view');
+        mainSection.classList.remove('card-view');
+        modelList.classList.add('virtual-scroll-container'); // List view also uses this for height/overflow
+        modelList.classList.add('list-view-virtual-scroll'); // Add specific class for list styling
+    }
 
-  clearChildren(modelList);
-  // The 'models' array is now pre-filtered by loadModels via modelService.
-  // No need for client-side filtering here based on the old filterType.
-  const filteredModels = models;
-
-  // Set container class based on display mode
-  const mainSection = modelList.closest('#mainSection') || document.body; // Find parent or default to body
-  if (displayMode === 'list') {
-    mainSection.classList.add('list-view');
-    mainSection.classList.remove('card-view');
-  } else { // displayMode === 'card'
-    mainSection.classList.add('card-view');
-    mainSection.classList.remove('list-view');
-  }
-
-  if (filteredModels.length === 0) {
-      modelList.innerHTML = `<p class="empty-list-message">${t('noModelsFound')}</p>`; // Show a message if empty
-      return;
-  }
-
-  filteredModels.forEach(model => {
-    const cardElement = _renderSingleModelElement(model); // Use the helper function
-    modelList.appendChild(cardElement);
-  });
-}
-
-/**
- * Updates a single model card in the list or adds it if it's new (and matches current filter).
- * @param {object} updatedModelData - The updated model data object.
- */
-export function updateSingleModelCard(updatedModelData) {
-    if (!modelList || !updatedModelData || !updatedModelData.file) {
-        logMessage('warn', '[MainView] updateSingleModelCard: 列表元素或更新数据无效', updatedModelData);
+    if (typeof VirtualScroll === 'undefined') {
+        logMessage('error', '[MainView] VirtualScroll library not available. Cannot render with virtual scrolling.');
+        clearChildren(modelList);
+        modelList.innerHTML = `<p class="empty-list-message">${t('errorMissingLibrary', { library: 'VirtualScroll' })}</p>`;
         return;
     }
-    logMessage('info', `[MainView] 尝试更新单个模型卡片: ${updatedModelData.name} (${updatedModelData.file})`);
 
-    // 1. Update internal state
-    const modelIndex = models.findIndex(m => m.file === updatedModelData.file);
+    // VirtualScroll instance handles rendering its items into modelList.
+    // We just need to ensure it's updated. setupOrUpdateVirtualScroll() is called from loadModels or switchViewMode.
+    if (models.length === 0) {
+        if (virtualScrollInstance) virtualScrollInstance.updateItems([]);
+        clearChildren(modelList); // Explicitly clear if library doesn't on empty items
+        modelList.innerHTML = `<p class="empty-list-message">${t('noModelsFound')}</p>`;
+    } else if (!virtualScrollInstance && models.length > 0) {
+        logMessage('warn', `[MainView] renderModels called for ${displayMode} view with models, but no virtualScrollInstance. Attempting setup.`);
+        setupOrUpdateVirtualScroll(); // Attempt to set it up
+         if (!virtualScrollInstance) { // If still no instance
+            clearChildren(modelList);
+            modelList.innerHTML = `<p class="empty-list-message">${t('virtualScrollError')}</p>`;
+         }
+    }
+    // If virtualScrollInstance exists and models.length > 0, the library handles rendering.
+}
+
+
+export function updateSingleModelCard(updatedModelData) { // Renamed for clarity, now generic
+    if (!updatedModelData || !updatedModelData.file) return;
+    logMessage('info', `[MainView] Updating single model item: ${updatedModelData.name}`);
+
+    const modelIndex = models.findIndex(m => JSON.stringify(m.file) === JSON.stringify(updatedModelData.file));
     if (modelIndex !== -1) {
-        logMessage('debug', `[MainView] 在内部模型数组中找到并更新模型: ${updatedModelData.file}`);
-        models[modelIndex] = updatedModelData;
-    } else {
-        logMessage('warn', `[MainView] 更新的模型 ${updatedModelData.file} 不在当前加载的内部模型数组中，跳过更新。`);
-        // Consider if a new model matching filters should be added. For now, only updates existing.
-    }
-
-    // 2. Check if the updated model should be visible based on the current filter (filterType is removed, logic might need update if complex filtering returns)
-    // For now, assume if it's in `models` (updated or pre-existing and matched by file path), it should be visible
-    // or its visibility is handled by the full `renderModels` if filters change.
-    // This function primarily handles in-place updates or removals due to data changes, not filter changes.
-    let shouldBeVisible = true; // Simplified: if we are updating it, it's likely meant to be visible or its data changed.
-                                // Complex filter logic would re-trigger renderModels.
-
-    // 3. Find existing DOM element
-    const escapedFilePath = JSON.stringify(updatedModelData.file);
-    const selector = `li[data-model-file=${escapedFilePath}]`;
-    const existingCard = modelList.querySelector(selector);
-
-    if (existingCard) {
-        if (shouldBeVisible) { // Simplified: always true if card exists and we're updating it
-            logMessage('debug', `[MainView] 找到现有 DOM 卡片，将替换: ${updatedModelData.file}`);
-            _releaseBlobUrlForCardElement(existingCard); // Release old image before replacing
-            const newCardElement = _renderSingleModelElement(updatedModelData);
-            existingCard.replaceWith(newCardElement);
-        } else { // This 'else' branch might be less relevant now without client-side filterType
-            logMessage('debug', `[MainView] 找到现有 DOM 卡片，但（按旧逻辑）不再符合过滤器，将移除: ${updatedModelData.file}`);
-            _releaseBlobUrlForCardElement(existingCard); // Release image before removing
-            existingCard.remove();
+        models[modelIndex] = { ...models[modelIndex], ...updatedModelData };
+        if (virtualScrollInstance) {
+            // Re-transform data and update virtual scroll
+            const newItemsData = _transformModelsToVirtualScrollItems();
+            virtualScrollInstance.updateItems(newItemsData);
+            virtualScrollInstance.refresh();
         }
-    } else if (shouldBeVisible) { // If card didn't exist but data implies it should (e.g. new model from sync)
-        logMessage('debug', `[MainView] 未找到现有 DOM 卡片，但模型数据已更新/新增，将添加: ${updatedModelData.file}`);
-        const newCardElement = _renderSingleModelElement(updatedModelData);
-        modelList.appendChild(newCardElement);
-        const emptyMsg = modelList.querySelector('.empty-list-message');
-        if (emptyMsg) emptyMsg.remove();
     } else {
-         logMessage('debug', `[MainView] 模型 ${updatedModelData.file} 不存在于 DOM 且（按旧逻辑）不符合当前过滤器，无需操作。`);
+        logMessage('warn', `[MainView] Updated model ${updatedModelData.file} not in current models array.`);
     }
 }
 
-
-/** Renders the directory navigation tabs based on the current subdirectories list. */
 function renderDirectoryTabs() {
-  if (!directoryTabsContainer) return;
-  const tabList = directoryTabsContainer.querySelector('.tab-list'); // Assuming a .tab-list inside
-  if (!tabList) {
-      logMessage('warn', "'.tab-list' not found within directory tabs container:", directoryTabsContainer);
-      return;
-  }
+    if (!directoryTabsContainer) return;
+    const tabList = directoryTabsContainer.querySelector('.tab-list');
+    if (!tabList) return;
+    clearChildren(tabList);
 
-  clearChildren(tabList);
-
-  // "All" Tab
-  const allTab = document.createElement('div');
-  allTab.className = `tab-item ${currentDirectory === null ? 'active' : ''}`;
-  allTab.textContent = t('all'); // Use translation key 'all'
-  allTab.onclick = () => {
-    // Task 4: Click Event Logging
-    logMessage('info', `[UI] 点击了目录标签: "全部" (Source: ${currentSourceId})`);
-    if (currentDirectory !== null) {
-      setActiveTab(allTab);
-      loadModels(currentSourceId, null); // Load root directory
-    }
-  };
-  tabList.appendChild(allTab);
-
-  // Subdirectory Tabs
-  subdirectories.sort(); // Sort directories alphabetically
-  subdirectories.forEach(dir => {
-    const tab = document.createElement('div');
-    tab.className = `tab-item ${currentDirectory === dir ? 'active' : ''}`;
-    tab.textContent = dir; // Directory names likely don't need translation
-    tab.onclick = () => {
-      // Task 4: Click Event Logging
-      logMessage('info', `[UI] 点击了目录标签: "${dir}" (Source: ${currentSourceId})`);
-      if (currentDirectory !== dir) {
-        setActiveTab(tab);
-        loadModels(currentSourceId, dir); // Load specific directory
-      }
+    const allTab = document.createElement('div');
+    allTab.className = `tab-item ${currentDirectory === null ? 'active' : ''}`;
+    allTab.textContent = t('all');
+    allTab.onclick = () => {
+        if (currentDirectory !== null) {
+            setActiveTab(allTab);
+            loadModels(currentSourceId, null);
+        }
     };
-    tabList.appendChild(tab);
-  });
+    tabList.appendChild(allTab);
 
-  // Show/hide the tab container based on whether there are subdirectories
-  directoryTabsContainer.style.display = subdirectories.length > 0 ? 'block' : 'none';
+    subdirectories.sort().forEach(dir => {
+        const tab = document.createElement('div');
+        tab.className = `tab-item ${currentDirectory === dir ? 'active' : ''}`;
+        tab.textContent = dir;
+        tab.onclick = () => {
+            if (currentDirectory !== dir) {
+                setActiveTab(tab);
+                loadModels(currentSourceId, dir);
+            }
+        };
+        tabList.appendChild(tab);
+    });
+    directoryTabsContainer.style.display = subdirectories.length > 0 ? 'block' : 'none';
 }
 
-/** Helper to set the active class on a clicked tab. */
 function setActiveTab(activeTabElement) {
-    const tabList = activeTabElement.parentNode;
-    tabList.querySelectorAll('.tab-item').forEach(item => {
-        item.classList.remove('active');
-    });
+    activeTabElement.parentNode.querySelectorAll('.tab-item').forEach(item => item.classList.remove('active'));
     activeTabElement.classList.add('active');
 }
 
-// ===== Event Handlers =====
-
-/** Handles the change event for the source select dropdown. */
 async function handleSourceChange() {
-  if (!sourceSelect) {
-      logMessage('warn', '[MainView] handleSourceChange: sourceSelect 元素不存在');
-      return;
-  }
-  const selectedSourceId = sourceSelect.value;
-  logMessage('info', `[UI] handleSourceChange started. Selected Source ID: ${selectedSourceId}`); // Added log
+    if (!sourceSelect) return;
+    const selectedSourceId = sourceSelect.value;
+    logMessage('info', `[UI] Source changed to: ${selectedSourceId}`);
+    currentSourceConfig = allSourceConfigs.find(config => config.id === selectedSourceId) || null;
 
-  // --- 更新当前数据源配置 ---
-  currentSourceConfig = allSourceConfigs.find(config => config.id === selectedSourceId) || null;
-  logMessage('debug', `[MainView] Found config for ID ${selectedSourceId}:`, currentSourceConfig); // Added log
-
-  if (currentSourceConfig) {
-      logMessage('info', `[MainView] 当前数据源配置已更新: ${currentSourceConfig.name}, ReadOnly: ${currentSourceConfig.readOnly}, Type: ${currentSourceConfig.type}`); // Enhanced log
-  } else if (selectedSourceId) {
-      logMessage('warn', `[MainView] 未找到 ID 为 ${selectedSourceId} 的数据源配置`);
-  }
-  // ---
-  // 更新写入操作相关的 UI 状态 (这部分可能需要根据实际的 updateWriteActionUI 调整或移除)
-  // updateWriteActionUI(currentSourceConfig?.readOnly ?? false);
-
-  // --- 控制爬虫按钮和只读指示器的显隐 ---
-  logMessage('debug', `[MainView] Checking button/indicator elements. Button: ${!!crawlInfoButton}, Indicator: ${!!sourceReadonlyIndicator}`); // Added log
-  if (crawlInfoButton && sourceReadonlyIndicator) {
-    const isReadOnly = currentSourceConfig?.readOnly === true;
-    const isLocal = currentSourceConfig?.type?.toUpperCase() === 'LOCAL';
-    logMessage('debug', `[MainView] Display logic check: isReadOnly=${isReadOnly}, isLocal=${isLocal}`); // Added log
-
-    if (isReadOnly) {
-        logMessage('debug', '[MainView] Setting UI for ReadOnly source.'); // Added log
-        crawlInfoButton.style.display = 'none';
-        sourceReadonlyIndicator.style.display = 'inline-flex';
-    } else {
-        logMessage('debug', '[MainView] Setting UI for Writable source.'); // Added log
-        sourceReadonlyIndicator.style.display = 'none';
-        if (isLocal) {
-            logMessage('debug', '[MainView] Source is LOCAL, showing crawl button.'); // Added log
-            crawlInfoButton.style.display = 'inline-block';
-        } else {
-            logMessage('debug', '[MainView] Source is NOT LOCAL, hiding crawl button.'); // Added log
-            crawlInfoButton.style.display = 'none';
-        }
+    if (crawlInfoButton && sourceReadonlyIndicator) {
+        const isReadOnly = currentSourceConfig?.readOnly === true;
+        const isLocal = currentSourceConfig?.type?.toUpperCase() === 'LOCAL';
+        sourceReadonlyIndicator.style.display = isReadOnly ? 'inline-flex' : 'none';
+        crawlInfoButton.style.display = (!isReadOnly && isLocal) ? 'inline-block' : 'none';
     }
-  } else {
-      logMessage('warn', '[MainView] 无法控制按钮/指示器显隐，DOM 元素未找到');
-  }
-  // ---
 
-  if (selectedSourceId) {
-    logMessage('info', `[MainView] Calling loadModels for source: ${selectedSourceId}`); // Added log
-    await loadModels(selectedSourceId, null);
-    logMessage('info', `[MainView] loadModels finished for source: ${selectedSourceId}`); // Added log
-  } else {
-      // Handle case where no source is selected (e.g., empty list)
-      logMessage('info', '[MainView] 没有选择数据源，清空视图');
-      models = [];
-      subdirectories = [];
-      renderModels();
-      renderDirectoryTabs();
-      // renderFilterTypes(); // REMOVED
-      // 隐藏爬虫按钮
-      if (crawlInfoButton) crawlInfoButton.style.display = 'none';
-      if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
-  }
-  logMessage('info', `[UI] handleSourceChange finished for Source ID: ${selectedSourceId}`); // Added log
+    if (selectedSourceId) {
+        await loadModels(selectedSourceId, null);
+    } else {
+        models = [];
+        subdirectories = [];
+        if (typeof VirtualScroll !== 'undefined') setupOrUpdateVirtualScroll();
+        renderModels();
+        renderDirectoryTabs();
+        if (crawlInfoButton) crawlInfoButton.style.display = 'none';
+        if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
+    }
 }
 
-// Old handleFilterChange function is removed.
-
-/** Handles switching between card and list view modes. */
 function switchViewMode(newMode) {
-if (displayMode !== newMode) {
-  // Task 4: Click Event Logging (Handled by callers)
-  logMessage('info', `[UI] 切换视图模式到: ${newMode}`);
-  displayMode = newMode;
-  // Update button active states
-  if (newMode === 'card') {
-    cardViewBtn.classList.add('active');
-    listViewBtn.classList.remove('active');
-  } else {
-    listViewBtn.classList.add('active');
-    cardViewBtn.classList.remove('active');
-  }
-  // Re-render the model list with the new view mode class
-  renderModels();
+    if (displayMode !== newMode) {
+        logMessage('info', `[UI] Switching view mode to: ${newMode}`);
+        displayMode = newMode; // Set new mode first
+
+        if (virtualScrollInstance) { // Destroy existing instance before re-setup
+            logMessage('debug', '[MainView] Mode changed, destroying existing VirtualScroll instance.');
+            virtualScrollInstance.destroy();
+            virtualScrollInstance = null;
+            // Don't clear children here, renderModels will handle it or VirtualScroll will overwrite
+        }
+
+        updateViewModeButtons();
+
+        if (typeof VirtualScroll !== 'undefined') {
+            setupOrUpdateVirtualScroll(); // Setup/Recreate for the new mode
+        }
+        renderModels(); // Render with new mode (will use virtual scroll if setup)
+    }
 }
+
+function updateViewModeButtons() {
+    if (displayMode === 'card') {
+        cardViewBtn.classList.add('active');
+        listViewBtn.classList.remove('active');
+    } else {
+        listViewBtn.classList.add('active');
+        cardViewBtn.classList.remove('active');
+    }
 }
 
-// A shared constant for maximum visible tags, can be used by both rendering and tooltip logic.
-const MAX_VISIBLE_TAGS = 6;
 
-// ===== Tags Tooltip Event Handlers (Delegated) =====
-
-/**
- * Handles mouseover events on the model list for showing the tags tooltip.
- * @param {MouseEvent} event - The mouseover event.
- */
 function handleModelListMouseOverForTagsTooltip(event) {
-    if (displayMode !== 'card' || !globalTagsTooltip) return;
-
+    if (displayMode !== 'card' || !globalTagsTooltip) return; // Tooltip only for card view for now
     const tagsContainer = event.target.closest('.tags-container');
     if (!tagsContainer) return;
-
+    // Find the parent card element from the tags container
     const cardElement = tagsContainer.closest('.model-card');
-    if (!cardElement || !cardElement.dataset.modelFile) return;
+    // Get the model file from the row container's dataset
+    const rowElement = cardElement?.closest('.virtual-scroll-row, .list-item-row');
+    const modelFileStr = rowElement?.dataset.modelFile;
+
+    if (!cardElement || !modelFileStr) return;
 
     try {
-        const modelFile = JSON.parse(cardElement.dataset.modelFile);
-        const model = models.find(m => m.file === modelFile);
-
+        const modelFile = JSON.parse(modelFileStr);
+        // Find model in the flat 'models' array
+        const model = models.find(m => JSON.stringify(m.file) === JSON.stringify(modelFile));
         if (model && model.tags && model.tags.length > MAX_VISIBLE_TAGS) {
             clearChildren(globalTagsTooltip);
             model.tags.forEach(tagText => {
@@ -745,65 +639,44 @@ function handleModelListMouseOverForTagsTooltip(event) {
                 tagElementFull.textContent = tagText;
                 globalTagsTooltip.appendChild(tagElementFull);
             });
-
             const rect = tagsContainer.getBoundingClientRect();
             let top = rect.bottom + window.scrollY + 5;
             let left = rect.left + window.scrollX;
-
-            globalTagsTooltip.style.display = 'flex'; // Set display to flex to measure
+            globalTagsTooltip.style.display = 'flex';
             const tooltipRect = globalTagsTooltip.getBoundingClientRect();
-
-            if (left + tooltipRect.width > window.innerWidth) {
-                left = window.innerWidth - tooltipRect.width - 10;
-            }
-            if (top + tooltipRect.height > window.innerHeight) {
-                top = rect.top + window.scrollY - tooltipRect.height - 5;
-            }
+            if (left + tooltipRect.width > window.innerWidth) left = window.innerWidth - tooltipRect.width - 10;
+            if (top + tooltipRect.height > window.innerHeight) top = rect.top + window.scrollY - tooltipRect.height - 5;
             if (left < 0) left = 10;
             if (top < 0) top = 10;
-
             globalTagsTooltip.style.left = `${left}px`;
             globalTagsTooltip.style.top = `${top}px`;
             globalTagsTooltip.classList.add('tooltip-active');
         }
     } catch (e) {
-        logMessage('error', '[MainView] Error parsing modelFile for tags tooltip:', e, cardElement.dataset.modelFile);
+        logMessage('error', '[MainView] Error for tags tooltip:', e);
     }
 }
 
 
-/**
- * Handles mouseout events on the model list for hiding the tags tooltip.
- * @param {MouseEvent} event - The mouseout event.
- */
 function handleModelListMouseOutOfTagsTooltip(event) {
     if (displayMode !== 'card' || !globalTagsTooltip) return;
-
     const toElement = event.relatedTarget;
-
-    // Don't hide if moving to the tooltip itself or one of its children
-    if (toElement && (globalTagsTooltip.contains(toElement) || globalTagsTooltip === toElement)) {
-        return;
-    }
-
-    // Hide if moving out of a tags-container that triggered the tooltip,
-    // unless moving to another part of the same card's tags or the tooltip itself.
+    if (toElement && (globalTagsTooltip.contains(toElement) || globalTagsTooltip === toElement)) return;
     const currentTargetTagsContainer = event.target.closest('.tags-container');
-
     if (currentTargetTagsContainer) {
-        // If relatedTarget is null (mouse left the window) or not part of any tags-container
-        // or not part of the tooltip, then hide.
         if (!toElement || (!toElement.closest('.tags-container') && !globalTagsTooltip.contains(toElement))) {
             globalTagsTooltip.style.display = 'none';
             globalTagsTooltip.classList.remove('tooltip-active');
         }
     } else if (globalTagsTooltip.classList.contains('tooltip-active') && (!toElement || !globalTagsTooltip.contains(toElement))) {
-        // This case handles moving from the tooltip to outside, and relatedTarget is not the tooltip
         globalTagsTooltip.style.display = 'none';
         globalTagsTooltip.classList.remove('tooltip-active');
     }
 }
 
-
-// ===== Filter Options Caching =====
-
+export function cleanupMainView() {
+    if (cardViewResizeObserver && modelList) cardViewResizeObserver.unobserve(modelList);
+    if (virtualScrollInstance) virtualScrollInstance.destroy();
+    document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
+    logMessage('debug', '[MainView] Cleaned up.');
+}

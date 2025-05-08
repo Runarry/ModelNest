@@ -1,193 +1,204 @@
 /* List View Specific Styles */
 
-/* .mainSection.list-view rule removed as scoping is handled by parent */
-
-.list-view #modelList {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  list-style: none;
-  /* Ensure list style is none */
+/* Styles for the container when virtual scroll is active in list view */
+.list-view #modelList.virtual-scroll-container {
+  height: calc(100vh - 80px); /* 示例高度，可以根据顶部栏实际高度调整 */
+  overflow-y: auto;
+  position: relative;
+  box-sizing: border-box;
+  display: block; /* 确保正确的块级布局 */
   padding: 0;
-  /* 恢复默认 padding */
-  width: 100%;
+  margin: 0;
+}
+/* Styles for the virtual scroll row container */
+.list-view .list-item-row {
+  height: 70px; /* === LIST_ITEM_HEIGHT in JS === */
+  overflow: hidden; /* Prevent inner content from overflowing */
+  box-sizing: border-box;
+  border-bottom: 1px solid var(--border-color); /* Separator line */
+  padding: 0; /* Padding is handled by the inner card now */
+  width: 100%; /* Ensure row takes full width */
 }
 
-.list-view .model-card {
+/* Styles for the original card structure nested inside the list item row */
+.list-view .list-item-row .model-card {
   display: grid;
-  grid-template-columns: 60px minmax(280px, 1fr) auto;
-  /* 增加中间列的最小宽度 */
-  align-items: flex-start;
+  /* Adjust columns: Smaller image, flexible info, tags */
+  grid-template-columns: 50px minmax(150px, 1fr) auto;
+  align-items: center; /* Vertically center items in the grid row */
   gap: 0.8rem;
-  /* 增加间距 */
-  padding: 0.6rem 0.8rem;
-  min-height: 60px;
+  padding: 0.5rem 0.8rem; /* Adjust padding for the 70px height */
+  height: 100%; /* Fill the parent list-item-row */
   width: 100%;
-  margin: 0 auto;
-  /* 居中显示 */
+  margin: 0; /* No margin */
   background-color: var(--card-bg);
-  border-radius: 8px;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: all 0.3s ease;
+  border-radius: 0; /* No radius for list items */
+  box-shadow: none; /* No shadow for list items */
+  border: none; /* Border is on the outer row */
+  box-sizing: border-box;
+  transition: background-color 0.2s ease;
   cursor: pointer;
+  overflow: hidden; /* Hide any potential overflow within the card itself */
 }
 
-.list-view .model-card:hover {
-  background-color: rgba(0, 0, 0, 0.03);
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+.list-view .list-item-row .model-card:hover {
+  background-color: var(--list-item-hover-bg, rgba(0, 0, 0, 0.03));
+  transform: none; /* No transform on hover for list items */
+  box-shadow: none;
 }
 
-.list-view .model-card:active {
-  transform: translateY(0);
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-[data-theme="dark"] .list-view .model-card:hover {
+/* Dark theme hover */
+[data-theme="dark"] .list-view .list-item-row .model-card:hover {
   background-color: rgba(255, 255, 255, 0.05);
-  /* Dark theme hover */
 }
 
+/* --- Styles for elements inside the nested .model-card --- */
 
-.list-view .model-image {
-  width: 60px;
-  height: 60px;
-  min-height: 60px;
-  /* Ensure fixed height */
-  border-radius: 8px;
-  /* 增加圆角，与card-view保持一致 */
+/* Image container and image */
+.list-view .list-item-row .model-card-image-container { /* Target the container added in JS */
+  width: 50px;  /* Match grid column */
+  height: 50px; /* Match grid column */
+  flex-shrink: 0;
+  overflow: hidden; /* Ensure image stays within bounds */
+  border-radius: 4px; /* Small radius for the image */
+  align-self: center; /* Already centered by grid align-items */
+}
+
+.list-view .list-item-row .model-image { /* Target the image/placeholder */
+  width: 100%;
+  height: 100%;
   object-fit: cover;
+  display: block;
   background-color: rgba(0, 0, 0, 0.07);
-  /* 调整背景色，与card-view保持一致 */
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
-  transition: transform 0.3s ease;
-  cursor: pointer;
-  aspect-ratio: 1 / 1;
-  /* 添加宽高比，与card-view保持一致 */
+  border-radius: 4px; /* Consistent radius */
+}
+.list-view .list-item-row .model-image-placeholder {
+   border-radius: 4px;
+   background-color: rgba(0, 0, 0, 0.05);
+}
+.list-view .list-item-row .model-image-placeholder .placeholder-icon {
+    width: 60%; /* Adjust icon size */
+    height: 60%;
+    color: rgba(0, 0, 0, 0.2);
+}
+[data-theme="dark"] .list-view .list-item-row .model-image-placeholder {
+  background-color: rgba(255, 255, 255, 0.05);
+}
+[data-theme="dark"] .list-view .list-item-row .model-image-placeholder .placeholder-icon {
+  color: rgba(255, 255, 255, 0.2);
 }
 
-.list-view .model-image:hover {
-  transform: scale(1.05);
-}
 
-.list-view .model-info {
+/* Info container and its children */
+.list-view .list-item-row .model-info {
   display: flex;
   flex-direction: column;
-  gap: 0.4rem;
-  /* 减小间距 */
-  overflow: hidden;
-  align-self: center;
-  padding: 0.2rem 0.4rem;
-  /* 添加内边距 */
-  width: 100%;
-  /* 确保宽度填满可用空间 */
+  gap: 0.2rem; /* Small gap between name and type */
+  overflow: hidden; /* Prevent text overflow */
+  align-self: center; /* Already centered by grid align-items */
+  padding: 0; /* Padding is on the parent card */
+  width: 100%; /* Fill grid cell */
 }
 
-.list-view .model-info:hover {
-  transform: translateY(-1px);
-  /* 轻微悬停效果 */
-}
-
-.list-view .model-description {
-  font-size: 0.75rem;
-  color: #666;
-  margin: 0;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  /* 限制显示2行 */
-  line-clamp: 2;
-  /* 标准属性 */
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.3;
-}
-
-[data-theme="dark"] .list-view .model-description {
-  color: #aaa;
-}
-
-.list-view .model-name {
+.list-view .list-item-row .model-name {
   font-size: 0.9rem;
-  /* 减小字体大小，与card-view保持一致 */
   font-weight: 600;
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   color: var(--text-color);
-  /* 使用变量，与card-view保持一致 */
   line-height: 1.3;
-  /* 添加行高，与card-view保持一致 */
 }
 
-.list-view .model-type {
+.list-view .list-item-row .model-type {
   font-size: 0.75rem;
-  color: #888;
+  color: var(--text-secondary-color, #888);
   margin: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  display: inline-block;
-  padding: 0.2rem 0.5rem;
+  display: inline-block; /* Keep inline-block for background */
+  padding: 0.15rem 0.4rem; /* Adjust padding */
   background-color: rgba(0, 0, 0, 0.05);
   border-radius: 4px;
   font-weight: 500;
-  width: fit-content;
-  /* 确保背景色只有文字长度 */
+  width: fit-content; /* Fit content width */
   max-width: 100%;
-  /* 防止溢出 */
 }
 
-.list-view .tags-container {
-  grid-column: 3;
-  justify-self: end;
-  align-self: flex-start;
-  /* 改为顶部对齐 */
+/* Tags container and tags */
+.list-view .list-item-row .tags-container {
+  grid-column: 3; /* Place in the third grid column */
+  justify-self: end; /* Align to the right */
+  align-self: center; /* Vertically center */
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: wrap; /* Allow tags to wrap */
   gap: 0.4rem;
-  margin-top: 0;
-  max-height: none;
-  overflow: visible;
-  padding: 0.2rem 0;
+  margin: 0;
+  padding: 0;
   background-color: transparent;
-  max-width: 500px;
-  /* 增加最大宽度 */
-  position: relative;
-  transition: max-height 0.3s ease-out;
+  max-width: 250px; /* Limit width */
+  max-height: calc(70px - 1rem); /* Limit height based on row height minus padding */
+  overflow: hidden; /* Hide overflowing tags */
+  position: relative; /* Needed if using absolute positioning inside */
 }
 
-.list-view .tag {
+.list-view .list-item-row .tag {
   white-space: nowrap;
   margin: 0;
   padding: 0.2rem 0.5rem;
-  background-color: rgba(67, 97, 238, 0.1);
+  background-color: rgba(var(--primary-color-rgb), 0.1);
   color: var(--primary-color);
   border-radius: 10px;
   font-size: 0.65rem;
   font-weight: 500;
   user-select: none;
   cursor: default;
-  transition: background-color 0.3s ease;
   line-height: 1.2;
   display: inline-block;
-  width: fit-content;
-  /* 确保背景色只有文字长度 */
 }
 
+/* Hide ellipsis in list view for now due to fixed height */
+.list-view .list-item-row .tag-ellipsis {
+  display: none;
+}
+
+/* Hide card-specific overlay in list view */
+.list-view .list-item-row .custom-img-overlay {
+  display: none;
+}
+
+/* --- Styles from original list-view.css that might be redundant or need removal --- */
+
+/* Remove original #modelList styling as it's handled by .virtual-scroll-container */
+/*
+.list-view #modelList {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  list-style: none;
+  padding: 0;
+  width: 100%;
+}
+*/
+
+/* Remove original .model-description styles if not used in the new structure */
+/*
+.list-view .model-description { ... }
+[data-theme="dark"] .list-view .model-description { ... }
+*/
+
+/* Remove original .tag:hover if default is fine */
+/*
 .list-view .tag:hover {
   background-color: rgba(67, 97, 238, 0.3);
 }
+*/
 
-/* Hide the "showMore" button in list view */
+/* Remove original .tag-more-btn styles */
+/*
 .list-view .tag-more-btn {
   display: none;
 }
-
-
-.list-view .custom-img-overlay {
-  display: none;
-
-}
-
+*/

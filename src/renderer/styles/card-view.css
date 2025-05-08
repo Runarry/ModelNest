@@ -1,13 +1,48 @@
 /* Card View Specific Styles */
 
+/* Remove grid layout from the container when card view is active,
+   as VirtualScroll will manage the layout internally. */
 .card-view #modelList {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); /* 减小卡片最小宽度，使每行显示更多卡片 */
-  gap: 1rem;
-  align-items: start; /* Prevent items stretching vertically */
+  /* display: grid; <-- REMOVED */
+  /* grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); <-- REMOVED */
+  /* gap: 1rem; <-- REMOVED */
+  /* align-items: start; <-- REMOVED */
   list-style: none;
   padding: 0;
+  margin: 0; /* Ensure no default margin */
+  /* IMPORTANT: Height and overflow are set on .virtual-scroll-container now */
 }
+
+/* Styles for the container when virtual scroll is active */
+.card-view .virtual-scroll-container {
+  /*
+    IMPORTANT: For this container to fill available space and avoid large bottom gaps,
+    its parent element (e.g., #mainSection) should ideally use Flexbox or Grid.
+    If #mainSection is a flex container (e.g., display: flex; flex-direction: column;),
+    then this element should have 'flex-grow: 1;' and its explicit 'height' removed.
+    Example:
+    flex-grow: 1;
+  */
+  /* height: 75vh; */ /* EXAMPLE: Temporarily commented out. Adjust as needed or use flex-grow. */
+                      /* If using a fixed height like 75vh, ensure it's appropriate for your layout. */
+  height: calc(100vh - 100px); /* EXAMPLE: Adjust 100px based on header/footer/other elements height */
+  overflow-y: auto; /* Enable scrolling */
+  position: relative; /* Required for absolute positioning of rows by some libraries */
+  box-sizing: border-box;
+}
+
+/* Styles for the rows rendered by the virtual scroll library */
+.virtual-scroll-row {
+  display: flex;
+  flex-wrap: wrap;
+  /* Use gap matching JS constants (HORIZONTAL_CARD_GAP) */
+  gap: 12px; /* Increased gap */
+  /* Add padding to account for VERTICAL_ROW_GAP */
+  padding-bottom: 12px; /* Increased padding to match VERTICAL_ROW_GAP */
+  box-sizing: border-box;
+  width: 100%; /* Rows should span the container width */
+}
+
 
 .card-view .model-card {
   background-color: var(--card-bg);
@@ -16,11 +51,9 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08); /* Softer shadow */
   transition: transform 0.3s ease, box-shadow 0.3s ease;
   cursor: pointer;
-  /* display: flex; Removed flex display */
-  /* flex-direction: column; Removed flex direction */
-  /* height: auto; Let height be naturally determined */
-  /* min-height: 240px; Removed fixed min-height */
-  /* padding: 1rem; Remove overall padding, apply to content instead */
+  width: 180px;
+  height: 374px;
+  box-sizing: border-box;
 }
 
 .card-view .model-card:hover {
@@ -31,16 +64,14 @@
 .card-view .model-image {
   width: 100%;
   flex-shrink: 0; /* Prevent image from shrinking */
-  /* min-height: 220px; Removed fixed min-height */
   aspect-ratio: 1 / 1; /* 调整为4:3比例，减小图片高度 */
   object-fit: cover;
   background-color: rgba(0, 0, 0, 0.07);
   border-radius: 8px 8px 0 0; /* Radius only for top corners */
   display: block;
-  width: 100%; /* Ensure image takes full width */
-  height: 100%; /* Ensure image takes full height within aspect ratio */
+  /* height: 100%; Ensure image takes full height within aspect ratio - this might be redundant with aspect-ratio */
   object-position: center;
-  min-width: 190;
+  /* min-width: 190; This seems like an error, width is 100% of 180px card */
 }
 
 /* Styles for the image placeholder */
@@ -57,8 +88,8 @@
 
 .card-view .model-image-placeholder .placeholder-icon {
   color: rgba(0, 0, 0, 0.2); /* Color for the placeholder icon */
-  width: 100%; /* Adjust icon size relative to placeholder */
-  height: 100%;
+  width: 50%; /* Adjust icon size relative to placeholder */
+  height: 50%;
 }
 
 /* Apply dark theme styles within card view */
@@ -72,18 +103,10 @@
 
 
 .card-view .model-info {
-  /* Apply padding here instead of the card */
   padding: 0.6rem 0.8rem 0.4rem 0.8rem; /* 减小内边距 */
-  /* Ensure it's displayed */
-  display: block; /* Or flex if needed for internal alignment */
+  display: block;
   visibility: visible;
   height: auto;
-  /* flex: 0 0 auto; Removed flex property */
-  /* flex-shrink: 0; Removed flex shrink */
-  /* display: flex; Let it be default block */
-  /* flex-direction: column; */
-  /* justify-content: flex-start; */
-  /* min-height: 100px; Removed fixed min-height */
 }
 
 .card-view .model-name {
@@ -106,27 +129,21 @@
   font-size: 0.75rem; /* Adjusted font size */
   font-weight: 500;
   margin-top: 0.3rem; /* Adjusted margin */
-  /* text-transform: capitalize; Removed */
 }
 
 .card-view .tags-container {
   display: flex; /* Keep flex for tag layout */
   flex-wrap: wrap;
   gap: 0.4rem;
-  /* Ensure it's displayed */
   visibility: visible;
   height: auto;
-  /* flex-shrink: 0; Removed flex shrink */
   margin-top: 0.4rem; /* Reduced margin top */
-  /* max-height: 60px; Removed max-height */
-  /* overflow-y: auto; Removed overflow */
   padding: 0.4rem 0.8rem 0.6rem 0.8rem; /* 减小内边距 */
-  /* background-color: rgba(67, 97, 238, 0.05); Optional: remove background */
   border-radius: 0 0 8px 8px; /* Radius for bottom corners if needed */
   position: relative;
   transition: max-height 0.3s ease-out; /* Smooth transition for expansion */
-  min-width: 180px;
-  min-height: 100px;
+  min-width: 180px; /* Should match card width */
+  min-height: 100px; /* Adjust as needed for typical tag content */
   align-items: flex-start;
   align-content: flex-start;
 }
@@ -136,9 +153,6 @@
 
 /* Styles for the global tags tooltip */
 .global-tags-tooltip {
-  /* display: none; is set by JS initially and on mouseleave */
-  /* position: absolute; is set by JS */
-  /* z-index: 1001; is set by JS */
   background-color: var(--card-bg); /* Use card background color */
   color: var(--text-color); /* Use theme text color */
   padding: 0.5rem 0.7rem; /* Slightly smaller padding */
@@ -154,10 +168,11 @@
   pointer-events: none;
   transition: opacity 0.15s ease-in-out;
   opacity: 0;
+  /* position, z-index, display:none are handled by JS */
 }
 
 .global-tags-tooltip.tooltip-active {
-  opacity: 0.9; /* Increased opacity for better visibility */
+  opacity: 0.95; /* Increased opacity for better visibility */
 }
 
 /* Tags inside the global tooltip */
@@ -168,7 +183,6 @@
   border-radius: 8px; /* Smaller border radius for tags */
   background-color: rgba(var(--primary-color-rgb), 0.1); /* Subtle primary color tint */
   color: var(--text-color); /* Use theme text color */
-  /* Ensure no text-transform if it was inherited */
   text-transform: none;
 }
 
@@ -200,14 +214,18 @@
   align-self: flex-start;
 }
 
-/* 图片浮动文字----------------*/ 
+/* 图片浮动文字----------------*/
 .custom-img-container {
   position: relative;
-  display: inline-block;
+  display: inline-block; /* Or block, depending on desired layout with text */
+  width: 100%; /* Ensure it takes the width of the card space for image */
 }
 
-.custom-img-container img {
+.custom-img-container img,
+.custom-img-container .model-image-placeholder { /* Apply to placeholder too */
   display: block;
+  width: 100%;
+  /* height: 100%; Let aspect-ratio control height */
 }
 
 .card-view .custom-img-overlay {
