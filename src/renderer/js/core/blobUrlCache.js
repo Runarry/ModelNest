@@ -3,7 +3,7 @@ import { getModelImage, logMessage } from '../apiBridge.js'; // 假设 apiBridge
 const cache = new Map(); // Stores { blob, blobUrl, refCount, mimeType, revocationTimerId }
 // pendingRequests 用于处理对同一资源并发请求的情况
 const pendingRequests = new Map();
-const REVOCATION_DELAY_MS = 30000; 
+const REVOCATION_DELAY_MS = 60000; // block缓存丢弃时间。
 
 /**
  * 生成缓存键.
