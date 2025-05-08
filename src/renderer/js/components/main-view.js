@@ -73,6 +73,7 @@ export function initMainView(config, showDetailCallback) {
     sourceSelect.addEventListener('change', handleSourceChange); // Logged within handler
     // filterSelect.addEventListener('change', handleFilterChange); // Old filter - REMOVED
 
+
     // 事件委托：在 modelList 上监听点击事件
     modelList.addEventListener('click', (event) => {
         const cardElement = event.target.closest('.model-card');
@@ -87,6 +88,10 @@ export function initMainView(config, showDetailCallback) {
             }
         }
     });
+
+    // 事件委托：处理 tags tooltip
+    modelList.addEventListener('mouseover', handleModelListMouseOverForTagsTooltip);
+    modelList.addEventListener('mouseout', handleModelListMouseOutOfTagsTooltip);
 
     openFilterPanelBtn.addEventListener('click', async () => {
         logMessage('info', '[UI] 点击了打开/关闭筛选面板按钮');
@@ -360,13 +365,14 @@ function _renderSingleModelElement(model) {
     const card = document.createElement('li');
     card.className = 'model-card'; // Base class, specific styles handled by parent view class
     // 确保 model 数据能通过 dataset 等方式从 cardElement 获取到
+
     card.dataset.modelFile = JSON.stringify(model.file); // 存储模型文件路径作为标识
 
     const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
+    const fragment = document.createDocumentFragment();
 
     // --- Image ---
     let imageElement;
-
     let imageContainer = document.createElement('div');
     imageContainer.className = 'custom-img-container';
 
@@ -378,24 +384,20 @@ function _renderSingleModelElement(model) {
         imageElement.className = 'model-image';
         imageElement.loading = 'lazy';
         imageObserver.observe(imageElement);
-
     } else {
         imageElement = document.createElement('div');
         imageElement.className = 'model-image model-image-placeholder';
         imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg"  viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="placeholder-icon"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
     }
-
     imageContainer.appendChild(imageElement);
-    if (model.baseModel)
-    {
-        let overlay = imageElement = document.createElement('span');
+
+    if (model.baseModel) {
+        let overlay = document.createElement('span'); // Corrected: imageElement was reassigned
         overlay.className = 'custom-img-overlay';
         overlay.textContent = model.baseModel;
-        imageContainer.appendChild(overlay)
-
+        imageContainer.appendChild(overlay);
     }
-
-    card.appendChild(imageContainer);
+    fragment.appendChild(imageContainer);
 
     // --- Content (Name, Type) ---
     const contentDiv = document.createElement('div');
@@ -411,15 +413,13 @@ function _renderSingleModelElement(model) {
 
     contentDiv.appendChild(nameH3);
     contentDiv.appendChild(typeSpan);
-    card.appendChild(contentDiv);
+    fragment.appendChild(contentDiv);
 
     // --- Tags ---
     const tagsContainer = document.createElement('div');
     tagsContainer.className = 'tags-container';
-    card.appendChild(tagsContainer);
 
     if (model.tags && model.tags.length > 0) {
-        // Render initially visible tags directly into tagsContainer
         model.tags.forEach((tagText, index) => {
             if (index < MAX_VISIBLE_TAGS) {
                 const tagElementVisible = document.createElement('span');
@@ -429,58 +429,15 @@ function _renderSingleModelElement(model) {
             }
         });
 
-        // Add ellipsis if there are more tags (only for card view)
         if (displayMode === 'card' && model.tags.length > MAX_VISIBLE_TAGS) {
             const ellipsis = document.createElement('span');
             ellipsis.className = 'tag tag-ellipsis';
             ellipsis.textContent = '...';
             tagsContainer.appendChild(ellipsis);
         }
-
-        // Event listeners for the global tooltip
-        tagsContainer.addEventListener('mouseenter', (event) => {
-            if (displayMode === 'card' && model.tags.length > MAX_VISIBLE_TAGS && globalTagsTooltip) {
-                clearChildren(globalTagsTooltip); // Clear previous tags
-                model.tags.forEach(tagText => {
-                    const tagElementFull = document.createElement('span');
-                    tagElementFull.className = 'tag'; // Use the same class for styling consistency
-                    tagElementFull.textContent = tagText;
-                    globalTagsTooltip.appendChild(tagElementFull);
-                });
-
-                // Position tooltip near the mouse or the element
-                // Adjust offsetX and offsetY as needed for better positioning
-                const rect = tagsContainer.getBoundingClientRect();
-                let top = rect.bottom + window.scrollY + 5; // 5px below the container
-                let left = rect.left + window.scrollX;
-
-                // Prevent tooltip from going off-screen
-                globalTagsTooltip.style.display = 'flex'; // Set display to flex to measure
-                const tooltipRect = globalTagsTooltip.getBoundingClientRect();
-                if (left + tooltipRect.width > window.innerWidth) {
-                    left = window.innerWidth - tooltipRect.width - 10; // 10px padding from edge
-                }
-                if (top + tooltipRect.height > window.innerHeight) {
-                    top = rect.top + window.scrollY - tooltipRect.height - 5; // 5px above the container
-                }
-                 if (left < 0) left = 10; // 10px padding from edge
-                 if (top < 0) top = 10; // 10px padding from edge
-
-
-                globalTagsTooltip.style.left = `${left}px`;
-                globalTagsTooltip.style.top = `${top}px`;
-                // globalTagsTooltip.style.display = 'flex'; // Already set for measurement, ensure it's flex
-                globalTagsTooltip.classList.add('tooltip-active'); // Make it visible via CSS class
-            }
-        });
-
-        tagsContainer.addEventListener('mouseleave', () => {
-            if (displayMode === 'card' && globalTagsTooltip) {
-                globalTagsTooltip.style.display = 'none';
-                globalTagsTooltip.classList.remove('tooltip-active');
-            }
-        });
     }
+    fragment.appendChild(tagsContainer);
+    card.appendChild(fragment);
 
     // --- Click Event (已通过事件委托在 initMainView 中处理) ---
     // card.addEventListener('click', () => {
@@ -757,6 +714,96 @@ if (displayMode !== newMode) {
   renderModels();
 }
 }
+
+// A shared constant for maximum visible tags, can be used by both rendering and tooltip logic.
+const MAX_VISIBLE_TAGS = 6;
+
+// ===== Tags Tooltip Event Handlers (Delegated) =====
+
+/**
+ * Handles mouseover events on the model list for showing the tags tooltip.
+ * @param {MouseEvent} event - The mouseover event.
+ */
+function handleModelListMouseOverForTagsTooltip(event) {
+    if (displayMode !== 'card' || !globalTagsTooltip) return;
+
+    const tagsContainer = event.target.closest('.tags-container');
+    if (!tagsContainer) return;
+
+    const cardElement = tagsContainer.closest('.model-card');
+    if (!cardElement || !cardElement.dataset.modelFile) return;
+
+    try {
+        const modelFile = JSON.parse(cardElement.dataset.modelFile);
+        const model = models.find(m => m.file === modelFile);
+
+        if (model && model.tags && model.tags.length > MAX_VISIBLE_TAGS) {
+            clearChildren(globalTagsTooltip);
+            model.tags.forEach(tagText => {
+                const tagElementFull = document.createElement('span');
+                tagElementFull.className = 'tag';
+                tagElementFull.textContent = tagText;
+                globalTagsTooltip.appendChild(tagElementFull);
+            });
+
+            const rect = tagsContainer.getBoundingClientRect();
+            let top = rect.bottom + window.scrollY + 5;
+            let left = rect.left + window.scrollX;
+
+            globalTagsTooltip.style.display = 'flex'; // Set display to flex to measure
+            const tooltipRect = globalTagsTooltip.getBoundingClientRect();
+
+            if (left + tooltipRect.width > window.innerWidth) {
+                left = window.innerWidth - tooltipRect.width - 10;
+            }
+            if (top + tooltipRect.height > window.innerHeight) {
+                top = rect.top + window.scrollY - tooltipRect.height - 5;
+            }
+            if (left < 0) left = 10;
+            if (top < 0) top = 10;
+
+            globalTagsTooltip.style.left = `${left}px`;
+            globalTagsTooltip.style.top = `${top}px`;
+            globalTagsTooltip.classList.add('tooltip-active');
+        }
+    } catch (e) {
+        logMessage('error', '[MainView] Error parsing modelFile for tags tooltip:', e, cardElement.dataset.modelFile);
+    }
+}
+
+
+/**
+ * Handles mouseout events on the model list for hiding the tags tooltip.
+ * @param {MouseEvent} event - The mouseout event.
+ */
+function handleModelListMouseOutOfTagsTooltip(event) {
+    if (displayMode !== 'card' || !globalTagsTooltip) return;
+
+    const toElement = event.relatedTarget;
+
+    // Don't hide if moving to the tooltip itself or one of its children
+    if (toElement && (globalTagsTooltip.contains(toElement) || globalTagsTooltip === toElement)) {
+        return;
+    }
+
+    // Hide if moving out of a tags-container that triggered the tooltip,
+    // unless moving to another part of the same card's tags or the tooltip itself.
+    const currentTargetTagsContainer = event.target.closest('.tags-container');
+
+    if (currentTargetTagsContainer) {
+        // If relatedTarget is null (mouse left the window) or not part of any tags-container
+        // or not part of the tooltip, then hide.
+        if (!toElement || (!toElement.closest('.tags-container') && !globalTagsTooltip.contains(toElement))) {
+            globalTagsTooltip.style.display = 'none';
+            globalTagsTooltip.classList.remove('tooltip-active');
+        }
+    } else if (globalTagsTooltip.classList.contains('tooltip-active') && (!toElement || !globalTagsTooltip.contains(toElement))) {
+        // This case handles moving from the tooltip to outside, and relatedTarget is not the tooltip
+        globalTagsTooltip.style.display = 'none';
+        globalTagsTooltip.classList.remove('tooltip-active');
+    }
+}
+
 
 // ===== Filter Options Caching =====
 
