@@ -169,36 +169,3 @@
   display: none;
 }
 
-/* --- Styles from original list-view.css that might be redundant or need removal --- */
-
-/* Remove original #modelList styling as it's handled by .virtual-scroll-container */
-/*
-.list-view #modelList {
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  list-style: none;
-  padding: 0;
-  width: 100%;
-}
-*/
-
-/* Remove original .model-description styles if not used in the new structure */
-/*
-.list-view .model-description { ... }
-[data-theme="dark"] .list-view .model-description { ... }
-*/
-
-/* Remove original .tag:hover if default is fine */
-/*
-.list-view .tag:hover {
-  background-color: rgba(67, 97, 238, 0.3);
-}
-*/
-
-/* Remove original .tag-more-btn styles */
-/*
-.list-view .tag-more-btn {
-  display: none;
-}
-*/
