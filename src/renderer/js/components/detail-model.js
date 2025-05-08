@@ -1,6 +1,7 @@
-import { loadImage } from '../utils/ui-utils.js'; // Assuming loadImage handles API call and blob creation
-import { t } from '../core/i18n.js'; // 导入 i18n 函数
-import { logMessage, saveModel } from '../apiBridge.js'; // 导入 API 桥接
+import { loadImage } from '../utils/ui-utils.js';
+import { t } from '../core/i18n.js';
+import { logMessage, saveModel } from '../apiBridge.js';
+import { BlobUrlCache } from '../core/blobUrlCache.js';
 
 // ===== DOM Element References =====
 let detailModel;
@@ -134,16 +135,43 @@ export function hideDetailModel() {
     logMessage('info', `[DetailModel] 开始隐藏模型详情: ${currentModel?.name || '未知'}`);
     if (detailModel) {
         detailModel.classList.remove('active');
-        // Optional: Clean up object URLs if created for images/blobs
-        if (detailImage && detailImage.src.startsWith('blob:')) {
-            logMessage('debug', `[DetailModel] 撤销 Blob URL: ${detailImage.src}`);
-            URL.revokeObjectURL(detailImage.src);
+
+        // --- Release Blob URL using BlobUrlCache ---
+        // We need to release the blob URL that was potentially loaded for the currentModel's image.
+        // The loadImage function in ui-utils.js now stores the cacheKey in imgElement.dataset.blobCacheKey,
+        // but it's safer to use the sourceId and imagePath that were used to load it,
+        // as detailImage element might be reused or its dataset manipulated elsewhere.
+        if (currentModel && currentModel.image && currentSourceId && detailImage) {
+            logMessage('debug', `[DetailModel] Preparing to release Blob URL for image: ${currentModel.image} from source: ${currentSourceId}`);
+            // It's good practice to clear the src *before* releasing,
+            // though BlobUrlCache handles the actual revoke.
+            // Clearing src prevents the browser from trying to access a (soon-to-be) revoked URL.
+            if (detailImage.src.startsWith('blob:')) {
+                 // We can directly use currentSourceId and currentModel.image as these were used to load it.
+                BlobUrlCache.releaseBlobUrl(currentSourceId, currentModel.image);
+                logMessage('debug', `[DetailModel] Called BlobUrlCache.releaseBlobUrl for ${currentSourceId}::${currentModel.image}`);
+            }
+            detailImage.src = ''; // Clear src
+            detailImage.removeAttribute('data-blob-cache-key'); // Remove the key if it was set
+            detailImage.style.display = 'none';
+        } else if (detailImage && detailImage.src.startsWith('blob:')) {
+            // Fallback if currentModel/currentSourceId somehow became null but image still has a blob src
+            // This case is less ideal as we might not have the original sourceId/imagePath
+            // but if data-blob-cache-key was reliably set, we could use that.
+            // For now, we'll log a warning if this less specific path is taken.
+            logMessage('warn', `[DetailModel] currentModel/currentSourceId is null, but detailImage.src is a blob. Cannot reliably release via BlobUrlCache without original key. Old revoke logic removed.`);
+            // Old logic: URL.revokeObjectURL(detailImage.src);
             detailImage.src = '';
             detailImage.style.display = 'none';
         }
-        currentModel = null; // Clear stored model
-        currentSourceId = null;
+        // --- End Release Blob URL ---
+
         if(detailDescriptionContainer) detailDescriptionContainer.innerHTML = ''; // Clear dynamic content
+        
+        // Clear stored model and sourceId AFTER potential use in releaseBlobUrl
+        currentModel = null;
+        currentSourceId = null;
+
         logMessage('info', '[DetailModel] 模型详情已隐藏');
     } else {
         logMessage('warn', '[DetailModel] hideDetailModel 调用时弹窗元素未初始化');

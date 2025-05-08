@@ -3,6 +3,7 @@ import { t } from '../core/i18n.js'; // 导入 i18n 函数
 import { logMessage, listModels, listSubdirectories,getAllSourceConfigs } from '../apiBridge.js'; // 导入 API 桥接
 import { CrawlStatusModal } from './crawl-status-modal.js'; // 导入弹窗组件 (稍后创建)
 import FilterPanel from './filter-panel.js'; // New: Import FilterPanel component
+import { BlobUrlCache } from '../core/blobUrlCache.js';
 
 // ===== DOM Element References =====
 // These might be passed during initialization or queried within functions
@@ -433,9 +434,39 @@ function _renderSingleModelElement(model) {
     return card;
 }
 
+/**
+ * Releases the Blob URL associated with the image in a given card element.
+ * @param {HTMLElement} cardElement - The model card element.
+ */
+function _releaseBlobUrlForCardElement(cardElement) {
+    if (!cardElement) return;
+    // Card element itself might be the li, image is a child img.
+    const imgElement = cardElement.querySelector('img[data-blob-cache-key]');
+    if (imgElement) {
+        const cacheKey = imgElement.dataset.blobCacheKey;
+        if (cacheKey) {
+            BlobUrlCache.releaseBlobUrlByKey(cacheKey);
+            logMessage('debug', `[MainView] Released Blob URL for card via key: ${cacheKey}`);
+            delete imgElement.dataset.blobCacheKey; // Clean up the attribute
+        }
+    }
+}
+
 /** Renders the model list based on the current filter, display mode, and models data. */
 function renderModels() {
   if (!modelList) return;
+
+  // Before clearing children, release any existing blob URLs
+  if (modelList.childNodes.length > 0) {
+    logMessage('debug', '[MainView] Releasing Blob URLs for existing model list items before clearing in renderModels.');
+    modelList.childNodes.forEach(cardNode => {
+        // Ensure we are only processing element nodes (model cards)
+        if (cardNode.nodeType === Node.ELEMENT_NODE) {
+            _releaseBlobUrlForCardElement(cardNode);
+        }
+    });
+  }
+
   clearChildren(modelList);
   // The 'models' array is now pre-filtered by loadModels via modelService.
   // No need for client-side filtering here based on the old filterType.
@@ -479,53 +510,42 @@ export function updateSingleModelCard(updatedModelData) {
         logMessage('debug', `[MainView] 在内部模型数组中找到并更新模型: ${updatedModelData.file}`);
         models[modelIndex] = updatedModelData;
     } else {
-        // If the model wasn't in the original list (e.g., newly created/synced?),
-        // we might need to add it if it matches the current directory/filter.
-        // For simplicity now, we only update existing ones.
-        // TODO: Consider adding logic to insert new models if applicable.
         logMessage('warn', `[MainView] 更新的模型 ${updatedModelData.file} 不在当前加载的内部模型数组中，跳过更新。`);
-        // return; // Or proceed to check if it should be added to the view
+        // Consider if a new model matching filters should be added. For now, only updates existing.
     }
 
-    // 2. Check if the updated model should be visible based on the current filter
-    const modelTypeUpper = updatedModelData.modelType ? updatedModelData.modelType.toUpperCase() : t('uncategorized').toUpperCase();
-    const shouldBeVisible = !filterType || modelTypeUpper === filterType;
+    // 2. Check if the updated model should be visible based on the current filter (filterType is removed, logic might need update if complex filtering returns)
+    // For now, assume if it's in `models` (updated or pre-existing and matched by file path), it should be visible
+    // or its visibility is handled by the full `renderModels` if filters change.
+    // This function primarily handles in-place updates or removals due to data changes, not filter changes.
+    let shouldBeVisible = true; // Simplified: if we are updating it, it's likely meant to be visible or its data changed.
+                                // Complex filter logic would re-trigger renderModels.
 
     // 3. Find existing DOM element
-    // Use JSON.stringify to properly escape the file path for the CSS selector
     const escapedFilePath = JSON.stringify(updatedModelData.file);
     const selector = `li[data-model-file=${escapedFilePath}]`;
-    logMessage('debug', `[MainView] Attempting to find card with selector: ${selector}`);
     const existingCard = modelList.querySelector(selector);
-    logMessage('debug', `[MainView] Found existing card for ${updatedModelData.file}:`, existingCard ? 'Yes' : 'No');
 
     if (existingCard) {
-        if (shouldBeVisible) {
-            // Model exists and should be visible: Replace it
+        if (shouldBeVisible) { // Simplified: always true if card exists and we're updating it
             logMessage('debug', `[MainView] 找到现有 DOM 卡片，将替换: ${updatedModelData.file}`);
+            _releaseBlobUrlForCardElement(existingCard); // Release old image before replacing
             const newCardElement = _renderSingleModelElement(updatedModelData);
             existingCard.replaceWith(newCardElement);
-        } else {
-            // Model exists but should NO LONGER be visible: Remove it
-            logMessage('debug', `[MainView] 找到现有 DOM 卡片，但不再符合过滤器，将移除: ${updatedModelData.file}`);
+        } else { // This 'else' branch might be less relevant now without client-side filterType
+            logMessage('debug', `[MainView] 找到现有 DOM 卡片，但（按旧逻辑）不再符合过滤器，将移除: ${updatedModelData.file}`);
+            _releaseBlobUrlForCardElement(existingCard); // Release image before removing
             existingCard.remove();
         }
-    } else if (shouldBeVisible) {
-        // Model does NOT exist in DOM, but SHOULD be visible: Add it
-        // This handles cases where a model might be added/synced while viewing the list
-        logMessage('debug', `[MainView] 未找到现有 DOM 卡片，但模型符合过滤器，将添加: ${updatedModelData.file}`);
+    } else if (shouldBeVisible) { // If card didn't exist but data implies it should (e.g. new model from sync)
+        logMessage('debug', `[MainView] 未找到现有 DOM 卡片，但模型数据已更新/新增，将添加: ${updatedModelData.file}`);
         const newCardElement = _renderSingleModelElement(updatedModelData);
         modelList.appendChild(newCardElement);
-        // Remove the "empty list" message if it exists
         const emptyMsg = modelList.querySelector('.empty-list-message');
         if (emptyMsg) emptyMsg.remove();
     } else {
-         logMessage('debug', `[MainView] 模型 ${updatedModelData.file} 不存在于 DOM 且不符合当前过滤器，无需操作。`);
+         logMessage('debug', `[MainView] 模型 ${updatedModelData.file} 不存在于 DOM 且（按旧逻辑）不符合当前过滤器，无需操作。`);
     }
-
-    // 4. Re-render filter types in case the updated model introduced/removed a type - REMOVED
-    //    (This is less efficient but ensures filter dropdown is accurate)
-    // renderFilterTypes(); // This function is removed
 }
 
 

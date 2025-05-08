@@ -1,4 +1,5 @@
 import { getModelImage, logMessage } from '../apiBridge.js'; // 导入 API 桥接
+import { BlobUrlCache, generateCacheKey } from '../core/blobUrlCache.js';
 
 // ===== UI Feedback Helper =====
 let feedbackTimeout = null;
@@ -96,55 +97,49 @@ export async function loadImage(imgElement) {
   const logPrefix = `[ImageLoader ${sourceId}] ${imagePath}:`;
 
   if (!sourceId || !imagePath) {
-      // Task 1: Error Logging
-      logMessage('error', `${logPrefix} 加载失败 - <img> 元素缺少 data-source-id 或 data-image-path 属性`, imgElement);
-      // Optionally set a placeholder/error state on the imgElement
-      imgElement.alt = 'Error: Missing data attributes'; // Provide feedback
-      return;
+    logMessage('error', `${logPrefix} 加载失败 - <img> 元素缺少 data-source-id 或 data-image-path 属性`, imgElement);
+    imgElement.alt = 'Error: Missing data attributes';
+    imgElement.src = ''; // Clear src to prevent broken image icon
+    return;
   }
-  logMessage('debug', `${logPrefix} 开始加载图片`);
-  try {
-    const imageData = await getModelImage({ sourceId, imagePath });
 
-    if (imageData && imageData.data) {
-       logMessage('debug', `${logPrefix} 从 API 收到图片数据, 大小: ${imageData.data?.length} bytes, 类型: ${imageData.mimeType}`);
-      try {
-          const blob = new Blob([new Uint8Array(imageData.data)], { type: imageData.mimeType });
-          const objectUrl = URL.createObjectURL(blob);
-          logMessage('debug', `${logPrefix} 创建 Blob URL: ${objectUrl}`);
-          imgElement.src = objectUrl;
-          // Optional: Clean up the object URL when the image is no longer needed
-          // imgElement.onload = () => URL.revokeObjectURL(objectUrl); // Example cleanup
-          imgElement.onerror = () => { // Handle cases where the blob URL itself fails to load
-               // Task 1: Error Logging
-              logMessage('error', `${logPrefix} 从 Blob URL 加载图片失败: ${objectUrl}`);
-              URL.revokeObjectURL(objectUrl); // Clean up failed URL
-              imgElement.alt = 'Error loading image from blob'; // Provide feedback
-          };
-           imgElement.onload = () => { // Add onload for successful logging and cleanup
-               // Log success including the source from the API result
-               logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功: ${objectUrl}, 来源: ${imageData?.source || '未知'}`);
-               // Revoke the object URL once the image is loaded to free up memory
-               URL.revokeObjectURL(objectUrl);
-               logMessage('debug', `${logPrefix} Blob URL 已撤销: ${objectUrl}`);
-           };
-      } catch (blobError) {
-           // Task 1: Error Logging
-          logMessage('error', `${logPrefix} 创建 Blob 或 Object URL 时出错:`, blobError.message, blobError.stack, blobError);
-          imgElement.alt = 'Error creating image blob'; // Provide feedback
-      }
+  // 为该图片元素设置一个唯一的 cacheKey，以便后续可以释放
+  // 注意：如果 imagePath 本身可能包含 '::'，需要选择更安全的组合方式或对 imagePath进行编码
+  const cacheKey = generateCacheKey(sourceId, imagePath); // Use imported function
+  imgElement.dataset.blobCacheKey = cacheKey;
+  // 清除旧的 src，以防是之前的 blob url
+  imgElement.src = '';
+
+
+  logMessage('debug', `${logPrefix} 开始加载图片 (using BlobUrlCache)`);
+
+  try {
+    const blobUrl = await BlobUrlCache.getOrCreateBlobUrl(sourceId, imagePath);
+
+    if (blobUrl) {
+      logMessage('info', `${logPrefix} 从 BlobUrlCache 获取到 URL: ${blobUrl}`);
+      imgElement.src = blobUrl;
+
+      // onload 和 onerror 仍然有用，用于知道图片是否实际显示成功
+      // 但它们不再负责 revokeObjectURL
+      imgElement.onload = () => {
+        logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功: ${blobUrl}`);
+      };
+      imgElement.onerror = () => {
+        logMessage('error', `${logPrefix} 从 Blob URL 加载图片失败: ${blobUrl}`);
+        imgElement.alt = 'Error loading image from blob';
+        // 注意：这里不应该 revoke，因为 BlobUrlCache 会管理生命周期
+        // 如果加载失败，可能是 Blob 本身有问题或 URL 已被意外撤销
+        // 可以考虑在这里尝试从 BlobUrlCache 中移除有问题的条目，但这需要 BlobUrlCache 提供相应接口
+        // 或者让 BlobUrlCache 内部在创建时就处理好无法加载的 Blob
+      };
     } else {
-        // Handle case where API returns no image data (e.g., image not found on backend)
-         // Task 1: Error Logging (Potential failure point)
-        logMessage('warn', `${logPrefix} API 未返回图片数据 (可能未找到)`);
-        // Optionally set a placeholder/error state
-        imgElement.alt = 'Image not found'; // Provide feedback
+      logMessage('warn', `${logPrefix} BlobUrlCache未能提供 Blob URL (可能获取数据失败).`);
+      imgElement.alt = 'Image not available';
     }
-  } catch (apiError) {
-     // Task 1: Error Logging
-    logMessage('error', `${logPrefix} 调用 API getModelImage 时出错:`, apiError.message, apiError.stack, apiError);
-    // Optionally set a placeholder/error state
-     imgElement.alt = 'Error loading image data'; // Provide feedback
+  } catch (error) {
+    logMessage('error', `${logPrefix} 调用 BlobUrlCache.getOrCreateBlobUrl 时出错:`, error);
+    imgElement.alt = 'Error loading image data';
   }
 }
 
