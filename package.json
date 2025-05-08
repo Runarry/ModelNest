@@ -29,7 +29,7 @@
     "core-js": "^3.42.0",
     "cross-env": "^7.0.3",
     "cssnano": "^7.0.7",
-    "electron": "^36.1.0",
+    "electron": "^36.2.0",
     "electron-builder": "^26.0.15",
     "postcss": "^8.5.3",
     "postcss-import": "^16.1.0",
