@@ -690,6 +690,22 @@ select:hover {
   /* Enable vertical scrolling ONLY for this area */
   scrollbar-gutter: stable;
   /* Reserve space for scrollbar to prevent layout shifts */
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch; /* iOS平滑滚动 */
+  will-change: transform; /* 提示浏览器优化 */
+  transform: translateZ(0); /* 触发硬件加速 */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0,0,0,0.2) transparent;
+}
+
+/* 自定义滚动条样式 - WebKit浏览器 */
+.content-main::-webkit-scrollbar {
+  width: 8px;
+}
+
+.content-main::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,0.2);
+  border-radius: 4px;
 }
 
 /* 响应式调整 */
