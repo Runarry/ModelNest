@@ -685,9 +685,9 @@ select:hover {
 
   .directory-tabs {
     width: 100%;
-    margin-right: 0; /* 移除右边距 */
-    margin-bottom: 1rem; /* 在垂直布局时添加底部边距 */
-    /* order: -1; /* 保持目录在顶部 */
+    margin-right: 0; 
+    margin-bottom: 1rem; 
+
   }
 
   .content-main {
@@ -698,9 +698,6 @@ select:hover {
 /* Icon for WebDAV Sources (Using a cloud emoji for now) */
 #sourceSelect .source-option-webdav::before {
   content: '☁️';
-  /* Unicode character for cloud */
-  /* Alternatively, use background-image with a data URI or URL */
-  /* background-image: url('path/to/webdav-icon.svg'); */
   font-size: 14px;
   /* Adjust emoji size if needed */
 }

@@ -31,6 +31,7 @@ let allSourceConfigs = []; // 新增：存储所有数据源的完整配置
 let currentSourceConfig = null; // 新增：存储当前选定数据源的配置
 let crawlStatusModal = null; // 新增：弹窗实例
 let cachedFilterOptionsBySource = {}; // New: Cache for filter options, keyed by sourceId
+let globalTagsTooltip = null; // For the global tags tooltip
 
 // ===== Initialization =====
 
@@ -162,6 +163,14 @@ export function initMainView(config, showDetailCallback) {
     // 初始化新的筛选面板实例 (使用导入的类，并传入可能的缓存选项)
     // 延后 FilterPanel 的初始化到模型加载和主页面渲染完毕后
     filterPanelInstance = null;
+
+    // Create and append the global tags tooltip
+    globalTagsTooltip = document.createElement('div');
+    globalTagsTooltip.className = 'global-tags-tooltip'; // Will be styled in CSS
+    globalTagsTooltip.style.display = 'none'; // Initially hidden
+    globalTagsTooltip.style.position = 'absolute'; // For positioning near mouse/element
+    globalTagsTooltip.style.zIndex = '1001'; // Ensure it's on top (higher than card-view z-index if any)
+    document.body.appendChild(globalTagsTooltip);
 
     // Initial fetch of filter options will be triggered by the first call to loadModels
     // (e.g., via handleSourceChange after renderSources sets an initial source)
@@ -410,29 +419,67 @@ function _renderSingleModelElement(model) {
     card.appendChild(tagsContainer);
 
     if (model.tags && model.tags.length > 0) {
-        model.tags.forEach((tag, index) => {
-            const tagElement = document.createElement('span');
-            tagElement.className = 'tag';
-            tagElement.textContent = tag;
-            if (index >= MAX_VISIBLE_TAGS) {
-                tagElement.classList.add('tag-hidden');
+        // Render initially visible tags directly into tagsContainer
+        model.tags.forEach((tagText, index) => {
+            if (index < MAX_VISIBLE_TAGS) {
+                const tagElementVisible = document.createElement('span');
+                tagElementVisible.className = 'tag';
+                tagElementVisible.textContent = tagText;
+                tagsContainer.appendChild(tagElementVisible);
             }
-            tagsContainer.appendChild(tagElement);
         });
 
-        if (model.tags.length > MAX_VISIBLE_TAGS) {
-            const moreBtn = document.createElement('button');
-            moreBtn.className = 'tag-more-btn';
-            moreBtn.textContent = t('showMore');
-            moreBtn.onclick = (event) => {
-                logMessage('info', `[UI] 点击了模型 "${model.name}" 的 "显示更多/更少" 标签按钮`);
-                event.stopPropagation();
-                const container = event.target.closest('.tags-container');
-                const isExpanded = container.classList.toggle('expanded');
-                event.target.textContent = isExpanded ? t('showLess') : t('showMore');
-            };
-            tagsContainer.appendChild(moreBtn);
+        // Add ellipsis if there are more tags (only for card view)
+        if (displayMode === 'card' && model.tags.length > MAX_VISIBLE_TAGS) {
+            const ellipsis = document.createElement('span');
+            ellipsis.className = 'tag tag-ellipsis';
+            ellipsis.textContent = '...';
+            tagsContainer.appendChild(ellipsis);
         }
+
+        // Event listeners for the global tooltip
+        tagsContainer.addEventListener('mouseenter', (event) => {
+            if (displayMode === 'card' && model.tags.length > MAX_VISIBLE_TAGS && globalTagsTooltip) {
+                clearChildren(globalTagsTooltip); // Clear previous tags
+                model.tags.forEach(tagText => {
+                    const tagElementFull = document.createElement('span');
+                    tagElementFull.className = 'tag'; // Use the same class for styling consistency
+                    tagElementFull.textContent = tagText;
+                    globalTagsTooltip.appendChild(tagElementFull);
+                });
+
+                // Position tooltip near the mouse or the element
+                // Adjust offsetX and offsetY as needed for better positioning
+                const rect = tagsContainer.getBoundingClientRect();
+                let top = rect.bottom + window.scrollY + 5; // 5px below the container
+                let left = rect.left + window.scrollX;
+
+                // Prevent tooltip from going off-screen
+                globalTagsTooltip.style.display = 'flex'; // Set display to flex to measure
+                const tooltipRect = globalTagsTooltip.getBoundingClientRect();
+                if (left + tooltipRect.width > window.innerWidth) {
+                    left = window.innerWidth - tooltipRect.width - 10; // 10px padding from edge
+                }
+                if (top + tooltipRect.height > window.innerHeight) {
+                    top = rect.top + window.scrollY - tooltipRect.height - 5; // 5px above the container
+                }
+                 if (left < 0) left = 10; // 10px padding from edge
+                 if (top < 0) top = 10; // 10px padding from edge
+
+
+                globalTagsTooltip.style.left = `${left}px`;
+                globalTagsTooltip.style.top = `${top}px`;
+                // globalTagsTooltip.style.display = 'flex'; // Already set for measurement, ensure it's flex
+                globalTagsTooltip.classList.add('tooltip-active'); // Make it visible via CSS class
+            }
+        });
+
+        tagsContainer.addEventListener('mouseleave', () => {
+            if (displayMode === 'card' && globalTagsTooltip) {
+                globalTagsTooltip.style.display = 'none';
+                globalTagsTooltip.classList.remove('tooltip-active');
+            }
+        });
     }
 
     // --- Click Event (已通过事件委托在 initMainView 中处理) ---

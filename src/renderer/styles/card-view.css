@@ -131,34 +131,62 @@
   align-content: flex-start;
 }
 
-/* Style for hidden tags */
-.card-view .tag.tag-hidden {
-  display: none;
+
+/* Removed .tags-container.expanded and .tag-more-btn styles as they are no longer used */
+
+/* Styles for the global tags tooltip */
+.global-tags-tooltip {
+  /* display: none; is set by JS initially and on mouseleave */
+  /* position: absolute; is set by JS */
+  /* z-index: 1001; is set by JS */
+  background-color: var(--card-bg); /* Use card background color */
+  color: var(--text-color); /* Use theme text color */
+  padding: 0.5rem 0.7rem; /* Slightly smaller padding */
+  border-radius: 6px; /* Slightly smaller border radius */
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.15); /* Adjusted shadow */
+  border: 1px solid var(--border-color); /* Use theme border color */
+  width: auto;
+  max-width: 320px; /* Slightly smaller max-width */
+  white-space: normal;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem; /* Smaller gap between tags */
+  pointer-events: none;
+  transition: opacity 0.15s ease-in-out;
+  opacity: 0;
 }
 
-/* When container is expanded, show hidden tags */
-.card-view .tags-container.expanded .tag.tag-hidden {
-  display: inline-block;
+.global-tags-tooltip.tooltip-active {
+  opacity: 0.9; /* Increased opacity for better visibility */
 }
 
-/* Style for the "more" button */
-.card-view .tag-more-btn {
-  background: none;
-  border: none;
-  color: var(--primary-color);
-  cursor: pointer;
-  font-size: 0.65rem; /* Match tag font size */
-  padding: 0.2rem 0.4rem;
-  margin-left: 0.2rem;
-  font-weight: 600;
-  text-decoration: underline;
-  display: inline-block; /* Ensure it flows with tags */
+/* Tags inside the global tooltip */
+.global-tags-tooltip .tag {
+  padding: 0.15rem 0.4rem; /* Smaller padding for tags */
+  font-size: 0.6rem; /* Smaller font size for tags */
+  font-weight: 400; /* Lighter font weight */
+  border-radius: 8px; /* Smaller border radius for tags */
+  background-color: rgba(var(--primary-color-rgb), 0.1); /* Subtle primary color tint */
+  color: var(--text-color); /* Use theme text color */
+  /* Ensure no text-transform if it was inherited */
+  text-transform: none;
 }
 
-.card-view .tag-more-btn:hover {
-  text-decoration: none;
+
+/* Style for the ellipsis indicator */
+.card-view .tag-ellipsis {
+  padding: 0.2rem 0.3rem;
+  background-color: transparent;
+  color: rgba(var(--text-color-rgb), 0.7); /* Semi-transparent text color */
+  font-size: 0.65rem;
+  font-weight: 500;
+  cursor: default; /* Indicate it's not interactive */
+  transition: color 0.2s ease; /* Smooth color transition */
 }
 
+.card-view .tag-ellipsis:hover {
+  color: var(--primary-color); /* Highlight on hover */
+}
 
 .card-view .tag {
   display: inline-block;
