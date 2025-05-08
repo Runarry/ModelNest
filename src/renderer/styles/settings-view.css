@@ -79,6 +79,7 @@
   padding: 20px;
   overflow-y: auto; /* Allow content scrolling */
   background-color: var(--content-bg);
+  scrollbar-gutter: stable; /* Prevent layout shift when scrollbar appears/disappears */
 }
 
 .settings-pane {

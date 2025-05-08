@@ -77,6 +77,10 @@ body {
   transition: background-color 0.3s ease;
 }
 
+body.modal-open {
+  overflow: hidden;
+}
+
 #app {
   width: 100%;
   /* 增加最大宽度，使界面更宽 */

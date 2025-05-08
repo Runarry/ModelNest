@@ -191,6 +191,7 @@ async function opensettingsModal() {
     }
     logMessage('info', "[settingsModal] 开始打开设置弹窗");
     // Clear any previous feedback? (No global feedback area anymore)
+    document.body.classList.add('modal-open'); // Prevent body scroll
     settingsModal.classList.add('active');
 
     document.title = t('settings.title'); // Set page title
@@ -206,6 +207,7 @@ function closesettingsModal() {
     logMessage('info', "[settingsModal] 开始关闭设置弹窗");
     if (settingsModal) {
         settingsModal.classList.remove('active');
+        document.body.classList.remove('modal-open'); // Restore body scroll
         // Clear temporary state
         tempModelSources = [];
         currentConfigData = null;
