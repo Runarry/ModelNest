@@ -72,6 +72,21 @@ export function initMainView(config, showDetailCallback) {
     sourceSelect.addEventListener('change', handleSourceChange); // Logged within handler
     // filterSelect.addEventListener('change', handleFilterChange); // Old filter - REMOVED
 
+    // 事件委托：在 modelList 上监听点击事件
+    modelList.addEventListener('click', (event) => {
+        const cardElement = event.target.closest('.model-card');
+        if (cardElement && cardElement.dataset.modelFile) {
+            // 注意：dataset.modelFile 存储的是字符串化的 model.file
+            const modelFile = JSON.parse(cardElement.dataset.modelFile);
+            const model = models.find(m => m.file === modelFile);
+            if (model && _showDetail) {
+                logMessage('info', `[UI] 点击了模型卡片 (通过事件委托): ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
+                const isReadOnly = currentSourceConfig?.readOnly === true;
+                _showDetail(model, currentSourceId, isReadOnly);
+            }
+        }
+    });
+
     openFilterPanelBtn.addEventListener('click', async () => {
         logMessage('info', '[UI] 点击了打开/关闭筛选面板按钮');
         if (filterPanelInstance) {
@@ -335,7 +350,8 @@ export async function renderSources(sourcesData) { // Make async to fetch config
 function _renderSingleModelElement(model) {
     const card = document.createElement('li');
     card.className = 'model-card'; // Base class, specific styles handled by parent view class
-    card.dataset.modelFile = model.file; // Add unique identifier
+    // 确保 model 数据能通过 dataset 等方式从 cardElement 获取到
+    card.dataset.modelFile = JSON.stringify(model.file); // 存储模型文件路径作为标识
 
     const MAX_VISIBLE_TAGS = 6; // Maximum tags to show initially
 
@@ -419,17 +435,17 @@ function _renderSingleModelElement(model) {
         }
     }
 
-    // --- Click Event ---
-    card.addEventListener('click', () => {
-        logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
-        if (_showDetail) {
-            const isReadOnly = currentSourceConfig?.readOnly === true;
-            logMessage('debug', `[MainView] 打开详情，传递 readOnly 状态: ${isReadOnly}`);
-            _showDetail(model, currentSourceId, isReadOnly);
-        } else {
-            logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
-        }
-    });
+    // --- Click Event (已通过事件委托在 initMainView 中处理) ---
+    // card.addEventListener('click', () => {
+    //     logMessage('info', `[UI] 点击了模型卡片: ${model.name} (Type: ${model.modelType}, Source: ${currentSourceId})`);
+    //     if (_showDetail) {
+    //         const isReadOnly = currentSourceConfig?.readOnly === true;
+    //         logMessage('debug', `[MainView] 打开详情，传递 readOnly 状态: ${isReadOnly}`);
+    //         _showDetail(model, currentSourceId, isReadOnly);
+    //     } else {
+    //         logMessage('error', '[MainView] _showDetail 回调函数未初始化，无法显示模型详情');
+    //     }
+    // });
 
     return card;
 }
