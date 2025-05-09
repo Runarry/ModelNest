@@ -161,6 +161,10 @@ function prepareModelDataForSaving(existingData, incomingModelData) {
   };
 
   // 清理元数据
+  // baseModel 字段应已由 incomingModelData 正确提供 (在解析阶段已处理 basic 字段的兼容性)。
+  // 此处主要任务是确保 basic 字段从最终保存的数据中移除。
+  delete mergedData.basic;
+
   delete mergedData.id;
   delete mergedData.sourceId;
   delete mergedData.jsonPath;
