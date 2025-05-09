@@ -12,7 +12,7 @@
 }
 /* Styles for the virtual scroll row container */
 .list-view .list-item-row {
-  height: 80px; /* === LIST_ITEM_HEIGHT in JS === */
+  height: 75px; /* === LIST_ITEM_HEIGHT in JS === */
   overflow: hidden; /* Prevent inner content from overflowing */
   box-sizing: border-box;
   border-bottom: 1px solid var(--border-color); /* Separator line */
