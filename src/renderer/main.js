@@ -83,13 +83,13 @@ document.addEventListener('DOMContentLoaded', async () => {
         filterPanelContainerId: 'filter-panel-main-container' // ID for the div that will contain the filter panel
       };
   // Pass showDetailModel (from detail-Model module) as the callback
-  initMainView(mainViewConfig, (model) => {
-      const currentSourceId = document.getElementById('sourceSelect')?.value;
-      if (currentSourceId) {
-          showDetailModel(model, currentSourceId); // Logging inside showDetailModel
+  initMainView(mainViewConfig, (modelData, sourceId, isReadOnlyFlag) => { // Accept all params from main-view's _showDetail call
+      // Use the sourceId and isReadOnlyFlag passed directly from main-view
+      if (sourceId) {
+          showDetailModel(modelData, sourceId, isReadOnlyFlag);
       } else {
            // Task 1: Error Logging (Should ideally not happen if UI is consistent)
-          logMessage('error', "[Renderer] 无法显示详情：未选择数据源 (main-view 回调)");
+          logMessage('error', "[Renderer] 无法显示详情：main-view 未能在回调中提供 sourceId");
           // Optionally show user feedback
       }
   });
