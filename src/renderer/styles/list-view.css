@@ -134,29 +134,25 @@
   align-self: center; /* Vertically center */
   display: flex;
   flex-wrap: wrap; /* Allow tags to wrap */
-  gap: 0.4rem;
+  gap: 0.2rem;
   margin: 0;
   padding: 0;
   background-color: transparent;
-  max-width: 250px; /* Limit width */
+  max-width: 500px; /* Limit width */
   max-height: calc(80px - 2rem); /* Limit height based on row height minus padding */
-  overflow: hidden; /* Hide overflowing tags */
+  overflow: visible; /* Hide overflowing tags */
   position: relative; /* Needed if using absolute positioning inside */
 }
 
 .list-view .list-item-row .tag {
-  white-space: nowrap;
-  margin: 0;
-  padding: 0.2rem 0.5rem;
-  background-color: rgba(var(--primary-color-rgb), 0.1);
-  color: var(--primary-color);
-  border-radius: 10px;
-  font-size: 0.65rem;
-  font-weight: 500;
-  user-select: none;
-  cursor: default;
-  line-height: 1.2;
-  display: inline-block;
+  align-self: flex-start;
+    background-color: rgb(87 114 241 / 10%);
+    border-radius: .5px;
+    display: inline-block;
+    font-size: .70rem;
+    font-weight: 500;
+    padding: .1rem .2rem;
+    white-space: nowrap
 }
 
 /* Hide ellipsis in list view for now due to fixed height */

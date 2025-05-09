@@ -215,7 +215,7 @@
 }
 
 /* 图片浮动文字----------------*/
-.custom-img-container {
+.card-view .model-card-image-container {
   position: relative;
   display: inline-block; /* Or block, depending on desired layout with text */
   width: 100%; /* Ensure it takes the width of the card space for image */
