@@ -4,7 +4,7 @@ import { logMessage, listModels, listSubdirectories, getAllSourceConfigs } from 
 import { CrawlStatusModal } from './crawl-status-modal.js';
 import FilterPanel from './filter-panel.js';
 import { BlobUrlCache } from '../core/blobUrlCache.js';
-import { VirtualScroll } from 'js-booster'; // Assuming js-booster is available
+import { VirtualScroll } from '../../vendor/js-booster/js-booster.js'; // Assuming js-booster is available
 
 // ===== DOM Element References =====
 let sourceSelect;
