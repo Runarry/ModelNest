@@ -100,31 +100,40 @@ export function initMainView(config, showDetailCallback) {
 let _showDetail = (model) => logMessage('warn', "showDetailCallback not initialized.");
 
 function handleModelClick(event) {
-    // Find the closest row container first, then get the model file
-    const rowElement = event.target.closest('.list-item-row, .virtual-scroll-row'); // Card rows also have this class now
-    if (!rowElement) return;
+    // Find the clicked model card or list item's row
+    const clickedCardElement = event.target.closest('.model-card');
+    const rowElement = event.target.closest('.list-item-row, .virtual-scroll-row');
 
-    // Find the interactive element within the row (card or list item structure)
-    const targetElement = rowElement.querySelector('.model-card, [data-model-file]'); // Prefer specific inner element if possible
+    let modelFileStr = null;
 
-    // Use dataset from the row as fallback if inner element not found or lacks dataset
-    const modelFileStr = targetElement?.dataset.modelFile || rowElement.dataset.modelFile;
+    if (clickedCardElement && clickedCardElement.dataset.modelFile) {
+        // Prefer modelFile from the card itself (for card view and list view's inner card)
+        modelFileStr = clickedCardElement.dataset.modelFile;
+    } else if (rowElement && rowElement.dataset.modelFile) {
+        // Fallback to row's dataset (primarily for list view clicks on the row but outside the card)
+        modelFileStr = rowElement.dataset.modelFile;
+    }
 
     if (modelFileStr) {
         try {
             const modelFile = JSON.parse(modelFileStr);
-            // Find model in the flat 'models' array
             const model = models.find(m => JSON.stringify(m.file) === JSON.stringify(modelFile));
             if (model && _showDetail) {
                 logMessage('info', `[UI] Clicked model: ${model.name}`);
                 const isReadOnly = currentSourceConfig?.readOnly === true;
                 _showDetail(model, currentSourceId, isReadOnly);
             } else {
-                logMessage('warn', '[MainView] Clicked model not found in state or _showDetail missing.', modelFile);
+                logMessage('warn', '[MainView] Clicked model not found in state or _showDetail missing for file:', modelFileStr);
             }
         } catch (e) {
             logMessage('error', '[MainView] Error parsing modelFile from dataset:', e, modelFileStr);
         }
+    } else if (rowElement || clickedCardElement) {
+        // Log if a clickable-looking element was found but no modelFile data
+        logMessage('warn', '[MainView] Click detected on a row or card, but no modelFile data found.', {
+            clickedCardDataset: clickedCardElement?.dataset,
+            rowElementDataset: rowElement?.dataset
+        });
     }
 }
 
@@ -244,8 +253,10 @@ function _renderVirtualCardRow(rowModels) {
     const rowElement = document.createElement('div');
     // Use a more specific class for card rows if needed, or keep generic
     rowElement.className = 'virtual-scroll-row card-row-container';
+    // For card view, the row itself doesn't carry a single model's data,
+    // as it contains multiple cards. Each card will have its own dataset.
     rowModels.forEach(model => {
-        const cardElement = _renderSingleModelElement(model); // Returns <li>
+        const cardElement = _renderSingleModelElement(model); // Returns <li> with dataset.modelFile
         rowElement.appendChild(cardElement);
     });
     return rowElement;
@@ -373,8 +384,8 @@ const MAX_VISIBLE_TAGS = 6; // Keep consistent or define separately for list/car
 function _renderSingleModelElement(model) { // Renders the core card structure, used by both views now
     const card = document.createElement('li'); // Use LI as it was likely styled as such
     card.className = 'model-card'; // Keep the original class for styling
-    // Do NOT set dataset here if the parent row (.list-item-row or .virtual-scroll-row) handles it
-    // card.dataset.modelFile = JSON.stringify(model.file);
+    // Set dataset here for both card view and list view's inner card element
+    card.dataset.modelFile = JSON.stringify(model.file);
 
     const fragment = document.createDocumentFragment();
 
@@ -425,17 +436,19 @@ function _renderSingleModelElement(model) { // Renders the core card structure, 
     const tagsContainer = document.createElement('div');
     tagsContainer.className = 'tags-container'; // Shared class for tags section
     if (model.tags && model.tags.length > 0) {
-        const maxTags = displayMode === 'card' ? MAX_VISIBLE_TAGS : 10; // Show more tags in list view?
+        const isCardView = displayMode === 'card';
+        const maxTagsToShow = isCardView ? MAX_VISIBLE_TAGS : Infinity; // Show all tags in list view
+
         model.tags.forEach((tagText, index) => {
-            if (index < maxTags) {
+            if (index < maxTagsToShow) {
                 const tagElementVisible = document.createElement('span');
                 tagElementVisible.className = 'tag'; // Shared tag class
                 tagElementVisible.textContent = tagText;
                 tagsContainer.appendChild(tagElementVisible);
             }
         });
-        // Ellipsis logic might differ
-        if (model.tags.length > maxTags) {
+
+        if (isCardView && model.tags.length > maxTagsToShow) {
             const ellipsis = document.createElement('span');
             ellipsis.className = 'tag tag-ellipsis';
             ellipsis.textContent = '...';
@@ -621,16 +634,17 @@ function handleModelListMouseOverForTagsTooltip(event) {
     if (!tagsContainer) return;
     // Find the parent card element from the tags container
     const cardElement = tagsContainer.closest('.model-card');
-    // Get the model file from the row container's dataset
-    const rowElement = cardElement?.closest('.virtual-scroll-row, .list-item-row');
-    const modelFileStr = rowElement?.dataset.modelFile;
+    if (!cardElement || !cardElement.dataset.modelFile) { // Check if cardElement itself has the data
+        // logMessage('debug', '[MainView Tooltip] Mouseover tags, but parent card or modelFile data missing.');
+        return;
+    }
 
-    if (!cardElement || !modelFileStr) return;
+    const modelFileStr = cardElement.dataset.modelFile; // Get modelFile directly from the card
 
     try {
         const modelFile = JSON.parse(modelFileStr);
-        // Find model in the flat 'models' array
         const model = models.find(m => JSON.stringify(m.file) === JSON.stringify(modelFile));
+
         if (model && model.tags && model.tags.length > MAX_VISIBLE_TAGS) {
             clearChildren(globalTagsTooltip);
             model.tags.forEach(tagText => {
