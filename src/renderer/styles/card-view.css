@@ -25,7 +25,7 @@
   */
   /* height: 75vh; */ /* EXAMPLE: Temporarily commented out. Adjust as needed or use flex-grow. */
                       /* If using a fixed height like 75vh, ensure it's appropriate for your layout. */
-  height: calc(100vh - 100px); /* EXAMPLE: Adjust 100px based on header/footer/other elements height */
+  height: calc(100vh - 130px); /* EXAMPLE: Adjust 100px based on header/footer/other elements height */
   overflow-y: auto; /* Enable scrolling */
   position: relative; /* Required for absolute positioning of rows by some libraries */
   box-sizing: border-box;

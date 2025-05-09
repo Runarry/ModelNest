@@ -42,7 +42,7 @@ const VERTICAL_ROW_GAP = 12;
 const CARD_ROW_ITEM_HEIGHT = CARD_HEIGHT + VERTICAL_ROW_GAP;
 
 // List View Constants
-const LIST_ITEM_HEIGHT = 70; // Example height for a list item, adjust as needed
+const LIST_ITEM_HEIGHT = 80; // Example height for a list item, adjust as needed
 
 // ===== Initialization =====
 export function initMainView(config, showDetailCallback) {

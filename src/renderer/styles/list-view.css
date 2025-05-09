@@ -2,7 +2,7 @@
 
 /* Styles for the container when virtual scroll is active in list view */
 .list-view #modelList.virtual-scroll-container {
-  height: calc(100vh - 80px); /* 示例高度，可以根据顶部栏实际高度调整 */
+  height: calc(100vh - 140px); /* 示例高度，可以根据顶部栏实际高度调整 */
   overflow-y: auto;
   position: relative;
   box-sizing: border-box;
@@ -12,7 +12,7 @@
 }
 /* Styles for the virtual scroll row container */
 .list-view .list-item-row {
-  height: 70px; /* === LIST_ITEM_HEIGHT in JS === */
+  height: 80px; /* === LIST_ITEM_HEIGHT in JS === */
   overflow: hidden; /* Prevent inner content from overflowing */
   box-sizing: border-box;
   border-bottom: 1px solid var(--border-color); /* Separator line */
@@ -139,7 +139,7 @@
   padding: 0;
   background-color: transparent;
   max-width: 250px; /* Limit width */
-  max-height: calc(70px - 1rem); /* Limit height based on row height minus padding */
+  max-height: calc(80px - 2rem); /* Limit height based on row height minus padding */
   overflow: hidden; /* Hide overflowing tags */
   position: relative; /* Needed if using absolute positioning inside */
 }
