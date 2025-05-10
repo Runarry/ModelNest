@@ -2,6 +2,7 @@ const { parseLocalModels, parseModelDetailFromJsonContent, parseSingleModelFile 
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
+const crypto = require('crypto'); // 引入 crypto 模块
 const DataSource = require('./baseDataSource'); // 导入新的基类
 
 // 本地数据源实现
@@ -292,6 +293,122 @@ class LocalDataSource extends DataSource {
       log.error(`[LocalDataSource] 写入文件时出错: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
       throw error; // 重新抛出写入错误
     }
+  }
+
+  /**
+   * Gets file statistics (mtimeMs, size) for a local file.
+   * @param {string} relativeFilePath - The path to the file, relative to the data source root.
+   * @returns {Promise<{mtimeMs: number, size: number}|null>} File stats or null if error.
+   */
+  async getFileStats(filePathInput) {
+    const startTime = Date.now();
+    if (!filePathInput) {
+      log.warn('[LocalDataSource] getFileStats called with empty filePathInput');
+      return null;
+    }
+    // If filePathInput is already absolute, use it directly. Otherwise, join with config path.
+    const absoluteFilePath = path.isAbsolute(filePathInput)
+      ? filePathInput
+      : path.join(this.config.path, filePathInput);
+    log.debug(`[LocalDataSource] Attempting to get file stats for: ${absoluteFilePath} (input path: ${filePathInput})`);
+
+    try {
+      const stats = await fs.promises.stat(absoluteFilePath);
+      const duration = Date.now() - startTime;
+      log.debug(`[LocalDataSource] Successfully got file stats for: ${absoluteFilePath}, 耗时: ${duration}ms`);
+      return {
+        mtimeMs: stats.mtimeMs,
+        size: stats.size,
+      };
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      if (error.code === 'ENOENT') {
+        log.warn(`[LocalDataSource] getFileStats failed (file not found): ${absoluteFilePath}, 耗时: ${duration}ms`);
+      } else {
+        log.error(`[LocalDataSource] Error getting file stats for: ${absoluteFilePath}, 耗时: ${duration}ms`, error.message, error.stack);
+      }
+      return null; // Return null on error, as expected by some caching logic
+    }
+  }
+
+  /**
+   * Calculates a metadata digest for the content of a directory.
+   * This digest is used for cache invalidation of listModels results.
+   * @param {string|null} relativeDirectory - The directory path relative to the data source root. Null or empty for root.
+   * @param {string[]} supportedExts - Array of supported model file extensions (e.g., ['.safetensors', '.ckpt']).
+   * @param {boolean} showSubdirectory - Whether to include subdirectories in the digest calculation.
+   * @returns {Promise<string|null>} A SHA256 hash string representing the directory content metadata, or null if an error occurs or directory is not found.
+   */
+  async getDirectoryContentMetadataDigest(relativeDirectory, supportedExts, showSubdirectory) {
+    const startTime = Date.now();
+    const rootPath = this.config.path;
+    const targetDirectory = relativeDirectory ? path.join(rootPath, relativeDirectory) : rootPath;
+
+    log.debug(`[LocalDataSource] Calculating content digest for: ${targetDirectory}, showSubDir: ${showSubdirectory}, exts: ${supportedExts.join(',')}`);
+
+    try {
+      await fs.promises.access(targetDirectory);
+    } catch (error) {
+      if (error.code === 'ENOENT') {
+        log.warn(`[LocalDataSource] getDirectoryContentMetadataDigest: Directory not found: ${targetDirectory}`);
+        return null;
+      }
+      log.error(`[LocalDataSource] Error accessing directory for digest calculation: ${targetDirectory}`, error);
+      return null;
+    }
+
+    const metadataItems = [];
+    const lowerCaseSupportedExts = supportedExts.map(ext => ext.toLowerCase());
+
+    const collectMetadata = async (currentPath) => {
+      try {
+        const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
+        for (const entry of entries) {
+          const entryFullPath = path.join(currentPath, entry.name);
+          const relativeEntryPath = path.relative(targetDirectory, entryFullPath).replace(/\\/g, '/'); // Normalize path separators
+
+          if (entry.isFile()) {
+            const ext = path.extname(entry.name).toLowerCase();
+            if (lowerCaseSupportedExts.includes(ext) || ext === '.json') {
+              try {
+                const stats = await fs.promises.stat(entryFullPath);
+                metadataItems.push(`${relativeEntryPath}:${stats.size}:${stats.mtimeMs}`);
+              } catch (statError) {
+                if (statError.code !== 'ENOENT') { // Ignore if file was deleted during processing
+                    log.warn(`[LocalDataSource] Could not stat file for digest: ${entryFullPath}`, statError);
+                }
+              }
+            }
+          } else if (entry.isDirectory() && showSubdirectory) {
+            // For directories, we could add their names or a marker, but problem statement focuses on files.
+            // Let's ensure recursive call if showSubdirectory is true.
+            await collectMetadata(entryFullPath);
+          }
+        }
+      } catch (readDirError) {
+         if (readDirError.code !== 'ENOENT') { // Ignore if directory was deleted
+            log.warn(`[LocalDataSource] Error reading directory for digest: ${currentPath}`, readDirError);
+         }
+      }
+    };
+
+    await collectMetadata(targetDirectory);
+
+    if (metadataItems.length === 0) {
+      // Consistent hash for an empty (relevant) directory
+      const durationEmpty = Date.now() - startTime;
+      log.debug(`[LocalDataSource] No relevant files found for digest in ${targetDirectory}. Duration: ${durationEmpty}ms. Returning empty hash.`);
+      return crypto.createHash('sha256').update('').digest('hex');
+    }
+
+    // Sort items for a consistent hash
+    metadataItems.sort();
+    const metadataString = metadataItems.join('|');
+    const hash = crypto.createHash('sha256').update(metadataString).digest('hex');
+
+    const duration = Date.now() - startTime;
+    log.info(`[LocalDataSource] Calculated content digest for ${targetDirectory}: ${hash}. Items: ${metadataItems.length}. Duration: ${duration}ms`);
+    return hash;
   }
 }
 

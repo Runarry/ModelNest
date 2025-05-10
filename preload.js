@@ -58,6 +58,11 @@ clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片�
   getImageCacheSize: () => ipcRenderer.invoke('get-image-cache-size'), // 添加获取缓存大小的接口
   getPackageInfo: () => ipcRenderer.invoke('get-package-info'), // 添加获取 package.json 信息的接口
   getProcessVersions: () => ipcRenderer.invoke('get-process-versions'), // 添加获取 process.versions 的接口
-  sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo)
+  sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo),
+
+  // ModelInfoCacheService related APIs
+  clearModelInfoMemoryCache: () => ipcRenderer.invoke('clearModelInfoMemoryCache'),
+  clearModelInfoDiskCache: () => ipcRenderer.invoke('clearModelInfoDiskCache'),
+  getModelInfoCacheStats: () => ipcRenderer.invoke('getModelInfoCacheStats'),
 });
 console.log('[Preload] API exposed successfully.');

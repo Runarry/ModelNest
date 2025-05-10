@@ -178,6 +178,127 @@ function initializeAppIPC(services) {
     }
   });
 
+  // --- ModelInfoCacheService IPC Handlers ---
+
+  ipcMain.handle('clearModelInfoMemoryCache', async () => {
+    log.info('[IPC] clearModelInfoMemoryCache 请求');
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      await services.modelInfoCacheService.clearMemoryCache();
+      log.info('[IPC] ModelInfo Memory Cache cleared successfully.');
+      return { success: true };
+    } catch (error) {
+      log.error('[IPC] Failed to clear ModelInfo Memory Cache:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('clearModelInfoDiskCache', async () => {
+    log.info('[IPC] clearModelInfoDiskCache 请求');
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      await services.modelInfoCacheService.clearDiskCache();
+      log.info('[IPC] ModelInfo Disk Cache cleared successfully.');
+      return { success: true };
+    } catch (error) {
+      log.error('[IPC] Failed to clear ModelInfo Disk Cache:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  // 可选: 获取模型信息缓存统计
+  ipcMain.handle('getModelInfoCacheStats', async () => {
+    log.info('[IPC] getModelInfoCacheStats 请求');
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      // 假设 modelInfoCacheService 上有 getCacheStats 方法
+      if (typeof services.modelInfoCacheService.getCacheStats !== 'function') {
+        log.warn('[IPC] modelInfoCacheService.getCacheStats is not implemented.');
+        return { success: false, error: 'Stats function not implemented in service.' };
+      }
+      const stats = await services.modelInfoCacheService.getCacheStats();
+      log.info('[IPC] ModelInfo Cache Stats retrieved successfully.');
+      return { success: true, stats };
+    } catch (error) {
+      log.error('[IPC] Failed to get ModelInfo Cache Stats:', error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('clear-model-cache-by-source', async (event, { sourceId }) => {
+    log.info(`[IPC] clear-model-cache-by-source 请求 for sourceId: ${sourceId}`);
+    if (!sourceId) {
+      log.error('[IPC] clear-model-cache-by-source: sourceId is required.');
+      return { success: false, error: 'sourceId is required.' };
+    }
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      await services.modelInfoCacheService.clearBySource(sourceId);
+      log.info(`[IPC] All model cache for sourceId ${sourceId} cleared successfully.`);
+      return { success: true };
+    } catch (error) {
+      log.error(`[IPC] Failed to clear model cache for sourceId ${sourceId}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+
+  ipcMain.handle('clear-all-model-info-cache', async () => {
+    log.info('[IPC] clear-all-model-info-cache 请求');
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      await services.modelInfoCacheService.clearAll();
+      log.info('[IPC] All model info cache (L1 and L2) cleared successfully.');
+      return { success: true };
+    } catch (error) {
+      log.error('[IPC] Failed to clear all model info cache:', error);
+      return { success: false, error: error.message };
+    }
+  });
+  
+  ipcMain.handle('clear-specific-model-cache', async (event, { sourceId, resourcePath }) => {
+    log.info(`[IPC] clear-specific-model-cache 请求 for sourceId: ${sourceId}, resourcePath: ${resourcePath}`);
+    if (!sourceId || !resourcePath) {
+      log.error('[IPC] clear-specific-model-cache: sourceId and resourcePath are required.');
+      return { success: false, error: 'sourceId and resourcePath are required.' };
+    }
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      
+      // Clear modelJsonInfo cache
+      const modelInfoCacheKey = `model_info:${sourceId}:${resourcePath}`; // Assuming resourcePath is normalized_json_path
+      await services.modelInfoCacheService.clearEntry(modelInfoCacheKey, 'modelJsonInfo');
+      log.info(`[IPC] Cleared model_info cache for key: ${modelInfoCacheKey}`);
+
+      // Invalidate listModels cache for the directory
+      const directoryPath = path.dirname(resourcePath);
+      // Normalize dirPath if necessary, e.g., remove leading/trailing slashes if ModelInfoCacheService expects a specific format
+      const normalizedDirPath = directoryPath === '.' ? '' : directoryPath.replace(/^\/+|\/+$/g, '');
+      
+      await services.modelInfoCacheService.invalidateListModelsCacheForDirectory(sourceId, normalizedDirPath);
+      log.info(`[IPC] Invalidated list_models cache for directory: ${normalizedDirPath}, sourceId: ${sourceId}`);
+      
+      return { success: true };
+    } catch (error) {
+      log.error(`[IPC] Failed to clear specific model cache for sourceId ${sourceId}, resourcePath ${resourcePath}:`, error);
+      return { success: false, error: error.message };
+    }
+  });
+
+
+  // --- End ModelInfoCacheService IPC Handlers ---
+
   log.info('[IPC] App IPC Handlers 初始化完成');
 }
 

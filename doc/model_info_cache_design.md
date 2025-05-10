@@ -1,367 +1,520 @@
-# ModelNest `model info` 缓存方案设计文档
+# ModelNest `model info` 及 `listModels` 缓存方案设计文档 (修订版)
 
 ## 1. 引言
 
-本文档旨在为 ModelNest 项目设计一个高效的 `model info` 缓存系统。`model info` 指的是模型的详细元数据，特别是从外部源（如 Civitai API）获取并通过 `.json` 文件存储的信息，以及由 `ModelService` 最终整合的 `modelObj` 对象。核心需求是构建一个包含内存缓存和本地磁盘缓存的两级缓存系统，以减少对外部 API 的依赖、加快模型信息获取速度、优化 JSON 解析性能，并提升整体用户体验。
+本文档旨在对 ModelNest 项目的 `model info` 及 `listModels` 缓存系统进行修订和扩展设计。`model info` 指的是模型的详细元数据，而 `listModels` 是获取模型列表的核心操作。先前的设计主要集中在单个 `model info` 的缓存，本次修订将重点关注以下几个方面：
 
-设计将基于项目现有架构（如 [`doc/架构说明.md`](doc/架构说明.md) 所述），并重点关注与 `ModelService` ([`src/services/modelService.js`](src/services/modelService.js)) 的集成。
+1.  将二级磁盘缓存（L2）的存储后端从原计划或早期实现（如基于文件的 JSON）统一并明确为使用 **SQLite** 数据库。
+2.  统一采用 **BSON (Binary JSON, bsonspec.org)** 作为在 L2 缓存中存储复杂对象的序列化格式，以提升效率和减少存储空间。
+3.  为高频操作 `listModels` 方法设计并集成全新的缓存机制，该机制同样利用 SQLite 和 BSON。
+4.  梳理并明确服务间的依赖关系与初始化顺序，以增强系统稳定性和可维护性。
 
-## 2. 核心需求与缓存目标
+此修订方案旨在解决先前实现与用户最新核心需求之间的偏差，并为 ModelNest 提供一个更健壮、高效的缓存基础设施。设计将基于项目现有架构，并重点关注 `ModelInfoCacheService` 的重构以及其与 `ModelService`、`DataSource` 实现的集成。
 
-*   **缓存 `ModelService` 返回的 `modelObj`**: 内存中缓存完整的 `modelObj`。
-*   **缓存 JSON 解析结果**: 磁盘上主要缓存从 `.json` 文件解析得到的 `modelJsonInfo` (通常是来自 Civitai 的元数据)，以节省重复读取和解析的开销。
+## 2. 核心需求与缓存目标 (修订)
+
+*   **缓存 `ModelService` 返回的 `modelObj`**: L1 内存缓存中可以缓存完整的 `modelObj` 以加速对已加载模型详情的重复访问。
+*   **缓存 JSON 解析结果 (`modelJsonInfo`)**: L2 磁盘缓存（SQLite+BSON）主要缓存从 `.json` 文件解析或外部 API 获取的 `modelJsonInfo`，以节省重复IO和解析开销。
+*   **缓存 `listModels` 操作结果**: L2 磁盘缓存（SQLite+BSON）缓存 `ModelService.listModels` 方法返回的 `modelObj` 数组，以加速模型列表的加载。
 *   **两级缓存**:
-    *   L1: 内存缓存，速度最快，容量有限。
-    *   L2: 磁盘缓存，容量较大，持久化。
+    *   L1: 内存缓存 (`Map`)，速度最快，容量有限，主要服务于热点数据（如单个 `modelObj`）。
+    *   L2: SQLite 数据库，容量较大，持久化，使用 BSON 序列化。
 *   **按模型库隔离**: 缓存应能感知并区分不同的数据源 (`sourceId`)。
-*   **高效的失效机制**: 基于文件元数据 (修改时间、大小) 和 TTL。
-*   **IO 友好**: L2 磁盘缓存采用 SQLite + BSON 以优化 IO 和解析性能。
+*   **高效的失效机制**:
+    *   对于 `modelJsonInfo`: 基于源 `.json` 文件的元数据 (修改时间、大小) 和 TTL。
+    *   对于 `listModels` 结果:
+        *   `LocalDataSource`: 基于被查询目录的内容元数据摘要和 TTL。
+        *   `WebDavDataSource`: 主要基于 TTL 和用户手动刷新。
+*   **IO 友好与高性能**: L2 磁盘缓存采用 SQLite + BSON 以优化 IO、存储和解析性能。
+*   **服务依赖清晰**: 明确服务初始化顺序，避免循环依赖和初始化时序问题。
 
-## 3. 缓存结构设计
+## 3. 缓存结构设计 (修订)
 
-### 3.1. 缓存键策略
+### 3.1. 缓存键策略 (修订)
 
-缓存的统一键将基于数据源 ID 和模型关联的 `.json` 文件路径（如果存在）或主模型文件路径。
+#### 3.1.1. `modelJsonInfo` 缓存键
 
-*   **主缓存键 (`cacheKey`)**: 字符串格式，`{sourceId}:{normalized_resource_path}`。
+用于 `model_json_info_cache` 表和 L1 中缓存单个 `modelObj` (其 `modelJsonInfo` 是核心)。
+*   **格式**: `model_info:{sourceId}:{normalized_json_path}`
     *   `sourceId`: 数据源的唯一标识符。
-    *   `normalized_resource_path`:
-        *   如果模型有关联的 `.json` 文件，则为此 `.json` 文件的规范化相对路径。
-        *   如果模型没有 `.json` 文件（例如，仅有模型主文件），则为此模型主文件（如 `.safetensors`）的规范化相对路径。这将用于标识一个潜在的 `modelObj`，即使其 `modelJsonInfo` 为空。
+    *   `normalized_json_path`: 模型关联的 `.json` 文件的规范化相对路径（相对于数据源根目录）。如果模型没有 `.json` 文件，此键可能不适用，或者需要特殊处理（原设计文档中提及基于主模型文件路径的键，但 L2 主要缓存 `modelJsonInfo`，故此场景下 `.json` 路径更核心）。
+
+#### 3.1.2. `listModels` 结果缓存键
+
+用于 `list_models_cache` 表。
+*   **格式**: `list_models:{sourceId}:{normalized_directory_path}:{show_subdirectory_flag}:{supported_exts_hash}`
+    *   `sourceId`: 数据源 ID。
+    *   `normalized_directory_path`: 请求的规范化目录路径。空字符串、`.` 或 `/` 代表数据源根目录。应统一表示（例如，统一为相对路径，根目录用空字符串或特定占位符）。
+    *   `show_subdirectory_flag`: `0` (false) 或 `1` (true)，表示是否递归查询子目录。
+    *   `supported_exts_hash`: 一个哈希值，通过以下步骤生成：
+        1.  获取 `supportedExts` 数组（包含如 `.safetensors`, `.ckpt` 等扩展名）。
+        2.  将所有扩展名统一为小写。
+        3.  对扩展名数组进行字母顺序排序。
+        4.  将排序后的扩展名用特定分隔符（如 `|`）连接成一个字符串。
+        5.  计算该字符串的 SHA256 哈希值。
 
 ### 3.2. L1: 内存缓存
 
-*   **存储内容**: 完整的 `modelObj` JavaScript 对象。
+*   **存储内容**: 主要缓存完整的 `modelObj` JavaScript 对象，特别是那些被频繁访问的模型详情。
 *   **数据结构**: 使用 `Map` 对象实现。
-    *   键: `cacheKey` (如上定义)。
-    *   值: `{ data: modelObj, timestamp: Date.now(), ttl: configuredTtlForL1, sourceJsonStats: { mtimeMs: ..., size: ... } | null }`
-        *   `sourceJsonStats`: 如果 `modelObj.jsonPath` 存在，则记录其关联的 `.json` 文件的 `mtimeMs` 和 `size`，用于快速失效判断。如果不存在 `.json` 文件，则为 `null`。
+    *   键: `model_info:{sourceId}:{normalized_json_path}` (与 L2 `model_json_info_cache` 的键对应)。
+    *   值: `{ data: modelObj, timestamp: Date.now(), ttlMs: configuredTtlForL1, sourceJsonStats: { mtimeMs: ..., size: ... } | null }`
+        *   `sourceJsonStats`: 如果 `modelObj.jsonPath` 存在，则记录其关联的 `.json` 文件的 `mtimeMs` 和 `size`，用于快速失效判断。如果不存在 `.json` 文件，则为 `null`。字段名统一为 `sourceJsonStats`。
 *   **大小限制**: 可配置的最大条目数 (例如，默认 200 个)。
-*   **替换策略**: LRU (最近最少使用)。通过在访问或更新时将被操作的条目重新插入到 `Map` 的方式模拟（`Map` 保持插入顺序）。超出限制时，移除迭代器最前面的条目。
+*   **替换策略**: LRU (最近最少使用)。
 *   **实现位置**: `ModelInfoCacheService` 内部。
+*   **`listModels` 结果的 L1 缓存**: 本次设计主要将 `listModels` 结果缓存于 L2。未来可评估是否也将其部分热点结果（如特定常用目录的列表）放入 L1，但这会增加 L1 管理的复杂性。
 
-### 3.3. L2: 磁盘缓存 (SQLite + BSON)
+### 3.3. L2: 磁盘缓存 (SQLite + BSON) (修订)
 
-*   **存储内容**: `modelObj.modelJsonInfo` 部分，即从 `.json` 文件解析或从外部 API 获取的详细模型元数据。
 *   **存储机制**: 单个 SQLite 数据库文件。
-    *   **文件路径**: 用户应用数据目录下，例如 `app.getPath('userData')/ModelNest/cache/model_cache.sqlite`。
-*   **数据格式**: `modelJsonInfo` JavaScript 对象将通过 **BSON** 序列化为二进制数据 (`Buffer`) 后存储。
-*   **SQLite 表结构 (表名: `model_json_info_cache`)**:
-
-    | 列名                      | 类型    | 约束          | 描述                                                                 |
-    | :------------------------ | :------ | :------------ | :------------------------------------------------------------------- |
-    | `cache_key`               | TEXT    | PRIMARY KEY   | `{sourceId}:{normalized_json_path}` (源 JSON 文件的唯一键)           |
-    | `source_id`               | TEXT    | NOT NULL      | 数据源 ID                                                            |
-    | `normalized_json_path`    | TEXT    | NOT NULL      | 源 JSON 文件在其数据源中的规范化相对路径                               |
-    | `bson_data`               | BLOB    | NOT NULL      | BSON 序列化后的 `modelJsonInfo` 数据                                 |
-    | `source_json_mtime_ms`    | REAL    | NOT NULL      | 缓存时，源 JSON 文件的 `mtimeMs` (毫秒时间戳)                        |
-    | `source_json_size`        | INTEGER | NOT NULL      | 缓存时，源 JSON 文件的大小 (bytes)                                   |
-    | `cached_timestamp_ms`     | INTEGER | NOT NULL      | 此条目被缓存的 Unix毫秒时间戳                                          |
-    | `ttl_seconds`             | INTEGER | NOT NULL      | 此条目的有效生存时间 (秒)                                            |
-    | `last_accessed_timestamp_ms`| INTEGER | NOT NULL      | 最近访问此条目的 Unix毫秒时间戳 (用于 LRU 清理)                      |
-
-*   **索引**:
-    *   `cache_key` (自动因主键创建)。
-    *   `source_id` (用于按库管理和清理)。
-    *   `last_accessed_timestamp_ms` (用于 LRU 清理)。
-    *   `(cached_timestamp_ms + ttl_seconds * 1000)` (表达式索引，用于高效 TTL 清理，如果 SQLite 版本支持)。或者分别索引 `cached_timestamp_ms`。
-*   **依赖**: 需要引入 `sqlite3` 和 `bson` npm 包。
+    *   **文件路径**: 通过 `ConfigService` 配置，例如 `app.getPath('userData')/ModelNest/cache/model_cache.sqlite`。
+*   **数据格式**: 所有存入 SQLite `BLOB` 字段的复杂数据（如 `modelJsonInfo` 对象、`modelObj` 数组）都将通过 **BSON** 序列化为二进制 `Buffer` 后存储。
+*   **依赖**: 需要引入 `sqlite3` (或 `better-sqlite3`) 和 `bson` npm 包。
 *   **实现位置**: `ModelInfoCacheService` 内部。
 
-## 4. 缓存读写逻辑
+#### 3.3.1. SQLite 表 1: `model_json_info_cache`
 
-### 4.1. 数据流图 (读取 `model info`)
+用于缓存单个模型的 `modelJsonInfo`。
+
+| 列名                      | 类型    | 约束          | 描述                                                                 |
+| :------------------------ | :------ | :------------ | :------------------------------------------------------------------- |
+| `cache_key`               | TEXT    | PRIMARY KEY   | `model_info:{sourceId}:{normalized_json_path}`                       |
+| `source_id`               | TEXT    | NOT NULL      | 数据源 ID                                                            |
+| `normalized_json_path`    | TEXT    | NOT NULL      | 源 JSON 文件在其数据源中的规范化相对路径                               |
+| `bson_data`               | BLOB    | NOT NULL      | BSON 序列化后的 `modelJsonInfo` 数据                                 |
+| `source_json_mtime_ms`    | REAL    | NOT NULL      | 缓存时，源 JSON 文件的 `mtimeMs` (毫秒时间戳)                        |
+| `source_json_size`        | INTEGER | NOT NULL      | 缓存时，源 JSON 文件的大小 (bytes)                                   |
+| `cached_timestamp_ms`     | INTEGER | NOT NULL      | 此条目被缓存的 Unix 毫秒时间戳                                         |
+| `ttl_seconds`             | INTEGER | NOT NULL      | 此条目的有效生存时间 (秒)                                            |
+| `last_accessed_timestamp_ms`| INTEGER | NOT NULL      | 最近访问此条目的 Unix 毫秒时间戳 (用于 LRU 清理)                      |
+
+**索引 (`model_json_info_cache`):**
+*   `cache_key` (PK)
+*   `idx_mjic_source_id`: ON `model_json_info_cache` (`source_id`)
+*   `idx_mjic_last_accessed`: ON `model_json_info_cache` (`last_accessed_timestamp_ms`)
+*   `idx_mjic_expiration`: ON `model_json_info_cache` (`cached_timestamp_ms`, `ttl_seconds`) (用于计算过期 (`cached_timestamp_ms + ttl_seconds * 1000`))
+
+#### 3.3.2. SQLite 表 2: `list_models_cache`
+
+用于缓存 `listModels` 方法的调用结果 (`modelObj` 数组)。
+
+| 列名                      | 类型    | 约束          | 描述                                                                     |
+| :------------------------ | :------ | :------------ | :----------------------------------------------------------------------- |
+| `cache_key`               | TEXT    | PRIMARY KEY   | `list_models:{sourceId}:{normalized_dir_path}:{show_subdir_flag}:{exts_hash}` |
+| `source_id`               | TEXT    | NOT NULL      | 数据源 ID                                                                |
+| `directory_path`          | TEXT    | NOT NULL      | 请求的规范化目录路径 (用于辅助查询和清理)                                |
+| `show_subdirectory`       | INTEGER | NOT NULL      | 0 (false) 或 1 (true) (用于辅助查询和清理)                               |
+| `supported_exts_hash`     | TEXT    | NOT NULL      | 支持的模型扩展名列表（排序后）的哈希值                                     |
+| `bson_data`               | BLOB    | NOT NULL      | BSON 序列化后的 `modelObj` 数组                                          |
+| `directory_content_hash`  | TEXT    | NULL          | (LocalDataSource) 目录内容元数据摘要。 (WebDav) 可为 ETag 或 NULL。      |
+| `cached_timestamp_ms`     | INTEGER | NOT NULL      | 此条目被缓存的 Unix 毫秒时间戳                                             |
+| `ttl_seconds`             | INTEGER | NOT NULL      | 此条目的有效生存时间 (秒)                                                |
+| `last_accessed_timestamp_ms`| INTEGER | NOT NULL      | 最近访问此条目的 Unix 毫秒时间戳 (用于 LRU 清理)                          |
+
+**索引 (`list_models_cache`):**
+*   `cache_key` (PK)
+*   `idx_lmc_source_id_dir`: ON `list_models_cache` (`source_id`, `directory_path`) (便于按源或目录清理)
+*   `idx_lmc_last_accessed`: ON `list_models_cache` (`last_accessed_timestamp_ms`)
+*   `idx_lmc_expiration`: ON `list_models_cache` (`cached_timestamp_ms`, `ttl_seconds`)
+
+## 4. 缓存读写逻辑 (修订)
+
+### 4.1. 数据流图
+
+#### 4.1.1. 读取 `getModelDetail` (单个模型信息)
 
 ```mermaid
 graph LR
     subgraph UserAction["用户操作/系统调用"]
-        Action["请求模型详情 (getModelDetail)"]
+        ActionGetDetail["请求模型详情 (getModelDetail)"]
     end
 
     subgraph MainProcess["主进程"]
         MS["ModelService"]
         MICS["ModelInfoCacheService"]
-        DSInt["DataSourceInterface"]
-        Crawler["CivitaiCrawlerUtil (按需)"]
-        FS["文件系统"]
-        CAPI["Civitai API (外部)"]
+        DSInt["DataSourceInterface (Local/WebDAV)"]
+        FS["文件系统 (用于LocalDataSource)"]
+        WebDAVClient["WebDAV Client (用于WebDavDataSource)"]
+        CivitaiAPI["Civitai API (按需)"]
 
         subgraph L1Cache["L1: 内存缓存 (modelObj)"]
-            L1Map["Map<cacheKey, CachedModelObj>"]
+            L1Map["Map<modelInfoCacheKey, CachedModelObj>"]
         end
-        subgraph L2Cache["L2: 磁盘缓存 (modelJsonInfo via BSON)"]
-            L2DB["SQLite (model_json_info_cache 表)"]
+        subgraph L2Cache["L2: SQLite 缓存"]
+            L2_MJIC_Table["model_json_info_cache Table"]
         end
     end
 
-    Action -- sourceId, jsonPath, modelFilePath --> MS
+    ActionGetDetail -- sourceId, jsonPath, modelFilePath --> MS
 
-    MS -- 1. 构造 cacheKey --> MS
-    MS -- 2. getFromL1(cacheKey) --> MICS
+    MS -- 1. 构造 modelInfoCacheKey --> MS
+    MS -- 2. getFromMemory(modelInfoCacheKey) --> MICS
     MICS -- 查 L1Map --> L1Map
-    L1Map -- A1. 命中 --> MICS
-    MICS -- A2. 校验 L1 (TTL, sourceJsonStats vs FS) --> FS
-    FS -- JSON元数据 --> MICS
-    MICS -- A3. L1有效 --> MS
-    MS -- A4. 返回克隆的 modelObj --> Action
+    L1Map -- A1. L1 命中 --> MICS
+    MICS -- A2. 获取源JSON文件当前元数据 (mtime, size) --> DSInt
+    DSInt -- A2.1 (Local) --> FS
+    DSInt -- A2.2 (WebDAV) --> WebDAVClient
+    DSInt -- currentSourceJsonStats --> MICS
+    MICS -- A3. 校验 L1 (TTL, sourceJsonStats vs currentSourceJsonStats) --> MICS
+    MICS -- A4. L1 有效 --> MS
+    MS -- A5. 返回克隆的 modelObj --> ActionGetDetail
 
-    L1Map -- B1. L1未命中/失效 --> MICS
-    MICS -- 3. getFromL2(cacheKeyForJson) --> L2DB
-    L2DB -- B2. SQLite查询 (BLOB) --> MICS
-    MICS -- B3. L2命中 --> MICS
-    MICS -- B4. BSON反序列化 --> MICS
-    MICS -- B5. 校验 L2 (TTL, sourceJsonStats vs FS) --> FS
-    FS -- JSON元数据 --> MICS
-    MICS -- B6. L2有效 (得到 modelJsonInfo) --> MS
-    MS -- B7. 需构建完整 modelObj (可能部分已有) --> MS
-    MS -- B8. 使用L2的modelJsonInfo填充/构建modelObj --> MS
-    MS -- B9. 更新L1(新modelObj) --> MICS
-    MICS -- 写L1Map --> L1Map
-    MS -- B10. 返回 modelObj --> Action
+    L1Map -- B1. L1 未命中/失效 --> MICS
+    MICS -- 3. getModelJsonInfo(modelInfoCacheKey) from L2 --> L2_MJIC_Table
+    L2_MJIC_Table -- B2. SQLite 查询 (BLOB) --> MICS
+    MICS -- B3. L2 命中 --> MICS
+    MICS -- B4. BSON 反序列化 --> MICS
+    MICS -- B5. 获取源JSON文件当前元数据 (mtime, size) --> DSInt
+    DSInt -- currentSourceJsonStats --> MICS
+    MICS -- B6. 校验 L2 (TTL, L2.sourceJsonStats vs currentSourceJsonStats) --> MICS
+    MICS -- B7. L2 有效 (得到 modelJsonInfo) --> MS
+    MS -- B8. 从数据源加载基础 modelObj (不含 modelJsonInfo) --> DSInt
+    DSInt -- baseModelObj --> MS
+    MS -- B9. 组合 baseModelObj 和 L2.modelJsonInfo --> MS
+    MS -- B10. 更新 L1 (新 modelObj, currentSourceJsonStats) --> MICS
+    MICS -- 写 L1Map --> L1Map
+    MS -- B11. 返回 modelObj --> ActionGetDetail
 
-    MICS -- C1. L2未命中/失效 --> MS
-    MS -- 4. 从数据源加载完整 modelObj --> DSInt
-    DSInt -- readModelDetail (读文件, 解析JSON等) --> FS
-    FS -- 文件内容/JSON内容 --> DSInt
-    DSInt -- 返回初步 modelObj (可能无 modelJsonInfo) --> MS
+    MICS -- C1. L2 未命中/失效 (或L1失效后跳过L2检查) --> MS
+    MS -- 4. 从数据源加载完整 modelObj (含新 modelJsonInfo) --> DSInt
+    DSInt -- fullModelObj, newSourceJsonStats --> MS
     
-    alt 如果需要从Civitai获取modelJsonInfo
-      MS -- 5. 触发爬虫逻辑 --> Crawler
-      Crawler -- (内部计算模型文件哈希) --> Crawler
-      Crawler -- 请求Civitai API --> CAPI
-      CAPI -- 返回civitaiData --> Crawler
-      Crawler -- 返回civitaiData (作为 modelJsonInfo) --> MS
-      MS -- 6. 将civitaiData写入对应的.json文件 --> FS
+    alt 如果需要从 Civitai 获取 modelJsonInfo (由 DSInt 或 MS 内部逻辑触发)
+      MS --或 DSInt --> CivitaiAPI
+      CivitaiAPI -- civitaiData --> MS --或 DSInt
+      MS --或 DSInt --> "写入 .json 文件"
+      "写入 .json 文件" -- newSourceJsonStats --> MS
     end
 
-    MS -- 7. 得到最终 modelObj 和 sourceJsonStats --> MS
-    MS -- 8. 更新L2(BSON(modelJsonInfo), sourceJsonStats) --> MICS
-    MICS -- BSON序列化 --> MICS
-    MICS -- 写L2DB (SQLite INSERT/REPLACE) --> L2DB
-    MS -- 9. 更新L1(最终modelObj, sourceJsonStats) --> MICS
-    MICS -- 写L1Map --> L1Map
-    MS -- 10. 返回 modelObj --> Action
+    MS -- 5. 得到最终 modelObj 和 newSourceJsonStats --> MS
+    MS -- 6. 更新 L2 (setModelJsonInfo with BSON(modelObj.modelJsonInfo), newSourceJsonStats) --> MICS
+    MICS -- BSON 序列化 & 写 L2_MJIC_Table --> L2_MJIC_Table
+    MS -- 7. 更新 L1 (最终 modelObj, newSourceJsonStats) --> MICS
+    MICS -- 写 L1Map --> L1Map
+    MS -- 8. 返回 modelObj --> ActionGetDetail
 ```
 
-### 4.2. 读取流程 (`ModelService.getModelDetail(sourceId, jsonPath, modelFilePath)`)
+#### 4.1.2. 读取 `listModels` (模型列表)
 
-1.  **构造缓存键 (`cacheKey`)**:
-    *   如果 `jsonPath` 提供且有效，`cacheKey = {sourceId}:{normalized_json_path}`.
-    *   如果 `jsonPath` 无效或未提供，但 `modelFilePath` 有效，`cacheKey = {sourceId}:{normalized_model_file_path}`. (此 `modelObj` 的 `modelJsonInfo` 可能为空)。
-2.  **查询 L1 内存缓存 (`ModelInfoCacheService.getL1(cacheKey)`)**:
+```mermaid
+graph LR
+    subgraph UserAction_List["用户操作/系统调用"]
+        ActionListModels["请求模型列表 (listModels)"]
+    end
+
+    subgraph MainProcess_List["主进程"]
+        MS_List["ModelService"]
+        MICS_List["ModelInfoCacheService"]
+        DSInt_List["DataSourceInterface (Local/WebDAV)"]
+
+        subgraph L2Cache_List["L2: SQLite 缓存"]
+            L2_LMC_Table["list_models_cache Table"]
+        end
+    end
+
+    ActionListModels -- sourceId, dir, showSubdir, exts --> MS_List
+
+    MS_List -- 1. 构造 listModelsCacheKey --> MS_List
+    MS_List -- 2. getListModelsResult(listModelsCacheKey) from L2 --> MICS_List
+    MICS_List -- 从 L2_LMC_Table 查询 --> L2_LMC_Table
+    L2_LMC_Table -- cachedResult (BSON data, dirContentHash) --> MICS_List
+    MICS_List -- deserializedModelObjArray, cachedDirContentHash --> MS_List
+    
+    MS_List -- 3. L2 命中? --> CacheCheck_LMC{L2 Hit?}
+    CacheCheck_LMC -- Yes --> Validate_LMC["4. 校验缓存 (TTL, dirContentHash)"]
+    
+    subgraph ValidationLogic["校验逻辑 (MS_List)"]
+        direction LR
+        CompareTTL["4a. TTL 未过期?"]
+        CompareHash["4b. (Local) 计算当前 dirContentHash, 与缓存比较"]
+        WebDAVTTL["4c. (WebDAV) 主要依赖 TTL"]
+    end
+    Validate_LMC --> CompareTTL
+    CompareTTL -- Yes --> CompareHash
+    CompareHash -- Match / NotApplicable --> CacheValid_LMC{缓存有效?}
+    CompareTTL -- No --> CacheInvalid_LMC["缓存无效"]
+    CompareHash -- NoMatch --> CacheInvalid_LMC
+
+    CacheCheck_LMC -- No --> FetchFresh_LMC["5b. 从数据源获取"]
+    CacheValid_LMC -- No --> FetchFresh_LMC
+    CacheValid_LMC -- Yes --> ReturnCached_LMC["5a. 返回缓存的 modelObjArray"]
+    
+    FetchFresh_LMC --> DSInt_List
+    DSInt_List -- freshModelObjArray --> FetchFresh_LMC
+    FetchFresh_LMC -- 6. (Local) 计算新 dirContentHash --> FetchFresh_LMC
+    FetchFresh_LMC -- 7. setListModelsResult (BSON(freshModelObjArray), newDirContentHash) --> MICS_List
+    MICS_List -- BSON序列化 & 写 L2_LMC_Table --> L2_LMC_Table
+    FetchFresh_LMC -- 8. 返回 freshModelObjArray --> ActionListModels
+
+    ReturnCached_LMC --> ActionListModels
+```
+
+### 4.2. 读取流程: `ModelService.getModelDetail(sourceId, jsonPath, modelFilePath)` (修订)
+
+1.  **构造缓存键 (`modelInfoCacheKey`)**:
+    *   统一使用 `model_info:{sourceId}:{normalizedJsonPath}`。`normalizedJsonPath` 是 `jsonPath` 参数经过规范化处理后的结果。
+2.  **查询 L1 内存缓存 (`ModelInfoCacheService.getFromMemory(modelInfoCacheKey)`)**:
     *   **命中**:
-        *   获取缓存的 `{ data: modelObj, timestamp, ttl, sourceJsonStats }`。
-        *   检查 TTL 是否过期。
+        *   获取缓存的 `{ data: modelObj, timestamp, ttlMs, sourceJsonStats }`。
+        *   检查 TTL (`timestamp`, `ttlMs`) 是否过期。
         *   如果 `modelObj.jsonPath` 存在且 `sourceJsonStats` 存在：
-            *   从文件系统获取该 `jsonPath` 对应的实际文件 `mtimeMs` 和 `size`。
-            *   与 `sourceJsonStats` 比较。若文件已更改，则 L1 此条目视为无效。
-        *   **L1 有效 (未过期且依赖文件未变)**: 返回 `modelObj` 的深拷贝。更新此条目在 L1 LRU 中的位置。**流程结束。**
+            *   调用 `DataSourceInterface.getFileStats(sourceConfig, modelObj.jsonPath)` 获取源 `.json` 文件当前的 `mtimeMs` 和 `size` (`currentSourceJsonStats`)。
+            *   比较 `sourceJsonStats` 与 `currentSourceJsonStats`。若文件已更改，则 L1 此条目视为无效。
+        *   **L1 有效**: 返回 `modelObj` 的深拷贝。更新此条目在 L1 LRU 中的位置。**流程结束。**
         *   **L1 无效**: 从 L1 中移除此条目。继续。
     *   **未命中**: 继续。
-3.  **准备从数据源或 L2 加载 `modelJsonInfo`**:
-    *   确定目标 `.json` 文件路径 (`actualJsonPath`)，这通常是传入的 `jsonPath`。
-    *   构造 L2 缓存键: `l2CacheKey = {sourceId}:{actualJsonPath}` (仅当 `actualJsonPath` 有效时)。
-4.  **查询 L2 磁盘缓存 (`ModelInfoCacheService.getL2(l2CacheKey)`)**: (仅当 `actualJsonPath` 有效且 L1 未提供有效的 `modelJsonInfo`)
+3.  **查询 L2 磁盘缓存 (`ModelInfoCacheService.getModelJsonInfo(modelInfoCacheKey)`)**:
     *   **命中**:
-        *   从 SQLite 读取 `{ bson_data, source_json_mtime_ms, source_json_size, cached_timestamp_ms, ttl_seconds }`。
+        *   从 SQLite `model_json_info_cache` 表读取 `{ bson_data, source_json_mtime_ms, source_json_size, cached_timestamp_ms, ttl_seconds }`。
         *   检查 TTL (`cached_timestamp_ms`, `ttl_seconds`) 是否过期。
-        *   从文件系统获取 `actualJsonPath` 对应的实际文件 `mtimeMs` 和 `size`。
+        *   调用 `DataSourceInterface.getFileStats(sourceConfig, normalizedJsonPath)` 获取源 `.json` 文件当前的 `mtimeMs` 和 `size` (`currentSourceJsonStats`)。
         *   与记录的 `source_json_mtime_ms`, `source_json_size` 比较。若文件已更改，则 L2 此条目视为无效。
         *   **L2 有效**:
             *   使用 `BSON.deserialize(bson_data)` 得到 `modelJsonInfo` 对象。
-            *   更新此条目在 L2 LRU 中的位置 (`last_accessed_timestamp_ms`)。
-            *   **标记 `modelJsonInfoFromL2 = true`**。继续构建完整 `modelObj`。
-        *   **L2 无效**: 从 L2 中删除此条目。`modelJsonInfo` 仍需从源获取。
+            *   更新此条目在 L2 中的 `last_accessed_timestamp_ms`。
+            *   **从数据源加载基础 `modelObj`**: 调用 `dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath)`，但指示它只返回基础模型信息，不重新解析JSON或爬取（如果接口支持此区分）。或者，`ModelService` 自己构建一个不含 `modelJsonInfo` 的基础 `modelObj`。
+            *   将 L2 提供的 `modelJsonInfo` 填充到基础 `modelObj` 中。
+            *   使用最终的 `modelObj` 和 `currentSourceJsonStats` 更新 L1 缓存 (`ModelInfoCacheService.setToMemory`)。
+            *   返回 `modelObj` 的深拷贝。**流程结束。**
+        *   **L2 无效**: 从 L2 中删除此条目 (`ModelInfoCacheService.deleteFromL2`)。`modelJsonInfo` 仍需从源获取。
     *   **未命中**: `modelJsonInfo` 需从源获取。
-5.  **从数据源加载/构建 `modelObj`**:
-    *   调用 `dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath)` 获取基础的 `modelObj` (不含或含旧的 `modelJsonInfo`)。
-    *   **如果 L2 已提供了有效的 `modelJsonInfo` (来自步骤 4)**: 将此 `modelJsonInfoFromL2` 赋值给 `modelObj.modelJsonInfo`。
-    *   **否则 (L1, L2 均未提供有效 `modelJsonInfo`，或 `jsonPath` 本身就不存在)**:
-        *   如果 `jsonPath` 存在但其内容无效或需要更新 (例如，用户触发刷新，或无缓存时首次加载)：
-            *   调用爬虫逻辑 (如 `getCivitaiModelInfoWithTagsAndVersions(modelFilePath)`) 获取最新的 `civitaiInfo`。
-            *   如果成功获取 `civitaiInfo`:
-                *   将其作为 `modelObj.modelJsonInfo`。
-                *   将 `civitaiInfo` 写入（或覆盖）到 `jsonPath` 对应的 `.json` 文件中。
-                *   获取新写入/更新的 `.json` 文件的 `mtimeMs` 和 `size` (`newJsonStats`)。
-                *   **更新 L2 缓存**: `ModelInfoCacheService.setL2(l2CacheKey, civitaiInfo, newJsonStats)`。
-        *   如果 `jsonPath` 不存在，且应用逻辑决定不创建/不爬取，则 `modelObj.modelJsonInfo` 可能为空。
+4.  **从数据源加载/构建完整 `modelObj`**:
+    *   调用 `dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath)` 获取完整的 `modelObj` (包含最新的 `modelJsonInfo`)。此方法内部可能读取文件、解析 JSON、甚至触发爬虫。
+    *   `dataSourceInterface.readModelDetail` 或 `ModelService` 在获取到最终的 `modelJsonInfo` 后，如果它来自文件，应获取该 `.json` 文件最新的元数据 (`newSourceJsonStats` = `{ mtimeMs, size }`)。
+5.  **更新 L2 磁盘缓存**:
+    *   如果成功获取了 `modelObj.modelJsonInfo` 和 `newSourceJsonStats`：
+        *   `ModelInfoCacheService.setModelJsonInfo(modelInfoCacheKey, modelObj.modelJsonInfo, newSourceJsonStats, configuredL2TtlSeconds)`。
 6.  **更新 L1 内存缓存**:
-    *   获取最终构建的 `modelObj`。
-    *   如果 `modelObj.jsonPath` 存在，获取其最新的文件元数据 `currentJsonStats`。
-    *   `ModelInfoCacheService.setL1(cacheKey, modelObj, currentJsonStats)`。
+    *   `ModelInfoCacheService.setToMemory(modelInfoCacheKey, modelObj, configuredL1TtlMs, newSourceJsonStats)`。
 7.  返回 `modelObj` 的深拷贝。
 
-### 4.3. 写入/更新流程
+### 4.3. 读取流程: `ModelService.listModels(sourceId, directory, showSubdirectory, supportedExts)` (新增)
 
-*   **场景1: `ModelService.saveModel()` 保存 `modelObj` (通常是用户编辑后)**
-    1.  `ModelService` 内部逻辑将 `modelObj.modelJsonInfo` 写入到对应的 `.json` 文件。
-    2.  获取该 `.json` 文件最新的 `mtimeMs` 和 `size` (`newJsonStats`)。
-    3.  `ModelInfoCacheService.setL2(l2CacheKey, modelObj.modelJsonInfo, newJsonStats)`。
-    4.  `ModelService` 通常会重新调用 `getModelDetail` 或以其他方式获取更新后的 `modelObj`。这个过程会自动更新 L1。或者，`saveModel` 成功后，可以直接用保存后的 `modelObj` 和 `newJsonStats` 更新 L1：`ModelInfoCacheService.setL1(cacheKey, updatedModelObj, newJsonStats)`。
-*   **场景2: 爬虫服务更新了 `.json` 文件**
-    1.  爬虫服务获取了 `civitaiInfo` 并将其写入了目标 `.json` 文件。
-    2.  爬虫服务获取该 `.json` 文件最新的 `mtimeMs` 和 `size` (`newJsonStats`)。
-    3.  爬虫服务调用 `ModelInfoCacheService.setL2(l2CacheKey, civitaiInfo, newJsonStats)`。
-    4.  爬虫服务可以调用 `ModelInfoCacheService.invalidateL1(cacheKey)` 来使 L1 中可能存在的旧 `modelObj` 失效，下次访问时会重新构建。
+1.  **构造缓存键 (`listModelsCacheKey`)**:
+    *   根据 3.1.2 节定义的策略，使用 `sourceId`, `directory`, `showSubdirectory`, `supportedExts` 生成 `listModelsCacheKey`。
+2.  **查询 L2 磁盘缓存 (`ModelInfoCacheService.getListModelsResult(listModelsCacheKey)`)**:
+    *   `ModelInfoCacheService` 从 `list_models_cache` 表查询。
+    *   **命中**:
+        *   返回 `{ data: modelObjArray, directoryContentHash, cachedTimestampMs, ttlSeconds }` (其中 `data` 是 BSON 反序列化后的 `modelObj` 数组)。
+        *   **校验缓存**:
+            *   检查 TTL (`cachedTimestampMs`, `ttlSeconds`) 是否过期。如果过期，视为无效。
+            *   **对于 `LocalDataSource`**:
+                *   调用 `LocalDataSource.getDirectoryContentMetadataDigest(...)` 计算当前目录的 `currentDirectoryContentHash`。
+                *   如果 `currentDirectoryContentHash` 与缓存的 `directoryContentHash` 不匹配，视为无效。
+            *   **对于 `WebDavDataSource`**:
+                *   如果缓存的 `directoryContentHash` 存储了 ETag/Last-Modified，并且可以通过轻量级请求验证其未改变，则缓存有效。
+                *   否则，主要依赖 TTL。
+        *   **L2 有效**: 返回 `modelObjArray`。**流程结束。**
+        *   **L2 无效**: 从 L2 中删除此条目。继续。
+    *   **未命中**: 继续。
+3.  **从数据源加载模型列表**:
+    *   调用 `dataSourceInterface.listModels(sourceConfig, directory, supportedExts, showSubdirectory)` 获取 `freshModelObjArray`。
+    *   `ModelService` 内部可能还会对 `freshModelObjArray` 进行过滤。
+4.  **准备并更新 L2 磁盘缓存**:
+    *   **对于 `LocalDataSource`**:
+        *   在步骤 2 或 3 之后（如果未命中或失效），应已计算过一次 `currentDirectoryContentHash`。如果是在获取数据后计算，确保使用最新的目录状态。
+    *   **对于 `WebDavDataSource`**:
+        *   `newDirectoryContentHash` 可以是获取到的 ETag/Last-Modified (如果适用)，否则为 `null`。
+    *   获取 `listModels` 的配置 TTL (`configuredListModelsTtlSeconds`)。
+    *   调用 `ModelInfoCacheService.setListModelsResult(listModelsCacheKey, freshModelObjArray, newDirectoryContentHash, configuredListModelsTtlSeconds, keyParts)`。`keyParts` 包含用于填充表中其他字段（如 `source_id`, `directory_path` 等）的原始值。
+5.  返回 `freshModelObjArray`。
 
-### 4.4. L1 缓存键在 JSON 文件不存在时的处理
+### 4.4. 写入/更新流程 (修订)
 
-*   当 `getModelDetail` 被调用时，如果 `jsonPath` 参数为空或无效，但 `modelFilePath` 有效，此时 `cacheKey` 会基于 `modelFilePath`。
-*   L1 缓存中存储的 `modelObj` 的 `sourceJsonStats` 字段将为 `null`。
-*   在L1有效性检查时，由于 `sourceJsonStats` 为 `null`，不会进行基于JSON文件元数据的比较，仅检查TTL。
-*   L2 缓存的查找将不会发生，因为没有有效的 `jsonPath` 来构造 `l2CacheKey`。
-*   这种 `modelObj` 主要包含基于模型文件本身的信息，其 `modelJsonInfo` 部分通常为空或默认。
+*   **场景1: `ModelService.saveModel()` 保存 `modelObj`**
+    1.  `ModelService` 将 `modelObj.modelJsonInfo` 通过 `DataSourceInterface.writeModelJson` 写入对应的 `.json` 文件。
+    2.  获取该 `.json` 文件最新的元数据 `newSourceJsonStats` (`mtimeMs`, `size`)。
+    3.  **更新 `model_json_info_cache`**: 调用 `ModelInfoCacheService.setModelJsonInfo(modelInfoCacheKey, modelObj.modelJsonInfo, newSourceJsonStats, ttl)`。
+    4.  **更新 L1 缓存**: `ModelService` 通常会重新调用 `getModelDetail` (或其内部逻辑) 来获取包含最新时间戳等的 `modelObj`，这个过程会自动用 `newSourceJsonStats` 更新 L1。或者，`saveModel` 成功后，可以直接用新数据和 `newSourceJsonStats` 更新 L1。
+    5.  **使相关的 `listModels` 缓存失效**:
+        *   `ModelService` 调用 `ModelInfoCacheService.invalidateListModelsCacheForDirectory(sourceId, directoryPath)`，其中 `directoryPath` 是被修改的 `.json` 文件所在的目录。
+*   **场景2: 爬虫服务或其他外部服务更新了 `.json` 文件**
+    1.  服务获取 `newModelJsonInfo` 并写入 `.json` 文件。
+    2.  服务获取该 `.json` 文件最新的 `newSourceJsonStats`。
+    3.  服务调用 `ModelInfoCacheService.setModelJsonInfo(modelInfoCacheKey, newModelJsonInfo, newSourceJsonStats, ttl)`。
+    4.  服务调用 `ModelInfoCacheService.deleteFromMemory(modelInfoCacheKey)` (或 `invalidateL1`) 使 L1 失效。
+    5.  服务调用 `ModelInfoCacheService.invalidateListModelsCacheForDirectory(sourceId, directoryPath)`。
 
-## 5. 缓存失效机制
+## 5. 缓存失效机制 (修订)
 
 ### 5.1. TTL (Time To Live)
-*   L1 和 L2 缓存条目都包含创建时间戳和可配置的 TTL 值。
-*   **L1 TTL**: 例如，默认 1 小时。通过 `ConfigService` 配置。
-*   **L2 TTL**: 例如，默认 7 天。通过 `ConfigService` 配置。
-*   在读取缓存时检查是否过期。过期则视为未命中，并可触发删除。
 
-### 5.2. 基于文件元数据的失效 (主要机制)
+*   L1 和 L2 (两个表) 的缓存条目都包含创建时间戳 (`cached_timestamp_ms`) 和可配置的 TTL (`ttl_seconds`)。
+*   通过 `ConfigService` 配置，可为 `model_json_info_cache` 和 `list_models_cache` 设置不同的默认 TTL。
+*   读取缓存时检查是否过期。过期则视为未命中，并可触发删除。
+
+### 5.2. 基于文件元数据的失效 (`model_json_info_cache`)
+
 *   **L1 (`modelObj`)**: 当从 L1 读取 `modelObj` 时，如果其 `jsonPath` 和 `sourceJsonStats` 存在，则会获取实际 `.json` 文件的当前 `mtimeMs` 和 `size`。与 `sourceJsonStats` 不一致则 L1 条目失效。
-*   **L2 (`modelJsonInfo`)**: 当从 L2 读取 `modelJsonInfo` 时，会获取其源 `.json` 文件的当前 `mtimeMs` 和 `size`。与 L2 缓存中记录的 `source_json_mtime_ms` 和 `source_json_size` 不一致则 L2 条目失效。
+*   **L2 (`modelJsonInfo`)**: 当从 L2 的 `model_json_info_cache` 读取 `modelJsonInfo` 时，会获取其源 `.json` 文件的当前 `mtimeMs` 和 `size`。与 L2 缓存中记录的 `source_json_mtime_ms` 和 `source_json_size` 不一致则 L2 条目失效。
 
-### 5.3. 数据写入/更新操作触发的缓存更新与失效
+### 5.3. `listModels` 缓存的特定失效机制 (新增)
 
-当模型的核心数据（尤其是存储在 `.json` 文件中的 `modelJsonInfo`）被修改时，相关的缓存条目必须被更新或视作无效，以保证数据一致性。
+#### 5.3.1. `LocalDataSource`
 
-*   **通过 `ModelService.saveModel()`**:
-    *   当用户通过应用程序编辑并保存模型信息时，`ModelService.saveModel()` 方法会被调用。
-    *   此方法负责将更新后的 `modelJsonInfo` 写回对应的 `.json` 文件。
-    *   **关键操作**: 在 `.json` 文件成功写入后，`ModelService`（或其调用的保存逻辑）**必须**调用 `ModelInfoCacheService` 的 `setL2()` 方法，使用新的 `modelJsonInfo` 和更新后的 `.json` 文件元数据（`mtimeMs`, `size`）来刷新 L2 缓存中的对应条目。
-    *   同时，L1 缓存中对应的 `modelObj` 也需要更新。这可以通过 `ModelInfoCacheService.setL1()` 实现，传入新构建或获取的、包含最新数据的 `modelObj` 以及更新后的 `.json` 文件元数据。如果 `saveModel` 后会重新获取 `modelObj` (例如通过调用 `getModelDetail`)，则 L1 的更新会自然发生。
+*   **基于目录内容元数据摘要 (`directory_content_hash`)**:
+    *   在 `ModelService.listModels` 尝试从缓存读取或在写入新缓存条目之前，会调用 `LocalDataSource` 的一个新方法（例如 `getDirectoryContentMetadataDigest`）来计算当前请求目录（考虑 `showSubdirectory`）下所有相关文件（模型文件和 `.json` 文件）的元数据（路径、大小、修改时间）的聚合哈希值。
+    *   如果计算出的当前哈希与 `list_models_cache` 中存储的 `directory_content_hash` 不符，则缓存条目视为无效，即使 TTL 未到期。
+    *   新获取的数据将与新计算的哈希一同存入缓存。
 
-*   **通过外部更新 (如爬虫服务)**:
-    *   当爬虫服务或其他后台进程获取了新的 `modelJsonInfo` 并更新了对应的 `.json` 文件时。
-    *   该服务在成功更新 `.json` 文件后，同样需要调用 `ModelInfoCacheService.setL2()` 来刷新 L2 缓存，并调用 `ModelInfoCacheService.invalidateL1()` 或 `setL1()` (如果能构建新的 `modelObj`) 来处理 L1 缓存。
+#### 5.3.2. `WebDavDataSource`
 
-这些 `setL1()` 和 `setL2()` 操作会用新数据覆盖旧的缓存条目（如果键已存在），或者创建新条目，从而确保缓存反映了最新的数据状态。旧数据实际上是被新数据替换，或者在下次访问时因元数据不匹配而被视为无效。
+*   **主要依赖 TTL**: 由于远程特性，精确的内容变更检测成本高昂。
+*   **可选的 ETag/Last-Modified**: 如果 WebDAV 服务器对目录的 `PROPFIND` 请求返回可靠的 `ETag` 或 `Last-Modified` 头，并且 `webdav` 客户端库可以获取它们，则可以将这些值存储在 `directory_content_hash` 字段中。在检查缓存有效性时，可以通过轻量级请求（如 `HEAD` 或条件 `PROPFIND`）来验证这些头部是否变化。如果此方法不可行，则此字段为空，完全依赖 TTL。
+*   **用户手动刷新**: 提供明确的 UI 选项，允许用户强制刷新特定 WebDAV 数据源的模型列表，这将清除相关的 `listModels` 缓存。
 
-### 5.4. 用户手动触发
-*   提供 IPC 接口允许用户：
-    *   清除特定模型（通过 `cacheKey`）的 L1 和 L2 缓存。
-    *   清除某个数据源 (`sourceId`) 的所有 L1 和 L2 缓存。
-    *   清除所有缓存。
-*   `ModelInfoCacheService` 提供相应方法：`clear(cacheKey)`, `clearBySource(sourceId)`, `clearAll()`。
+### 5.4. 数据写入/更新操作触发的缓存更新与失效 (修订)
 
-### 5.5. BSON 序列化/反序列化错误处理
-*   **序列化 (写入 L2)**:
-    *   如果 `BSON.serialize(modelJsonInfo)` 失败，记录错误，本次不写入 L2 缓存。
-*   **反序列化 (读取 L2)**:
-    *   如果 `BSON.deserialize(bson_data)` 失败（例如，数据损坏），记录错误，将此 L2 条目视为无效（可从数据库删除），并尝试从源数据加载。
+*   当通过 `ModelService.saveModel()` 修改或创建 `.json` 文件时：
+    *   对应的 `model_json_info_cache` 条目会被更新（包含新的 BSON 数据和文件元数据）。
+    *   对应的 L1 `modelObj` 缓存条目会失效或被更新。
+    *   **所有可能包含该已修改/新建文件所在目录的 `list_models_cache` 条目都应被主动失效。** `ModelInfoCacheService` 将提供如 `invalidateListModelsCacheForDirectory(sourceId, dirPath)` 的方法，该方法会删除 `list_models_cache` 中 `source_id` 匹配且 `directory_path` 与 `dirPath` 相关的条目。
 
-## 6. 高级考虑点
+### 5.5. 用户手动触发 (修订)
+
+*   IPC 接口允许用户：
+    *   `clearModelCache({ sourceId, resourcePath })`: 清除特定模型的 L1 和 `model_json_info_cache` 条目，并使其所在目录相关的 `list_models_cache` 条目失效。
+    *   `clearSourceCache({ sourceId })`: 清除某个数据源 (`sourceId`) 的所有 L1 缓存、`model_json_info_cache` 条目和 `list_models_cache` 条目。
+    *   `clearAllModelCache()`: 清除所有缓存（L1 和 L2 的两个表）。
+*   `ModelInfoCacheService` 提供相应方法实现这些操作。
+
+### 5.6. BSON 序列化/反序列化错误处理
+
+*   **序列化 (写入 L2)**: 如果 `BSON.serialize()` 失败，记录错误，本次不写入 L2 缓存。
+*   **反序列化 (读取 L2)**: 如果 `BSON.deserialize()` 失败，记录错误，将此 L2 条目视为无效（可从数据库删除），并尝试从源数据加载。
+
+## 6. 高级考虑点 (修订)
 
 ### 6.1. 并发控制
-*   **缓存击穿 (单个热点 Key 失效时，多次请求同时加载源数据)**:
-    *   当 `ModelInfoCacheService` 发现某个 `cacheKey` 需要从源加载数据（例如，调用 `ModelService` 内部的加载逻辑或爬虫）时，可以使用一个内存中的 Promise 锁。
-    *   `Map<cacheKey, Promise<ModelObjOrJsonInfo>>`。第一个请求创建 Promise 并开始加载，后续相同 `cacheKey` 的请求等待此 Promise。加载完成后，结果存入缓存，Promise 从 Map 中移除。
-*   **缓存雪崩 (大量 Key 同时失效)**:
-    *   为 TTL 设置一个小的随机浮动范围（例如，基础 TTL ± 10%），避免大量缓存在同一精确时刻集中过期。
 
-### 6.2. 缓存穿透 (查询不存在的数据)
-*   当从外部源（如 Civitai API）查询一个模型信息，结果为“未找到”时：
-    *   可以在 L2 缓存中存储一个特殊的标记（例如，`bson_data` 为特定空值或一个特殊结构的 BSON 对象，并有一个额外的状态字段），表示此 `jsonPath` 已查询过且外部无数据。
-    *   为此类“未找到”条目设置一个较短的 TTL（例如，1小时 - 24小时）。
-    *   L1 缓存对应的 `modelObj` 的 `modelJsonInfo` 部分可以为 `null` 或特定标记。
+*   **缓存击穿**: 对于 `getModelDetail` 和 `listModels`，当缓存失效且多个并发请求尝试加载同一资源时，可以使用内存中的 Promise 锁 (`Map<cacheKey, Promise<Result>>`) 来确保只有一个请求实际执行数据加载操作，其他请求等待此 Promise。
+
+### 6.2. 缓存穿透 (`model_json_info_cache`)
+
+*   当查询一个不存在的 `.json` 文件或外部 API 未找到模型信息时，可以在 `model_json_info_cache` 中存储一个特殊标记（例如，`bson_data` 为特定空值或特殊结构，或有额外状态字段），并设置较短 TTL，以避免重复查询。
 
 ### 6.3. 缓存预热
-*   **可选策略1 (应用启动时)**:
-    *   异步加载用户最近访问过的 N 个模型的 `model info` 到 L1 和 L2 缓存。需要记录访问历史/频率。
-*   **可选策略2 (新模型库扫描后)**:
-    *   当用户扫描并添加一个新的本地模型目录后，可以分析哪些模型文件尚无对应的 `.json` 文件。
-    *   可以提示用户或根据配置自动触发一次后台任务，为这些新模型批量从 Civitai 获取信息、创建 `.json` 文件并填充缓存。
 
-### 6.4. 缓存清理 (L1 和 L2)
-*   **L1 (内存 `modelObj`)**:
-    *   主要通过 LRU 和数量限制进行被动清理。
-    *   TTL 过期也会导致条目在访问时被移除。
-*   **L2 (SQLite `modelJsonInfo`)**:
-    *   **TTL 清理**: 定期任务（例如，应用启动时或每日一次）执行 SQL 删除过期条目：
-        `DELETE FROM model_json_info_cache WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?` (当前时间)。
-    *   **LRU 清理 (基于条目数或估算大小)**:
-        *   可配置 L2 缓存的最大条目数（例如，默认 5000 条）。
+*   **`getModelDetail`**: 可考虑应用启动时异步加载用户最近访问的 N 个模型的 `model info`。
+*   **`listModels`**: 可考虑在应用启动或添加/刷新数据源后，异步预加载用户最常访问的几个目录的模型列表。
+
+### 6.4. 缓存清理 (L1 和 L2 SQLite) (修订)
+
+*   **L1**: 通过 LRU 和数量限制被动清理。TTL 过期条目在访问时移除。
+*   **L2 (SQLite)**:
+    *   **TTL 清理**: 定期任务（如应用启动时或每日后台任务）执行 SQL 删除两个 L2 表中过期的条目：
+        `DELETE FROM table_name WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?` (当前时间的毫秒时间戳)。
+    *   **LRU 清理**:
+        *   可为每个 L2 表配置最大条目数。
         *   当条目数超限时（可在写入后检查），删除 `last_accessed_timestamp_ms` 最早的 N 条记录。
-        *   `DELETE FROM model_json_info_cache WHERE cache_key IN (SELECT cache_key FROM model_json_info_cache ORDER BY last_accessed_timestamp_ms ASC LIMIT ?)`
-    *   **数据库文件大小控制**: SQLite 的 `VACUUM` 命令可以重建数据库文件并回收未使用空间，但它是一个阻塞操作，应在空闲时执行。主要通过限制条目数和定期清理过期条目来间接控制文件大小。
+        *   `DELETE FROM table_name WHERE cache_key IN (SELECT cache_key FROM table_name ORDER BY last_accessed_timestamp_ms ASC LIMIT ?)`
+    *   **数据库文件大小**: 定期执行 SQLite `VACUUM` 命令（应在空闲时）可以回收未使用空间。
 
-### 6.5. 可配置性 (`ConfigService`)
-以下参数应可通过 `ConfigService` 配置，并提供合理的默认值：
-*   `cache.enabled` (boolean, master switch for L1 & L2)
+### 6.5. 可配置性 (`ConfigService`) (修订)
+
+以下参数应可通过 `ConfigService` 配置：
+*   `cache.enabled` (boolean, 总开关)
 *   `cache.l1.enabled` (boolean)
-*   `cache.l1.maxItems` (number, e.g., 200)
-*   `cache.l1.ttlSeconds` (number, e.g., 3600 for 1 hour)
+*   `cache.l1.maxItems` (number)
+*   `cache.l1.ttlSeconds.modelInfo` (number)
 *   `cache.l2.enabled` (boolean)
-*   `cache.l2.ttlSeconds` (number, e.g., 604800 for 7 days)
-*   `cache.l2.maxItems` (number, e.g., 5000, for LRU cleanup trigger)
-*   `cache.l2.cleanupIntervalHours` (number, e.g., 24, for periodic TTL cleanup task)
-*   `cache.l2.dbPath` (string, advanced, defaults to `userData/ModelNest/cache/model_cache.sqlite`)
+*   `cache.l2.dbPath` (string)
+*   `cache.l2.ttlSeconds.modelInfo` (number, for `model_json_info_cache`)
+*   `cache.l2.ttlSeconds.listModelsLocal` (number, for `list_models_cache` with `LocalDataSource`)
+*   `cache.l2.ttlSeconds.listModelsWebDAV` (number, for `list_models_cache` with `WebDavDataSource`)
+*   `cache.l2.maxItems.modelInfo` (number)
+*   `cache.l2.maxItems.listModels` (number)
+*   `cache.l2.cleanupIntervalHours` (number, 定期清理任务间隔)
 
-### 6.6. 错误处理
-*   **SQLite 操作错误**: (DB连接、查询、写入失败) 记录详细错误日志。可以考虑短暂禁用 L2 缓存，或本次操作跳过 L2。
-*   **BSON 序列化/反序列化错误**: 记录错误。序列化失败则不写入 L2。反序列化失败则视该 L2 条目无效，并可删除。
-*   **文件系统操作错误** (获取 `mtime/size`): 记录错误，可能导致缓存有效性判断不准确，此时可选择将缓存条目视为无效。
-*   **优雅降级**: 在缓存系统出现严重错误时，应能降级到无缓存模式，保证核心功能可用，但性能下降。
+### 6.6. 错误处理 (修订)
+
+*   **SQLite 操作错误**: 记录详细错误。可考虑短暂禁用 L2 或本次操作跳过 L2。
+*   **BSON 错误**: 记录错误。序列化失败不写入，反序列化失败视条目无效。
+*   **文件/目录元数据操作错误**: 记录错误。可能导致缓存有效性判断不准，此时可选择将缓存条目视为无效。
+*   **优雅降级**: 缓存系统严重错误时，应能降级到无缓存模式。
 
 ### 6.7. 日志记录 (`electron-log`)
-记录关键缓存操作和事件，便于调试和监控：
-*   L1/L2 命中/未命中 (含 `cacheKey`)。
-*   L1/L2 条目写入/更新/删除/失效 (原因：TTL, 文件变更, 手动)。
-*   BSON 序列化/反序列化成功/失败。
-*   SQLite 操作成功/失败。
-*   缓存清理任务执行情况。
-*   所有配置加载。
-*   错误日志应包含上下文信息。
 
-## 7. 与现有架构的集成
+保持详细日志记录，覆盖 `listModels` 缓存操作。
 
-### 7.1. `ModelInfoCacheService`
-*   创建一个新的服务 `src/services/modelInfoCacheService.js`。
+## 7. 服务依赖与初始化 (新增/整合)
+
+确保 ModelNest 应用中服务的初始化顺序和依赖关系清晰、稳健，对于避免如 `ReferenceError: Cannot access '...' before initialization` 之类的错误至关重要。
+
+### 7.1. 推荐的初始化顺序
+
+在主进程的 `initializeServices` 函数 (例如在 [`src/services/index.js`](src/services/index.js)) 中，应严格遵循以下顺序实例化和初始化服务：
+
+1.  **`ConfigService`**: 首先初始化，因为它通常不依赖其他服务，但其他服务依赖它。其 `initialize` 方法（例如加载配置文件）必须是 `async` 并被 `await`。
+2.  **`DataSourceService`**: 依赖 `ConfigService`。
+3.  **`ModelInfoCacheService`**: 依赖 `ConfigService`。
+    *   其构造函数应接收 `ConfigService` 实例。
+    *   其 `initialize` 方法必须是 `async` 并被 `await`。此方法将负责：
+        *   从 `ConfigService` 读取所有缓存配置。
+        *   建立 SQLite 数据库连接（如果数据库文件不存在，则创建它）。
+        *   执行 `PRAGMA foreign_keys = ON;` (如果设计中使用了外键)。
+        *   执行 `CREATE TABLE IF NOT EXISTS ...` 为 `model_json_info_cache` 和 `list_models_cache` 创建表结构。
+        *   启动任何必要的后台清理任务（或设置定时器）。
+4.  **`ModelService`**: 依赖 `DataSourceService`, `ModelInfoCacheService`, 和 `ConfigService`。在其构造时，这些依赖项必须已经完全初始化。
+5.  **其他服务**: 根据其具体依赖关系依次初始化。
+
+### 7.2. 服务设计原则
+
+*   **构造函数轻量化**: 服务构造函数应主要用于设置内部状态的默认值和接收依赖注入的实例。避免在构造函数中执行异步操作或复杂的初始化逻辑。
+*   **显式 `initialize` 方法**: 对于需要异步操作（如文件IO、数据库连接、网络请求）或复杂设置的服务，提供一个独立的 `async initialize()` 方法。此方法应在服务实例创建后、被其他服务使用前调用并 `await`。
+*   **单向依赖**: 尽量维持服务间的单向依赖关系，以避免循环依赖。如果出现循环依赖，通常表明服务职责划分可能需要调整。
+*   **明确的错误处理**: 在 `initialize` 方法中，对可能发生的错误（如数据库连接失败、配置文件读取错误）进行捕获，并抛出明确的错误或采取适当的降级措施。`initializeServices` 函数应能处理这些初始化失败的情况。
+
+通过遵循这些原则，可以显著降低出现初始化相关错误（如 `ReferenceError`）的风险，并提高系统的整体可靠性。
+
+## 8. 与现有架构的集成 (修订)
+
+### 8.1. `ModelInfoCacheService` (修订)
+
 *   **职责**:
-    *   封装 L1 (内存 Map) 和 L2 (SQLite + BSON) 的所有缓存逻辑。
-    *   初始化 SQLite 连接，创建表结构（如果不存在）。
-    *   提供 `getL1`, `setL1`, `invalidateL1`, `getL2`, `setL2`, `invalidateL2`, `clear`, `clearBySource`, `clearAll` 等方法。
-    *   处理 LRU 和 TTL 逻辑。
-    *   执行定期的 L2 清理任务。
+    *   封装 L1 (内存 Map) 的缓存逻辑。
+    *   封装 L2 (SQLite + BSON) 的所有缓存逻辑，包括对 `model_json_info_cache` 和 `list_models_cache` 两个表的操作。
+    *   初始化 SQLite 连接，创建/维护表结构。
+    *   提供针对两种缓存内容的 `get/set/delete/invalidate` 方法。
+    *   处理 BSON 序列化/反序列化。
+    *   处理 LRU 和 TTL 逻辑，执行定期的 L2 清理任务。
     *   从 `ConfigService` 读取缓存配置。
 *   在主进程中实例化和运行。
 
-### 7.2. `ModelService` 集成
-*   `ModelService` 在其构造函数中接收 `ModelInfoCacheService` 实例 (依赖注入)。
-*   在其 `getModelDetail` 方法中，按照 "4.2. 读取流程" 中描述的逻辑与 `ModelInfoCacheService` 交互。
-*   在其 `saveModel` 方法成功写入 `.json` 文件后，调用 `ModelInfoCacheService` 的相应方法更新 L2 和 L1 缓存。
+### 8.2. `ModelService` 集成 (修订)
 
-### 7.3. `ModelCrawlerService` (或其他更新 `.json` 文件的服务) 集成
-*   当爬虫服务成功获取 `modelJsonInfo` 并将其写入（或更新）对应的 `.json` 文件后：
-    1.  获取该 `.json` 文件的 `sourceId` 和 `normalized_json_path` (构成 `l2CacheKey`)。
-    2.  获取该 `.json` 文件最新的 `mtimeMs` 和 `size` (`newJsonStats`)。
-    3.  调用 `modelInfoCacheService.setL2(l2CacheKey, newModelJsonInfo, newJsonStats)`。
-    4.  调用 `modelInfoCacheService.invalidateL1(correspondingL1CacheKey)` 以确保下次访问时 L1 会加载最新的数据。
+*   在其构造函数中接收 `ModelInfoCacheService` 实例。
+*   **`getModelDetail` 方法**: 按照 4.2 节描述的逻辑与 `ModelInfoCacheService` 交互，处理 `model_json_info_cache` 和 L1 缓存。
+*   **`listModels` 方法 (新增集成)**: 按照 4.3 节描述的逻辑与 `ModelInfoCacheService` 交互，处理 `list_models_cache`。
+*   **`saveModel` 方法**: 成功写入 `.json` 文件后，调用 `ModelInfoCacheService` 的方法更新 `model_json_info_cache` 和 L1 缓存，并调用方法使相关的 `list_models_cache` 条目失效。
 
-### 7.4. 主进程实现
-*   `ModelInfoCacheService` 及其所有依赖 (SQLite, BSON, 文件系统操作) 均在 Electron 主进程中运行，以利用 Node.js 的全部能力并避免阻塞渲染进程。
+### 8.3. `DataSource` 实现 (`LocalDataSource`, `WebDavDataSource`)
 
-### 7.5. IPC 接口 (通过 `src/ipc/appIPC.js` 或新建 `cacheIPC.js`)
-为渲染进程提供以下缓存管理功能：
-*   `clearModelCache({ sourceId, resourcePath })`: 清除特定模型的缓存。
-*   `clearSourceCache({ sourceId })`: 清除整个数据源的缓存。
-*   `clearAllModelCache()`: 清除所有 `model info` 缓存。
-*   `getCacheStatus()`: 获取缓存统计信息 (L1/L2 条目数，L2 数据库大小等)。
-这些 IPC 调用由 `ModelInfoCacheService` 的相应方法处理。
+*   `LocalDataSource` 需要新增 `async getDirectoryContentMetadataDigest(directory, supportedExts, showSubdirectory)` 方法，供 `ModelService` 在处理 `listModels` 缓存时调用。
+*   `WebDavDataSource` 的 `listModels` 方法可能需要尝试暴露目录的 ETag/Last-Modified 信息（如果可行），供 `ModelService` 使用。
 
-## 8. 所选方案理由分析
+### 8.4. IPC 接口 (修订)
 
-*   **两级缓存**: 结合了内存的速度和磁盘的持久性与大容量。
-*   **L1 缓存 `modelObj`**: `modelObj` 是 `ModelService` 的直接工作对象，在内存中缓存完整对象可以避免重复构建，提升频繁访问的性能。
-*   **L2 缓存 `modelJsonInfo` (BSON + SQLite)**:
-    *   **目标明确**: 针对性缓存耗时的 JSON 解析结果和外部 API 数据。
-    *   **SQLite**: 解决了独立 JSON 文件方案的 IO 低效和管理不便问题，提供了事务性、较好的读写性能和集中的数据管理。
-    *   **BSON**: 相较于纯文本 JSON，BSON 提供了更快的序列化/反序列化速度和可能更小的数据体积，直接满足用户对“节省解析时间”和“JS友好数据结构”的诉求（尽管仍需反序列化，但过程更快）。
-*   **基于 `.json` 文件元数据失效**: 直接关联到被缓存数据的源头（`.json` 文件），失效判断准确可靠。
-*   **缓存键设计**: `{sourceId}:{normalized_path}` 确保了全局唯一性和按库管理的能力。
-*   **模块化**: `ModelInfoCacheService` 将缓存逻辑内聚，易于维护和测试。
+*   `clearModelCache({ sourceId, resourcePath })`: 清除特定模型的 L1、`model_json_info_cache` 条目，并使其所在目录相关的 `list_models_cache` 条目失效。
+*   `clearSourceCache({ sourceId })`: 清除指定源在 L1、`model_json_info_cache` 和 `list_models_cache` 中的所有相关条目。
+*   `clearAllModelCache()`: 清空所有 L1 缓存和 L2 中的两个表。
+*   `getCacheStatus()`: 获取 L1 和 L2 (两个表) 的统计信息。
 
-此方案在满足核心需求的同时，兼顾了性能、可管理性、可配置性和与现有系统的集成。
+## 9. 所选方案理由分析 (修订)
+
+*   **两级缓存**: 结合内存的速度和 SQLite 的持久性、查询能力与大容量。
+*   **L1 缓存 `modelObj`**: 提升对热点模型详情的访问性能。
+*   **L2 缓存 `modelJsonInfo` (SQLite + BSON)**:
+    *   **SQLite**: 提供结构化存储、事务、索引查询，优于文件系统方案，便于管理和高效操作。
+    *   **BSON**: 二进制格式，序列化/反序列化速度快，存储体积可能更小。
+*   **`listModels` 结果缓存 (SQLite + BSON)**:
+    *   显著提升模型列表加载速度，改善用户体验。
+    *   **失效机制**:
+        *   `LocalDataSource` 的内容摘要机制提供了较高的准确性。
+        *   `WebDavDataSource` 的 TTL + 手动刷新是在远程源限制下的实用方案。
+*   **基于 `.json` 文件元数据失效 (`modelJsonInfo`)**: 准确可靠。
+*   **缓存键设计**: 确保唯一性，并支持按需清理。
+*   **模块化与服务依赖**: `ModelInfoCacheService` 内聚缓存逻辑，清晰的服务初始化顺序保证系统稳定性。
+
+此修订方案旨在全面提升 ModelNest 的缓存能力和整体性能，同时增强系统的可维护性和健壮性。

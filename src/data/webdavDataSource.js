@@ -727,6 +727,94 @@ class WebDavDataSource extends DataSource {
     // Example: if (this.client && this.client.disconnect) await this.client.disconnect();
     this.initialized = Promise.reject(new Error('Client disconnected')); // Mark as uninitialized
   }
+
+  /**
+   * Gets file statistics (mtimeMs, size) for a WebDAV file.
+   * @param {string} relativePath - The path to the file, relative to the data source root (subDirectory).
+   * @returns {Promise<{mtimeMs: number, size: number}|null>} File stats or null if error.
+   */
+  async getFileStats(relativePath) {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+    const sourceId = this.config.id;
+
+    if (!relativePath) {
+      log.warn(`[WebDavDataSource][${sourceId}] getFileStats called with empty relativePath`);
+      return null;
+    }
+    const resolvedPath = this._resolvePath(relativePath);
+    log.debug(`[WebDavDataSource][${sourceId}] Attempting to get file stats for: ${resolvedPath} (relative: ${relativePath})`);
+
+    try {
+      const stats = await this.client.stat(resolvedPath);
+      const duration = Date.now() - startTime;
+
+      if (stats && stats.lastmod && typeof stats.size === 'number') {
+        const mtimeMs = new Date(stats.lastmod).getTime();
+        log.debug(`[WebDavDataSource][${sourceId}] Successfully got file stats for: ${resolvedPath}, mtimeMs: ${mtimeMs}, size: ${stats.size}, 耗时: ${duration}ms`);
+        return {
+          mtimeMs: mtimeMs,
+          size: stats.size,
+        };
+      } else {
+        log.warn(`[WebDavDataSource][${sourceId}] getFileStats for ${resolvedPath} returned incomplete data:`, stats);
+        return null;
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      if (error.response && error.response.status === 404) {
+        log.warn(`[WebDavDataSource][${sourceId}] getFileStats failed (file not found): ${resolvedPath}, 耗时: ${duration}ms`);
+      } else {
+        log.error(`[WebDavDataSource][${sourceId}] Error getting file stats for: ${resolvedPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
+      }
+      return null; // Return null on error
+    }
+  }
+
+  /**
+   * Attempts to get a metadata digest for a directory on the WebDAV server.
+   * This can be an ETag or a last modified timestamp string.
+   * @param {string|null} relativeDirectory - The directory path relative to the data source root. Null or empty for root.
+   * @returns {Promise<string|null>} The ETag or last modified string, or null if not available or error.
+   */
+  async getDirectoryContentMetadataDigest(relativeDirectory) {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+    const sourceId = this.config.id;
+
+    const resolvedPath = this._resolvePath(relativeDirectory || '/');
+    log.debug(`[WebDavDataSource][${sourceId}] Attempting to get directory metadata digest for: ${resolvedPath} (relative: ${relativeDirectory})`);
+
+    try {
+      const stats = await this.client.stat(resolvedPath);
+      const duration = Date.now() - startTime;
+
+      if (stats) {
+        if (stats.etag) {
+          log.info(`[WebDavDataSource][${sourceId}] Got ETag for ${resolvedPath}: ${stats.etag}. Duration: ${duration}ms`);
+          return stats.etag;
+        }
+        if (stats.lastmod) {
+          // lastmod is usually a date string, which is fine as a digest.
+          log.info(`[WebDavDataSource][${sourceId}] Got lastmod for ${resolvedPath}: ${stats.lastmod}. Duration: ${duration}ms`);
+          return stats.lastmod;
+        }
+        log.warn(`[WebDavDataSource][${sourceId}] No ETag or lastmod found for ${resolvedPath} in stats object. Duration: ${duration}ms`, stats);
+        return null; // No suitable digest found
+      } else {
+        log.warn(`[WebDavDataSource][${sourceId}] client.stat for ${resolvedPath} returned null or undefined. Duration: ${duration}ms`);
+        return null;
+      }
+    } catch (error) {
+      const duration = Date.now() - startTime;
+      if (error.response && error.response.status === 404) {
+        log.warn(`[WebDavDataSource][${sourceId}] Directory not found for digest: ${resolvedPath}. Duration: ${duration}ms`);
+      } else {
+        log.error(`[WebDavDataSource][${sourceId}] Error getting directory stats for digest: ${resolvedPath}. Duration: ${duration}ms`, error.message, error.stack, error.response?.status);
+      }
+      return null; // Error occurred
+    }
+  }
 }
 
 module.exports = {

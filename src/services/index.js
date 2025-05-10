@@ -4,6 +4,7 @@ const ModelService = require('./modelService');
 const ImageService = require('./imageService');
 const UpdateService = require('./updateService');
 const ModelCrawlerService = require('./modelCrawlerService'); // Import the new service
+const ModelInfoCacheService = require('./modelInfoCacheService'); // Import the new cache service
 
 /**
  * Initializes all application services and handles dependency injection.
@@ -17,17 +18,21 @@ async function initializeServices() {
   // 2. Initialize DataSourceService, injecting ConfigService
   const dataSourceService = new DataSourceService({ configService });
 
-  // 3. Initialize ModelService, injecting DataSourceService
-  const modelService = new ModelService(dataSourceService);
+  // 3. Initialize ModelInfoCacheService, injecting ConfigService
+  const modelInfoCacheService = new ModelInfoCacheService(configService);
+  await modelInfoCacheService.initialize(); // Initialize cache service
 
-  // 4. Initialize ImageService, injecting DataSourceService
+  // 4. Initialize ModelService, injecting DataSourceService, ModelInfoCacheService, and ConfigService
+  const modelService = new ModelService(dataSourceService, modelInfoCacheService, configService);
+
+  // 5. Initialize ImageService, injecting DataSourceService
   const imageService = new ImageService(dataSourceService, configService);
 
-  // 5. Initialize UpdateService
+  // 6. Initialize UpdateService
   const updateService = new UpdateService();
   updateService.initialize(); // Does not need to be awaited currently
 
-  // 6. Initialize ModelCrawlerService, injecting DataSourceService
+  // 7. Initialize ModelCrawlerService, injecting DataSourceService
   const modelCrawlerService = new ModelCrawlerService(dataSourceService);
 
   // Return all service instances
@@ -38,6 +43,7 @@ async function initializeServices() {
     imageService,
     updateService,
     modelCrawlerService, // Add the new service instance
+    modelInfoCacheService, // Add the new cache service instance
   };
 }
 

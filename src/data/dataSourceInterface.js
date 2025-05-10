@@ -304,6 +304,48 @@ async function getImageData(sourceConfig, imagePath) {
     }
 }
 
+/**
+ * Gets file statistics (like mtimeMs and size) using the appropriate data source instance.
+ *
+ * @param {object} sourceConfig - The configuration object for the data source.
+ * @param {string} filePath - The path to the file.
+ * @returns {Promise<{mtimeMs: number, size: number}|null>} A promise that resolves with file stats or null if not found/error.
+ * @throws {Error} If the data source type is unknown or fetching stats fails.
+ */
+async function getFileStats(sourceConfig, filePath) {
+    const startTime = Date.now();
+    if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
+        log.error('[DataSourceInterface] getFileStats called with invalid sourceConfig:', sourceConfig);
+        throw new Error('Invalid source configuration provided (missing type or id).');
+    }
+    if (!filePath) {
+        log.error('[DataSourceInterface] getFileStats called with invalid filePath:', filePath);
+        throw new Error('Invalid filePath provided for getting file stats.');
+    }
+
+    const sourceId = sourceConfig.id;
+    log.info(`[DataSourceInterface] Attempting to get file stats for sourceId: ${sourceId}, path: ${filePath}`);
+
+    try {
+        // 获取数据源实例
+        const ds = getDataSourceInstance(sourceConfig);
+        // 调用标准接口方法
+        const stats = await ds.getFileStats(filePath);
+        const duration = Date.now() - startTime;
+        if (stats) {
+             log.info(`[DataSourceInterface] Successfully retrieved file stats for sourceId: ${sourceId}, path: ${filePath}. 耗时: ${duration}ms`);
+        } else {
+             log.warn(`[DataSourceInterface] Failed to get file stats (returned null) for sourceId: ${sourceId}, path: ${filePath}. 耗时: ${duration}ms`);
+        }
+        return stats;
+    } catch (error) {
+         const duration = Date.now() - startTime;
+        log.error(`[DataSourceInterface] Failed to get file stats for sourceId: ${sourceId}, path: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
+        // 根据具体数据源的实现，它可能会抛出错误或返回 null。
+        // 此处重新抛出错误，让调用者处理。
+        throw error;
+    }
+}
 
 module.exports = {
     writeModelJson,
@@ -311,6 +353,7 @@ module.exports = {
     listSubdirectories,
     readModelDetail,
     getImageData,
+    getFileStats, // Export the new function
     // 可以选择性地导出 getDataSourceInstance 如果其他模块需要直接访问实例
     // getDataSourceInstance
 };
