@@ -9,7 +9,7 @@ let detailName;
 let detailImage;
 let detailDescriptionContainer; // The element where description/tabs/inputs are rendered
 // References to pre-defined input elements in detailModel
-let modelTypeInput, modelBaseModelInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput, modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP; // Added modelBaseModelInput
+let modelTypeInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput, modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP;
 let detailSaveBtn, detailFeedbackEl, detailReadOnlyIndicatorEl;
 
 let detailCloseBtn;
@@ -39,7 +39,6 @@ export function initDetailModel(config) {
     detailCloseBtn = document.getElementById(config.closeBtnId);
 
     modelTypeInput = detailModel.querySelector('#detail-model-type');
-    modelBaseModelInput = detailModel.querySelector('#detail-model-base-model'); // Added for base model
     modelFileInput = detailModel.querySelector('#detail-model-file');
     modelJsonPathInput = detailModel.querySelector('#detail-model-jsonPath');
     modelTriggerInput = detailModel.querySelector('#detail-model-trigger');
@@ -57,18 +56,14 @@ export function initDetailModel(config) {
         modelTypeInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput,
         modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP, detailSaveBtn,
         detailFeedbackEl, detailReadOnlyIndicatorEl
-        // modelBaseModelInput is optional, will be handled if null
     };
 
     let allEssentialFound = true;
     for (const key in requiredElements) {
-        if (!requiredElements[key] && key !== 'modelBaseModelInput') { // modelBaseModelInput is not strictly essential for basic operation
+        if (!requiredElements[key]) {
             allEssentialFound = false;
             logMessage('error', `[DetailModel] 初始化失败：必需的 DOM 元素 '${key}' 未找到。`);
         }
-    }
-    if (!modelBaseModelInput) {
-        logMessage('warn', "[DetailModel] 初始化警告：基础模型输入框 #detail-model-base-model 未找到。该字段将作为动态“其他信息”处理。");
     }
 
 
@@ -187,9 +182,6 @@ export async function show(modelObj, sourceId, isReadOnly) { // Renamed from sho
 
     // --- 可编辑的核心元数据 (来自 modelJsonInfo) ---
     if (modelTypeInput) modelTypeInput.value = modelJson.modelType || '';
-    if (modelBaseModelInput) { // If dedicated input exists
-        modelBaseModelInput.value = modelJson.baseModel || modelJson.basic || '';
-    }
     if (modelTriggerInput) modelTriggerInput.value = modelJson.triggerWord || '';
     if (modelTagsInput) modelTagsInput.value = (modelJson.tags || []).join(', ');
 
@@ -208,12 +200,10 @@ export async function show(modelObj, sourceId, isReadOnly) { // Renamed from sho
             // modelObj top-level keys like 'file', 'jsonPath', 'sourceId' are not in modelJsonInfo
         ]);
 
-        // If modelBaseModelInput doesn't exist, 'baseModel' and 'basic' should not be in processedKeys
-        // so they can be rendered dynamically if present in modelJson.
-        if (!modelBaseModelInput) {
-            processedKeys.delete('baseModel');
-            processedKeys.delete('basic');
-        }
+        // Since the dedicated 'modelBaseModelInput' has been removed,
+        // 'baseModel' and 'basic' will always be treated as dynamic extra info fields if present in modelJson.
+        processedKeys.delete('baseModel');
+        processedKeys.delete('basic');
 
         const dynamicEntries = Object.entries(modelJson).filter(([key]) => !processedKeys.has(key));
 
@@ -354,7 +344,6 @@ export function hideDetailModel() {
  */
 function clearModelInputs() {
     if (modelTypeInput) modelTypeInput.value = '';
-    if (modelBaseModelInput) modelBaseModelInput.value = ''; // Clear base model input
     if (modelFileInput) modelFileInput.textContent = ''; // Use textContent for display elements
     if (modelJsonPathInput) modelJsonPathInput.textContent = ''; // Use textContent for display elements
     if (modelTriggerInput) modelTriggerInput.value = '';
@@ -497,7 +486,7 @@ function applyReadOnlyState() {
     const isReadOnly = currentIsReadOnly;
     logMessage('debug', `[DetailModel] Applying read-only state: ${isReadOnly}`);
 
-    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, #detail-model-description, #detail-model-base-model');
+    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, #detail-model-description');
     // Note: #detail-model-base-model might be null if not found, querySelectorAll handles this gracefully.
     
     inputs.forEach(input => {
@@ -559,21 +548,6 @@ function attachSaveListener() {
 
             // --- Collect Standard Editable Data for modelJsonInfo ---
             if (modelTypeInput) updatedJsonInfo.modelType = modelTypeInput.value.trim();
-            if (modelBaseModelInput) { // If dedicated input exists
-                updatedJsonInfo.baseModel = modelBaseModelInput.value.trim();
-                // If 'basic' was the original key and it's different from baseModel, decide how to handle.
-                // For now, assume baseModel is the primary key. 'basic' might be an alias.
-                // If 'basic' existed and baseModel is now the source, remove 'basic' if it's not the same.
-                if (currentModel.modelJsonInfo && typeof currentModel.modelJsonInfo.basic !== 'undefined' &&
-                    updatedJsonInfo.baseModel !== currentModel.modelJsonInfo.basic) {
-                    // If 'basic' was just an alias for 'baseModel', and we now use 'baseModel',
-                    // we might want to remove 'basic' to avoid redundancy if they were meant to be the same.
-                    // Or, if they are distinct concepts, keep 'basic' if it's not empty.
-                    // For now, if baseModel is set, it takes precedence.
-                    // If 'basic' was the key used for input, this logic might need adjustment.
-                    // Assuming 'baseModel' is the canonical key now.
-                }
-            }
             if (modelTriggerInput) updatedJsonInfo.triggerWord = modelTriggerInput.value.trim();
             if (modelTagsInput) {
                 updatedJsonInfo.tags = (modelTagsInput.value || '')
@@ -591,8 +565,8 @@ function attachSaveListener() {
                     // (though renderExtraFieldsContainer should filter them out)
                     if (!['modelType', 'baseModel', 'basic', 'triggerWord', 'tags', 'description'].includes(key)) {
                          updatedJsonInfo[key] = dynamicData[key]; // Assuming dynamicData values are already trimmed if necessary
-                    } else if (key === 'baseModel' && !modelBaseModelInput && dynamicData.baseModel) {
-                        // If baseModel was rendered dynamically because no dedicated input
+                    } else if (key === 'baseModel' && dynamicData.baseModel) {
+                        // modelBaseModelInput removed, baseModel is handled as a dynamic field if present in dynamicData
                         updatedJsonInfo.baseModel = dynamicData.baseModel.trim();
                     }
                 }
