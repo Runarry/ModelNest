@@ -58,7 +58,7 @@ class WebDavDataSource extends DataSource {
     // Basic normalization: remove double slashes, but be careful not to remove the leading one if subDirectory was empty
     const cleanedPath = fullPath.replace(/\/{2,}/g, '/');
 
-    // log.debug(`[WebDavDataSource][${this.config.id}] _resolvePath: '${relativePath}' -> '${cleanedPath}' (subDir: '${this.subDirectory}')`);
+    // log.debug(`[WebDavDataSource][${this.config.id}] _resolvePath: '${relativePath}' -> '${cleanedPath}' (subDir: '${this.subDirectory}')`); // Kept commented out as per original
     return cleanedPath;
   }
 
@@ -99,16 +99,16 @@ class WebDavDataSource extends DataSource {
    */
   async _recursiveListAllFiles(resolvedCurrentPath, currentShowSubdirectory) {
     const sourceId = this.config.id; // For logging
-    log.debug(`[WebDavDataSource][${sourceId}] 尝试列出目录: ${resolvedCurrentPath}, ShowSubDir: ${currentShowSubdirectory}`);
+    // log.debug(`[WebDavDataSource][${sourceId}] 尝试列出目录: ${resolvedCurrentPath}, ShowSubDir: ${currentShowSubdirectory}`); // Removed: Too verbose
     let filesFound = [];
     let items = [];
 
     try {
       items = await this.client.getDirectoryContents(resolvedCurrentPath, { deep: false, details: true });
-      log.debug(`[WebDavDataSource][${sourceId}] 在 ${resolvedCurrentPath} 中找到 ${items.length} 个项目`);
+      // log.debug(`[WebDavDataSource][${sourceId}] 在 ${resolvedCurrentPath} 中找到 ${items.length} 个项目`); // Removed: Too verbose
 
       if (!Array.isArray(items)) {
-       // log.warn(`[WebDavDataSource][${sourceId}] getDirectoryContents (deep: false) did not return an array for ${resolvedCurrentPath}. Received: ${typeof items}. Content:`, JSON.stringify(items));
+       // log.warn(`[WebDavDataSource][${sourceId}] getDirectoryContents (deep: false) did not return an array for ${resolvedCurrentPath}. Received: ${typeof items}. Content:`, JSON.stringify(items)); // Kept commented out
         if (typeof items === 'object' && items !== null) {
           if (Array.isArray(items.data)) { items = items.data; }
           else if (Array.isArray(items.items)) { items = items.items; }
@@ -133,10 +133,10 @@ class WebDavDataSource extends DataSource {
       if (item.type === 'file') {
         filesFound.push(item);
       } else if (item.type === 'directory' && currentShowSubdirectory) { // Only recurse if showSubdirectory is true
-        log.debug(`[WebDavDataSource][${sourceId}] 发现子目录，准备递归 (if enabled): ${item.filename}`);
+        // log.debug(`[WebDavDataSource][${sourceId}] 发现子目录，准备递归 (if enabled): ${item.filename}`); // Removed: Too verbose
         subDirectoryPromises.push(this._recursiveListAllFiles(item.filename, currentShowSubdirectory)); // Pass showSubdirectory
       } else if (item.type === 'directory' && !currentShowSubdirectory) {
-        log.debug(`[WebDavDataSource][${sourceId}] 发现子目录，但不递归 (showSubdirectory is false): ${item.filename}`);
+        // log.debug(`[WebDavDataSource][${sourceId}] 发现子目录，但不递归 (showSubdirectory is false): ${item.filename}`); // Removed: Too verbose
       } else {
         log.warn(`[WebDavDataSource][${sourceId}] 发现未知类型项: ${item.filename}, Type: ${item.type}`);
       }
@@ -147,7 +147,7 @@ class WebDavDataSource extends DataSource {
       subDirectoryResults.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           const subDirPath = items.filter(i => i.type === 'directory' && i.basename !== '.' && i.basename !== '..')[index]?.filename || '未知子目录';
-          log.debug(`[WebDavDataSource][${sourceId}] 子目录 ${subDirPath} 递归成功，找到 ${result.value.length} 个文件`);
+          // log.debug(`[WebDavDataSource][${sourceId}] 子目录 ${subDirPath} 递归成功，找到 ${result.value.length} 个文件`); // Removed: Too verbose
           filesFound = filesFound.concat(result.value);
         } else {
           const failedDirPath = items.filter(i => i.type === 'directory' && i.basename !== '.' && i.basename !== '..')[index]?.filename || '未知子目录';
@@ -156,10 +156,10 @@ class WebDavDataSource extends DataSource {
       });
     }
 
-    log.debug(`[WebDavDataSource][${sourceId}] 完成目录处理: ${resolvedCurrentPath}, 共找到 ${filesFound.length} 个文件 (递归行为受 showSubdirectory 控制)`);
-    if (filesFound.length > 0) {
-      log.debug(`[WebDavDataSource][${sourceId}] ${resolvedCurrentPath} 返回的部分文件示例:`, filesFound.slice(0, 5).map(f => f.filename));
-    }
+    // log.debug(`[WebDavDataSource][${sourceId}] 完成目录处理: ${resolvedCurrentPath}, 共找到 ${filesFound.length} 个文件 (递归行为受 showSubdirectory 控制)`); // Removed: Too verbose
+    // if (filesFound.length > 0) {
+      // log.debug(`[WebDavDataSource][${sourceId}] ${resolvedCurrentPath} 返回的部分文件示例:`, filesFound.slice(0, 5).map(f => f.filename)); // Removed: Too verbose
+    // }
     return filesFound;
   }
 
@@ -175,7 +175,7 @@ class WebDavDataSource extends DataSource {
     const resultsMap = new Map();
 
     if (!jsonFilePaths || jsonFilePaths.length === 0) {
-      log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: No JSON file paths provided.`);
+      // log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: No JSON file paths provided.`); // Removed: Can be inferred from subsequent logs if needed
       return resultsMap;
     }
 
@@ -192,7 +192,7 @@ class WebDavDataSource extends DataSource {
     settledResults.forEach(result => {
       if (result.status === 'fulfilled' && result.value.status === 'fulfilled') {
         resultsMap.set(result.value.path, result.value.value);
-        log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Successfully fetched ${result.value.path}`);
+        // log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Successfully fetched ${result.value.path}`); // Removed: Too verbose, one per file
       } else if (result.status === 'fulfilled' && result.value.status === 'rejected') {
         // This case handles errors caught within the individual fetchPromises' .catch
         resultsMap.set(result.value.path, null); // Mark as failed to fetch
@@ -227,14 +227,14 @@ class WebDavDataSource extends DataSource {
     // modelFile.filename is expected to be the fully resolved path on the server
     const modelFileDir = path.posix.dirname(modelFile.filename);
 
-    log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 开始处理模型文件 ${modelFile.filename}. Passed params: allItemsInDir? ${!!passedAllItemsInDir}, resolvedBasePath? ${!!passedResolvedBasePath}, sourceId? ${!!passedSourceId}`);
+    // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 开始处理模型文件 ${modelFile.filename}. Passed params: allItemsInDir? ${!!passedAllItemsInDir}, resolvedBasePath? ${!!passedResolvedBasePath}, sourceId? ${!!passedSourceId}`); // Removed: Too verbose
 
     // 尝试从缓存中获取同目录文件
     if (this._allItemsCache && this._allItemsCache.has(modelFileDir)) {
       currentAllItemsInDir = this._allItemsCache.get(modelFileDir);
-      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache hit for directory ${modelFileDir}. Found ${currentAllItemsInDir.length} items.`);
+      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache hit for directory ${modelFileDir}. Found ${currentAllItemsInDir.length} items.`); // Removed: Too verbose
     } else {
-      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache miss for directory ${modelFileDir}. Passed allItemsInDir is ${passedAllItemsInDir ? 'present' : 'absent'}.`);
+      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache miss for directory ${modelFileDir}. Passed allItemsInDir is ${passedAllItemsInDir ? 'present' : 'absent'}.`); // Removed: Too verbose
       // 如果 passedAllItemsInDir 存在，则使用它 (这主要用于 listModels 首次构建时)
       // 否则，如果缓存未命中且没有传递 allItemsInDir (例如从 readModelDetail 调用)，则需要获取
       if (!passedAllItemsInDir) {
@@ -253,11 +253,11 @@ class WebDavDataSource extends DataSource {
           } else {
             currentAllItemsInDir = fetchedItems;
           }
-          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetched ${currentAllItemsInDir.length} items for directory ${modelFileDir}`);
+          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetched ${currentAllItemsInDir.length} items for directory ${modelFileDir}`); // Removed: Too verbose
           // 将获取到的数据存入缓存，以备后续同一目录的其他模型使用
           if (this._allItemsCache) { // 确保缓存对象存在
              this._allItemsCache.set(modelFileDir, currentAllItemsInDir);
-             log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Stored fetched items for ${modelFileDir} into _allItemsCache.`);
+             // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Stored fetched items for ${modelFileDir} into _allItemsCache.`); // Removed: Too verbose
           }
         } catch (error) {
           log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Error fetching directory contents for ${modelFileDir}:`, error.message, error.stack, error.response?.status);
@@ -266,14 +266,14 @@ class WebDavDataSource extends DataSource {
       } else {
         // 使用传递的 allItemsInDir (来自 listModels 的初始构建过程)
         currentAllItemsInDir = passedAllItemsInDir;
-        log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Using passedAllItemsInDir for ${modelFileDir}. Count: ${currentAllItemsInDir.length}`);
+        // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Using passedAllItemsInDir for ${modelFileDir}. Count: ${currentAllItemsInDir.length}`); // Removed: Too verbose
       }
     }
 
     // 确保 currentResolvedBasePath 已设置
     if (!currentResolvedBasePath || currentResolvedBasePath === null) {
       currentResolvedBasePath = this._resolvePath('/');
-      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Calculated/ensured resolvedBasePath: ${currentResolvedBasePath}`);
+      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Calculated/ensured resolvedBasePath: ${currentResolvedBasePath}`); // Removed: Too verbose
     }
 
     const modelFileBase = path.posix.basename(modelFile.filename, path.posix.extname(modelFile.filename));
@@ -290,12 +290,12 @@ class WebDavDataSource extends DataSource {
             if (/\.(png|jpe?g|webp|gif)$/i.test(itemExt)) {
               if (!imageFile) {
                 imageFile = item;
-                log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 找到关联图片 ${item.filename} for ${modelFile.filename}`);
+                // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 找到关联图片 ${item.filename} for ${modelFile.filename}`); // Removed: Too verbose
               }
             } else if (itemExt === '.json') {
               if (!jsonFile) {
                 jsonFile = item;
-                log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 找到关联 JSON ${item.filename} for ${modelFile.filename}`);
+                // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 找到关联 JSON ${item.filename} for ${modelFile.filename}`); // Removed: Too verbose
               }
             }
           }
@@ -308,7 +308,7 @@ class WebDavDataSource extends DataSource {
 
     let modelJsonInfo = {};
     if (jsonFile) {
-      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 尝试读取 JSON 文件 ${jsonFile.filename}`);
+      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 尝试读取 JSON 文件 ${jsonFile.filename}`); // Removed: Too verbose
       try {
         let jsonContent;
         if (preFetchedJsonContentsMap.has(jsonFile.filename)) {
@@ -317,20 +317,20 @@ class WebDavDataSource extends DataSource {
             log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Pre-fetch for JSON ${jsonFile.filename} failed. Will attempt individual fetch.`);
             // Fall through to individual fetch
           } else {
-            log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 使用预取的 JSON 内容 ${jsonFile.filename}`);
+            // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 使用预取的 JSON 内容 ${jsonFile.filename}`); // Removed: Too verbose
           }
         }
 
         // If not pre-fetched or pre-fetch failed (jsonContent is null or undefined)
         if (jsonContent === undefined || jsonContent === null) {
-          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: ${jsonContent === null ? '预取失败，' : ''}尝试单独读取 JSON 文件 ${jsonFile.filename}`);
+          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: ${jsonContent === null ? '预取失败，' : ''}尝试单独读取 JSON 文件 ${jsonFile.filename}`); // Removed: Too verbose
           jsonContent = await this.client.getFileContents(jsonFile.filename, { format: 'text' });
-          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功单独读取 JSON ${jsonFile.filename}`);
+          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功单独读取 JSON ${jsonFile.filename}`); // Removed: Too verbose
         }
         
         if (typeof jsonContent === 'string') {
           modelJsonInfo = JSON.parse(jsonContent);
-          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功解析 JSON ${jsonFile.filename}`);
+          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功解析 JSON ${jsonFile.filename}`); // Removed: Too verbose
         } else {
           // This case should ideally not be hit if prefetch stores null for failure and individual fetch throws error
            log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: JSON content for ${jsonFile.filename} was not a string after fetch attempts. Content:`, jsonContent);
@@ -341,7 +341,7 @@ class WebDavDataSource extends DataSource {
         // modelJsonInfo 保持为 {}
       }
     } else {
-      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 模型 ${modelFile.filename} 没有关联的 JSON 文件`);
+      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 模型 ${modelFile.filename} 没有关联的 JSON 文件`); // Removed: Too verbose
     }
 
     try {
@@ -354,7 +354,7 @@ class WebDavDataSource extends DataSource {
         currentResolvedBasePath
       );
       const duration = Date.now() - startTime;
-      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 为 ${modelFile.filename} 创建模型对象完成, 耗时: ${duration}ms`);
+      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 为 ${modelFile.filename} 创建模型对象完成, 耗时: ${duration}ms`); // Removed: Too verbose
       return modelObj;
     } catch (error) {
       log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 调用 createWebDavModelObject 时出错 for ${modelFile.filename}:`, error.message, error.stack);
@@ -369,7 +369,7 @@ class WebDavDataSource extends DataSource {
 
     // 清空缓存，因为每次调用 listModels 都应重新构建
     this._allItemsCache.clear();
-    log.debug(`[WebDavDataSource][${sourceId}] Cleared _allItemsCache for new listModels call.`);
+    // log.debug(`[WebDavDataSource][${sourceId}] Cleared _allItemsCache for new listModels call.`); // Removed: Too verbose
 
     const relativeStartPath = directory ? (directory.startsWith('/') ? directory : `/${directory}`) : '/';
     const resolvedStartPath = this._resolvePath(relativeStartPath);
@@ -385,7 +385,7 @@ class WebDavDataSource extends DataSource {
 
       // 构建缓存
       if (allItemsFlatList.length > 0) {
-        log.debug(`[WebDavDataSource][${sourceId}] Populating _allItemsCache with ${allItemsFlatList.length} items.`);
+        // log.debug(`[WebDavDataSource][${sourceId}] Populating _allItemsCache with ${allItemsFlatList.length} items.`); // Removed: Too verbose
         allItemsFlatList.forEach(item => {
           const dir = path.posix.dirname(item.filename);
           if (!this._allItemsCache.has(dir)) {
@@ -393,16 +393,16 @@ class WebDavDataSource extends DataSource {
           }
           this._allItemsCache.get(dir).push(item);
         });
-        log.debug(`[WebDavDataSource][${sourceId}] _allItemsCache populated. Cache size: ${this._allItemsCache.size} directories.`);
+        // log.debug(`[WebDavDataSource][${sourceId}] _allItemsCache populated. Cache size: ${this._allItemsCache.size} directories.`); // Removed: Too verbose
         // Log a sample from the cache if needed for debugging
         // if (this._allItemsCache.size > 0) {
         //   const firstKey = this._allItemsCache.keys().next().value;
-        //   log.debug(`[WebDavDataSource][${sourceId}] Sample cache entry for dir '${firstKey}':`, this._allItemsCache.get(firstKey).slice(0,2).map(i => i.basename));
+        //   log.debug(`[WebDavDataSource][${sourceId}] Sample cache entry for dir '${firstKey}':`, this._allItemsCache.get(firstKey).slice(0,2).map(i => i.basename)); // Kept commented
         // }
       }
-      if (allItemsFlatList.length > 0) {
-        log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles 返回的部分项目示例:`, allItemsFlatList.slice(0, 5).map(item => ({ filename: item.filename, type: item.type })));
-      }
+      // if (allItemsFlatList.length > 0) {
+        // log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles 返回的部分项目示例:`, allItemsFlatList.slice(0, 5).map(item => ({ filename: item.filename, type: item.type }))); // Removed: Too verbose
+      // }
     } catch (error) {
       const duration = Date.now() - startTime;
       log.error(`[WebDavDataSource][${sourceId}] 递归列出文件项时出错: ${resolvedStartPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
@@ -418,9 +418,9 @@ class WebDavDataSource extends DataSource {
     );
 
     log.info(`[WebDavDataSource][${sourceId}] 从 ${allItemsFlatList.length} 个总项目中筛选出 ${modelFileItems.length} 个潜在模型文件.`);
-    if (modelFileItems.length > 0) {
-      log.debug(`[WebDavDataSource][${sourceId}] 筛选出的模型文件示例:`, modelFileItems.slice(0, 5).map(f => f.filename));
-    }
+    // if (modelFileItems.length > 0) {
+      // log.debug(`[WebDavDataSource][${sourceId}] 筛选出的模型文件示例:`, modelFileItems.slice(0, 5).map(f => f.filename)); // Removed: Too verbose
+    // }
 
 
     // 收集所有潜在的 JSON 文件路径以进行批量预取
@@ -461,7 +461,7 @@ class WebDavDataSource extends DataSource {
       const modelFileDir = path.posix.dirname(modelFile.filename);
       const allItemsInDirForModelFromFlatList = this._allItemsCache.get(modelFileDir) || [];
 
-      log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目. 其所在目录 ${modelFileDir} 中的项目将从缓存或传入列表获取.`);
+      // log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目. 其所在目录 ${modelFileDir} 中的项目将从缓存或传入列表获取.`); // Removed: Too verbose
       
       modelBuildPromises.push(
         this._buildModelEntry(modelFile, allItemsInDirForModelFromFlatList, sourceId, resolvedBasePath, preFetchedJsonContentsMap)
@@ -474,7 +474,7 @@ class WebDavDataSource extends DataSource {
     settledModelEntries.forEach(result => {
       if (result.status === 'fulfilled' && result.value) {
         allModels.push(result.value);
-        log.debug(`[WebDavDataSource][${sourceId}] 成功构建模型条目: ${result.value.name} (${result.value.path})`);
+        // log.debug(`[WebDavDataSource][${sourceId}] 成功构建模型条目: ${result.value.name} (${result.value.path})`); // Removed: Too verbose
       } else if (result.status === 'fulfilled' && !result.value) {
         // _buildModelEntry returned null (e.g., createWebDavModelObject failed)
         // Error already logged in _buildModelEntry
@@ -491,17 +491,17 @@ class WebDavDataSource extends DataSource {
 
   async _statIfExists(relativePath) {
     if (!relativePath || typeof relativePath !== 'string' || relativePath.trim() === '') {
-      log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: Invalid relativePath provided: '${relativePath}'`);
+      log.warn(`[WebDavDataSource][${this.config.id}] _statIfExists: Invalid relativePath provided: '${relativePath}'`); // Changed to warn
       return null;
     }
     const resolvedPath = this._resolvePath(relativePath);
     try {
       const statResult = await this.client.stat(resolvedPath);
-      log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: Successfully statted ${resolvedPath} (relative: ${relativePath})`);
+      // log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: Successfully statted ${resolvedPath} (relative: ${relativePath})`); // Removed: Too verbose
       return statResult;
     } catch (error) {
       if (error.response && error.response.status === 404) {
-        log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: File not found at ${resolvedPath} (relative: ${relativePath})`);
+        // log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: File not found at ${resolvedPath} (relative: ${relativePath})`); // Removed: Not an error, expected outcome for this function
       } else {
         log.warn(`[WebDavDataSource][${this.config.id}] _statIfExists: Error stating file ${resolvedPath} (relative: ${relativePath})`, error.message, error.response?.status);
       }
@@ -533,7 +533,7 @@ class WebDavDataSource extends DataSource {
     const duration = Date.now() - startTime;
     if (modelDetail && modelDetail.name) {
       log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Successfully processed model detail for: '${modelDetail.fileName || identifier}'. Duration: ${duration}ms.`);
-      // log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Result detail:`, JSON.stringify(modelDetail, null, 2));
+      // log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Result detail:`, JSON.stringify(modelDetail, null, 2)); // Kept commented
       return modelDetail;
     } else {
       log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Failed to get sufficient model detail for identifier: '${identifier}' using _buildModelEntry. Duration: ${duration}ms. Returning empty object.`);
@@ -549,11 +549,11 @@ class WebDavDataSource extends DataSource {
       return null;
     }
     const resolvedPath = this._resolvePath(relativePath);
-    log.debug(`[WebDavDataSource][${this.config.id}] 开始获取图片数据: ${resolvedPath} (relative: ${relativePath})`);
+    // log.debug(`[WebDavDataSource][${this.config.id}] 开始获取图片数据: ${resolvedPath} (relative: ${relativePath})`); // Removed: Too verbose
     try {
       const content = await this.client.getFileContents(resolvedPath);
 
-      log.debug(`[WebDavDataSource][${this.config.id}] 获取图片数据成功: ${resolvedPath}, 大小: ${content.length} bytes`);
+      // log.debug(`[WebDavDataSource][${this.config.id}] 获取图片数据成功: ${resolvedPath}, 大小: ${content.length} bytes`); // Removed: Too verbose
       return {
         path: relativePath, // Return the original relative path
         data: content,
@@ -568,7 +568,7 @@ class WebDavDataSource extends DataSource {
               if (ext === 'svg') mime = 'image/svg+xml';
             }
           }
-          log.debug(`[WebDavDataSource][${this.config.id}] Determined mimeType for ${relativePath}: ${mime}`);
+          // log.debug(`[WebDavDataSource][${this.config.id}] Determined mimeType for ${relativePath}: ${mime}`); // Removed: Too verbose
           return mime;
         })() // Use determined mimeType
       };
@@ -602,7 +602,7 @@ class WebDavDataSource extends DataSource {
       const resolvedDirPath = path.posix.dirname(resolvedPath);
       try {
         await this.client.stat(resolvedDirPath);
-        log.debug(`[WebDavDataSource][${sourceId}] Parent directory ${resolvedDirPath} exists.`);
+        // log.debug(`[WebDavDataSource][${sourceId}] Parent directory ${resolvedDirPath} exists.`); // Removed: Too verbose
       } catch (statError) {
         if (statError.response && statError.response.status === 404) {
           log.info(`[WebDavDataSource][${sourceId}] Parent directory ${resolvedDirPath} does not exist, attempting to create...`);
@@ -640,11 +640,11 @@ class WebDavDataSource extends DataSource {
       throw new Error('Relative path cannot be null or undefined for stat.');
     }
     const resolvedPath = this._resolvePath(relativePath);
-    log.debug(`[WebDavDataSource][${this.config.id}] Attempting to stat path: ${resolvedPath} (relative: ${relativePath})`);
+    // log.debug(`[WebDavDataSource][${this.config.id}] Attempting to stat path: ${resolvedPath} (relative: ${relativePath})`); // Removed: Too verbose
     try {
       const stats = await this.client.stat(resolvedPath);
       const duration = Date.now() - startTime;
-      log.debug(`[WebDavDataSource][${this.config.id}] Successfully stat path: ${resolvedPath}, 耗时: ${duration}ms`);
+      // log.debug(`[WebDavDataSource][${this.config.id}] Successfully stat path: ${resolvedPath}, 耗时: ${duration}ms`); // Removed: Too verbose
       return stats;
     } catch (error) {
       const duration = Date.now() - startTime;
