@@ -41,6 +41,18 @@ class ModelService {
       }
       log.debug(`[ModelService saveModel] Retrieved source config for ID: ${modelObj.sourceId}`);
 
+      //兼容性处理，为了兼容以前老配置
+      if (modelObj.modelJsonInfo) {
+        if (modelObj.modelJsonInfo.hasOwnProperty('basic') && modelObj.modelJsonInfo.hasOwnProperty('baseModel')) {
+          delete modelObj.modelJsonInfo.basic;
+          log.debug('[ModelService saveModel] Deleted modelObj.modelJsonInfo.basic as baseModel also exists.');
+        } else if (modelObj.modelJsonInfo.hasOwnProperty('basic') && !modelObj.modelJsonInfo.hasOwnProperty('baseModel')) {
+          modelObj.modelJsonInfo.baseModel = modelObj.modelJsonInfo.basic;
+          delete modelObj.modelJsonInfo.basic;
+          log.debug('[ModelService saveModel] Moved modelObj.modelJsonInfo.basic to baseModel and deleted basic.');
+        }
+      }
+
       // 2. Prepare data for saving using modelParser
       // modelParser.prepareModelDataForSaving now expects modelObj and returns a deep copy of modelObj.modelJsonInfo
       const dataToSave = prepareModelDataForSaving(modelObj);
