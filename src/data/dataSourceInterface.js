@@ -230,7 +230,8 @@ async function listSubdirectories(sourceConfig) {
  * @returns {Promise<object>} A promise that resolves with the model detail object.
  * @throws {Error} If the data source type is unknown or reading fails.
  */
-async function readModelDetail(sourceConfig, jsonPath) {
+async function readModelDetail(sourceConfig, jsonPath, modelFilePath) {
+    log.debug(`[DataSourceInterface readModelDetail] Entry. sourceId: ${sourceConfig?.id}, jsonPath: ${jsonPath}`);
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] readModelDetail called with invalid sourceConfig:', sourceConfig);
@@ -248,7 +249,8 @@ async function readModelDetail(sourceConfig, jsonPath) {
         // 获取数据源实例
         const ds = getDataSourceInstance(sourceConfig);
         // 调用标准接口方法
-        const detail = await ds.readModelDetail(jsonPath);
+        const detail = await ds.readModelDetail(jsonPath, modelFilePath, sourceConfig.id);
+        log.debug('[DataSourceInterface readModelDetail] modelObj from concrete data source:', JSON.stringify(detail, null, 2));
         const duration = Date.now() - startTime;
         log.info(`[DataSourceInterface] Successfully read model detail for sourceId: ${sourceId}, path: ${jsonPath}. 耗时: ${duration}ms`);
         return detail;

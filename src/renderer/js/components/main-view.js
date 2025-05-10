@@ -95,9 +95,26 @@ export function initMainView(config, showDetailCallback) {
     if (typeof VirtualScroll !== 'undefined') {
         setupOrUpdateVirtualScroll();
     }
+
+    // Listen for model updates from the detail view
+    window.addEventListener('model-updated', _handleModelUpdatedEvent);
 }
 
 let _showDetail = (model) => logMessage('warn', "showDetailCallback not initialized.");
+
+/**
+ * Handles the 'model-updated' event dispatched from the detail view.
+ * @param {CustomEvent} event - The event object.
+ * @param {object} event.detail - The updated model object.
+ */
+function _handleModelUpdatedEvent(event) {
+    if (event.detail) {
+        logMessage('info', `[MainView] Received 'model-updated' event for: ${event.detail.name}`);
+        updateSingleModelCard(event.detail);
+    } else {
+        logMessage('warn', "[MainView] Received 'model-updated' event without detail.");
+    }
+}
 
 function handleModelClick(event) {
     // Find the clicked model card or list item's row
@@ -443,12 +460,12 @@ function _renderSingleModelElement(modelObj) { // Renders the core card structur
     contentDiv.appendChild(typeSpan);
 
     // Description (conditionally for list view, or if design changes)
-    if (displayMode === 'list' && modelObj.modelJsonInfo && modelObj.modelJsonInfo.description) {
-        const descriptionP = document.createElement('p');
-        descriptionP.className = 'model-description-list-view'; // Specific class for styling
-        descriptionP.textContent = modelObj.modelJsonInfo.description.substring(0, 100) + (modelObj.modelJsonInfo.description.length > 100 ? '...' : ''); // Example: truncate
-        contentDiv.appendChild(descriptionP);
-    }
+    // if (displayMode === 'list' && modelObj.modelJsonInfo && modelObj.modelJsonInfo.description) {
+    //     const descriptionP = document.createElement('p');
+    //     descriptionP.className = 'model-description-list-view'; // Specific class for styling
+    //     descriptionP.textContent = modelObj.modelJsonInfo.description.substring(0, 100) + (modelObj.modelJsonInfo.description.length > 100 ? '...' : ''); // Example: truncate
+    //     contentDiv.appendChild(descriptionP);
+    // }
     fragment.appendChild(contentDiv);
 
 
@@ -543,6 +560,12 @@ export function updateSingleModelCard(updatedModelObj) {
     }
     logMessage('info', `[MainView] Updating single model item: ${updatedModelObj.name}`);
 
+logMessage('debug', `[MainView updateSingleModelCard] Comparing with updatedModelObj: file='${updatedModelObj.file}', jsonPath='${updatedModelObj.jsonPath}', sourceId='${updatedModelObj.sourceId}'`);
+
+    logMessage('debug', '[MainView updateSingleModelCard] Iterating current models array for comparison:');
+    models.forEach((m, index) => {
+        logMessage('debug', `  [${index}] model in array: file='${m.file}', jsonPath='${m.jsonPath}', sourceId='${m.sourceId}'`);
+    });
     const modelIndex = models.findIndex(m =>
         m.file === updatedModelObj.file &&
         m.jsonPath === updatedModelObj.jsonPath &&
@@ -550,13 +573,8 @@ export function updateSingleModelCard(updatedModelObj) {
     );
 
     if (modelIndex !== -1) {
-        // Ensure not to mutate original modelJsonInfo if it's part of updatedModelObj
-        // Create a new object for the updated model to maintain immutability if needed elsewhere
-        const newModelData = { ...models[modelIndex], ...updatedModelObj };
-        if (updatedModelObj.modelJsonInfo) { // If modelJsonInfo is being updated
-            newModelData.modelJsonInfo = { ...(models[modelIndex].modelJsonInfo || {}), ...updatedModelObj.modelJsonInfo };
-        }
-        models[modelIndex] = newModelData;
+        // updatedModelObj is the fully fresh model object from the service/event
+        models[modelIndex] = updatedModelObj; // Directly replace with the fresh object
 
         if (virtualScrollInstance) {
             const newItemsData = _transformModelsToVirtualScrollItems();
@@ -731,5 +749,6 @@ export function cleanupMainView() {
     if (cardViewResizeObserver && modelList) cardViewResizeObserver.unobserve(modelList);
     if (virtualScrollInstance) virtualScrollInstance.destroy();
     document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
+    window.removeEventListener('model-updated', _handleModelUpdatedEvent); // Remove event listener
     logMessage('debug', '[MainView] Cleaned up.');
 }

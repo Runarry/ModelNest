@@ -325,7 +325,7 @@ function clearModelInputs() {
     if (modelDescriptionTextarea) modelDescriptionTextarea.value = '';
     if (extraInfoGroupContainer) extraInfoGroupContainer.innerHTML = ''; // Clear dynamically added extra fields
     if (noExtraInfoP) noExtraInfoP.style.display = 'none'; // Hide 'no extra info' message
-    if (detailFeedbackEl) detailFeedbackEl.textContent = ''; // Clear feedback message
+    if (detailFeedbackEl) detailFeedbackEl.className = 'Model-feedback'; // Clear feedback message
 
     // Reset image
     if (detailImage) {
@@ -570,9 +570,11 @@ function attachSaveListener() {
             const saveStartTime = Date.now();
             logMessage('info', `[DetailModel] 调用 API 保存模型: ${modelToSave.name}`);
             try {
-                await saveModel(modelToSave); // Pass the entire updated modelObj (currentModel with new modelJsonInfo)
+                const updatedFullModelObj = await saveModel(modelToSave); // apiBridge.saveModel now returns the full updated modelObj
+                currentModel = updatedFullModelObj; // Update internal state with the fresh modelObj
+
                 const saveDuration = Date.now() - saveStartTime;
-                logMessage('info', `[DetailModel] API 保存模型成功: ${modelToSave.name}, 耗时: ${saveDuration}ms`);
+                logMessage('info', `[DetailModel] API 保存模型成功: ${currentModel.name}, 耗时: ${saveDuration}ms`);
                 
                 if (detailFeedbackEl) {
                     detailFeedbackEl.textContent = t('detail.saveSuccess');
@@ -582,9 +584,9 @@ function attachSaveListener() {
                 setTimeout(() => {
                     if (detailModel.classList.contains('active')) {
                          hideDetailModel();
-                         logMessage('info', `[DetailModel] 触发 model-updated 事件: ${modelToSave.name}`);
-                         // Dispatch event with the fully updated model object (modelToSave)
-                         window.dispatchEvent(new CustomEvent('model-updated', { detail: modelToSave }));
+                         logMessage('info', `[DetailModel] 触发 model-updated 事件: ${currentModel.name}`);
+                         // Dispatch event with the fresh modelObj
+                         window.dispatchEvent(new CustomEvent('model-updated', { detail: currentModel }));
                     }
                 }, 1500);
 

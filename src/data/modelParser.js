@@ -4,9 +4,9 @@ const fsSync = require('fs'); // 保留 sync API 用于可能需要的场景，�
 const path = require('path');
 
 // 解析本地模型目录，返回标准模型对象数组
-async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}) { // 改为 async 函数, 添加 sourceConfig
-  const sourceId = sourceConfig.id || 'local'; // 从 sourceConfig 获取 id，或默认为 'local'
-  log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}`);
+async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}, ignorExtSupport = false) { // 改为 async 函数, 添加 sourceConfig
+  // sourceId 将在 parseSingleModelFile 内部处理
+  log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}`);
   try {
     await fs.stat(dir); // 异步检查目录是否存在和可访问
   } catch (statError) {
@@ -18,7 +18,7 @@ async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}) { /
     return [];
   }
  
-  let filesInDir; // 重命名以避免与 modelFileInfo.file 混淆
+  let filesInDir;
   try {
       filesInDir = await fs.readdir(dir); // 异步读取目录
       log.debug(`[modelParser] 目录文件:`, filesInDir);
@@ -29,52 +29,91 @@ async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}) { /
   const models = [];
  
   for (const modelFileName of filesInDir) {
-    const modelFileExt = path.extname(modelFileName).toLowerCase();
-    if (supportedExtensions.includes(modelFileExt)) {
-      const modelNameWithoutExt = path.basename(modelFileName, modelFileExt);
-      const modelFullPath = path.join(dir, modelFileName);
-      
-      // 查找同名图片和 json
-      const imageName = filesInDir.find(f => f === `${modelNameWithoutExt}.png` || f === `${modelNameWithoutExt}.jpg` || f === `${modelNameWithoutExt}.jpeg` || f === `${modelNameWithoutExt}.gif` || f === `${modelNameWithoutExt}.webp`) || '';
-      const imageFullPath = imageName ? path.join(dir, imageName) : '';
-      
-      const jsonFileName = filesInDir.find(f => f === `${modelNameWithoutExt}.json`) || '';
-      const jsonFullPath = jsonFileName ? path.join(dir, jsonFileName) : '';
-
-      let modelObj = {};
-      let jsonContent = '{}'; // 默认为空JSON字符串
-
-      if (jsonFullPath) {
-        try {
-          jsonContent = await fs.readFile(jsonFullPath, 'utf-8');
-        } catch (e) {
-          log.error(`[modelParser] 读取模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
-          // jsonContent 保持 '{}'
-        }
-      }
-      
-      const modelFileInfo = {
-        name: modelNameWithoutExt,
-        file: modelFullPath,
-        jsonPath: jsonFullPath,
-        ext: modelFileExt // 传递模型文件扩展名用于 modelType 推断
-      };
-
-      // 调用新的 parseModelDetailFromJsonContent
-      // sourceId 用于填充 modelBaseInfo.sourceId
-      modelObj = parseModelDetailFromJsonContent(jsonContent, sourceId, modelFileInfo);
-      
-      // 确保顶层 image 路径被正确设置
-      modelObj.image = imageFullPath;
-      
-      // 旧的 extra 字段现在由 modelJsonInfo 替代，但如果需要保留 extra 结构，可以这样做：
-      // modelObj.extra = modelObj.modelJsonInfo; // 或者只包含部分原始信息
-
+    const modelFullPath = path.join(dir, modelFileName);
+    // parseSingleModelFile 会检查扩展名是否受支持
+    const modelObj = await parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig, ignorExtSupport);
+    if (modelObj) {
       models.push(modelObj);
     }
   }
   log.debug(`[modelParser] 解析完成，模型数量: ${models.length}`);
   return models;
+}
+// 解析单个本地模型文件，返回标准模型对象
+async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false) {
+  const sourceId = sourceConfig.id || 'local';
+  log.debug(`[modelParser] 解析单个模型文件: ${modelFullPath}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}`);
+
+  try {
+    await fs.stat(modelFullPath); // 异步检查文件是否存在和可访问
+  } catch (statError) {
+    if (statError.code === 'ENOENT') {
+      log.warn(`[modelParser] 模型文件不存在: ${modelFullPath}`);
+    } else {
+      log.error(`[modelParser] 访问模型文件失败: ${modelFullPath}`, statError.message, statError.stack);
+    }
+    return null; // 如果文件无法访问，则返回 null
+  }
+
+  const dir = path.dirname(modelFullPath);
+  const modelFileName = path.basename(modelFullPath);
+  let filesInDir;
+
+  try {
+    filesInDir = await fs.readdir(dir); // 异步读取目录
+    log.debug(`[modelParser] 模型所在目录文件:`, filesInDir);
+  } catch (readError) {
+    log.error(`[modelParser] 读取模型所在目录失败: ${dir}`, readError.message, readError.stack);
+    return null; // 如果目录无法读取，则返回 null
+  }
+
+  const modelFileExt = path.extname(modelFileName).toLowerCase();
+  if (!ignorExtSupport) {
+    if (!supportedExtensions.includes(modelFileExt)) {
+      log.warn(`[modelParser] 不支持的模型文件扩展名: ${modelFileExt} for file ${modelFullPath}`);
+      return null; // 如果扩展名不支持，则返回 null
+    }
+  }
+
+
+
+  const modelNameWithoutExt = path.basename(modelFileName, modelFileExt);
+  
+  // 查找同名图片和 json
+  const imageName = filesInDir.find(f => f === `${modelNameWithoutExt}.png` || f === `${modelNameWithoutExt}.jpg` || f === `${modelNameWithoutExt}.jpeg` || f === `${modelNameWithoutExt}.gif` || f === `${modelNameWithoutExt}.webp`) || '';
+  const imageFullPath = imageName ? path.join(dir, imageName) : '';
+  
+  const jsonFileName = filesInDir.find(f => f === `${modelNameWithoutExt}.json`) || '';
+  const jsonFullPath = jsonFileName ? path.join(dir, jsonFileName) : '';
+
+  let modelObj = {};
+  let jsonContent = '{}'; // 默认为空JSON字符串
+
+  if (jsonFullPath) {
+    try {
+      jsonContent = await fs.readFile(jsonFullPath, 'utf-8');
+    } catch (e) {
+      log.error(`[modelParser] 读取模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
+      // jsonContent 保持 '{}'
+    }
+  }
+  
+  const modelFileInfo = {
+    name: modelNameWithoutExt,
+    file: modelFullPath,
+    jsonPath: jsonFullPath,
+    ext: modelFileExt // 传递模型文件扩展名用于 modelType 推断
+  };
+
+  // 调用 parseModelDetailFromJsonContent
+  // sourceId 用于填充 modelBaseInfo.sourceId
+  modelObj = parseModelDetailFromJsonContent(jsonContent, sourceId, modelFileInfo);
+  
+  // 确保顶层 image 路径被正确设置
+  modelObj.image = imageFullPath;
+  
+  log.debug(`[modelParser] 单个模型文件解析完成: ${modelFullPath}`);
+  return modelObj;
 }
 
 // 步骤 A: 解析原始 JSON 内容 (modelJsonInfo)
@@ -89,8 +128,10 @@ function _parseJsonContentToRawInfo(jsonContentString) {
 
 // 修改：从 JSON 内容和文件信息解析模型详情
 // modelFileInfo: { name: string (不含扩展名), file: string (完整路径), jsonPath: string (完整路径), ext: string (模型文件扩展名) }
-function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier, modelFileInfo) {
-  const modelJsonInfo = _parseJsonContentToRawInfo(jsonContent);
+function parseModelDetailFromJsonContent(jsonContentString, sourceIdentifier, modelFileInfo) {
+  log.debug(`[ModelParser parseModelDetailFromJsonContent] Entry. jsonContentString (length: ${jsonContentString?.length}), sourceIdentifier: ${sourceIdentifier}, modelFileInfo:`, JSON.stringify(modelFileInfo));
+  const modelJsonInfo = _parseJsonContentToRawInfo(jsonContentString);
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelJsonInfo from _parseJsonContentToRawInfo:', modelJsonInfo ? Object.keys(modelJsonInfo) : 'null/undefined');
 
   const modelBaseInfo = {
     name: modelFileInfo.name,
@@ -104,6 +145,11 @@ function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier, modelFil
     modelType: '',
     baseModel: '',
   };
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelBaseInfo.name:', modelBaseInfo.name);
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelBaseInfo.file:', modelBaseInfo.file);
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelBaseInfo.jsonPath:', modelBaseInfo.jsonPath);
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelFileInfo.ext (for modelType inference):', modelFileInfo.ext);
+
 
   // 处理 modelType
   if (modelJsonInfo.modelType && typeof modelJsonInfo.modelType === 'string') {
@@ -113,6 +159,7 @@ function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier, modelFil
   } else {
     modelBaseInfo.modelType = 'UNKNOWN'; // 默认值
   }
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelBaseInfo.modelType (after processing):', modelBaseInfo.modelType);
 
   // 处理 baseModel (兼容 basic)
   let rawBaseModel = modelJsonInfo.baseModel || modelJsonInfo.basic;
@@ -121,6 +168,7 @@ function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier, modelFil
   } else {
     modelBaseInfo.baseModel = ''; // 默认值或根据文件名等推断
   }
+  log.debug('[ModelParser parseModelDetailFromJsonContent] modelBaseInfo.baseModel (after processing):', modelBaseInfo.baseModel);
   
   // 其他可能从 modelJsonInfo 提取并处理后放入 modelBaseInfo 的字段
   // 例如：description, triggerWord, tags (如果它们也需要 trim 或其他处理)
@@ -129,11 +177,12 @@ function parseModelDetailFromJsonContent(jsonContent, sourceIdentifier, modelFil
   modelBaseInfo.triggerWord = (modelJsonInfo.triggerWord || '').toString();
   modelBaseInfo.tags = Array.isArray(modelJsonInfo.tags) ? modelJsonInfo.tags : [];
 
-
-  return {
+  const modelObj = {
     ...modelBaseInfo,
     modelJsonInfo: modelJsonInfo, // 嵌套原始 JSON 数据
   };
+  log.debug('[ModelParser parseModelDetailFromJsonContent] Returning modelObj:', JSON.stringify(modelObj, null, 2));
+  return modelObj;
 }
 
 
@@ -247,6 +296,7 @@ function prepareModelDataForSaving(modelObj) {
 }
 module.exports = {
   parseLocalModels,
+  parseSingleModelFile, // 导出新增的函数
   parseModelDetailFromJsonContent, // 导出新函数
   createWebDavModelObject, // 导出新创建的函数
   prepareModelDataForSaving, // 导出用于保存模型数据的函数

@@ -1,4 +1,4 @@
-const { parseLocalModels, parseModelDetailFromJsonContent } = require('./modelParser'); // 导入新函数
+const { parseLocalModels, parseModelDetailFromJsonContent, parseSingleModelFile } = require('./modelParser'); // 导入新函数及 parseSingleModelFile
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
@@ -88,46 +88,56 @@ class LocalDataSource extends DataSource {
   }
   async readModelDetail(jsonPath, modelFilePath, sourceId) {
     const startTime = Date.now();
-    if (!jsonPath) {
-        log.warn('[LocalDataSource] readModelDetail 调用时 jsonPath 为空');
-        return {};
-    }
+    // Log entry with all original parameters for context.
+    // jsonPath is kept for interface compatibility and logging, though not directly used by parseSingleModelFile.
+    log.debug(`[LocalDataSource readModelDetail] Entry. jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath}, sourceId: ${sourceId}`);
+
     if (!modelFilePath) {
-        log.warn(`[LocalDataSource] readModelDetail 调用时 modelFilePath 为空 (jsonPath: ${jsonPath})`);
-        return {};
+        log.warn(`[LocalDataSource readModelDetail] Called with empty modelFilePath.`);
+        const duration = Date.now() - startTime;
+        log.debug(`[LocalDataSource readModelDetail] Exiting due to empty modelFilePath. 耗时: ${duration}ms`);
+        return {}; // Consistent with original error return
     }
     if (!sourceId) {
-        log.warn(`[LocalDataSource] readModelDetail 调用时 sourceId 为空 (jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath})`);
-        return {};
+        log.warn(`[LocalDataSource readModelDetail] Called with empty sourceId for modelFilePath: ${modelFilePath}.`);
+        const duration = Date.now() - startTime;
+        log.debug(`[LocalDataSource readModelDetail] Exiting due to empty sourceId. 耗时: ${duration}ms`);
+        return {}; // Consistent with original error return
     }
-    log.debug(`[LocalDataSource] 开始读取模型详情: jsonPath=${jsonPath}, modelFilePath=${modelFilePath}, sourceId=${sourceId}`);
-    try {
-      await fs.promises.access(jsonPath);
-      const jsonContent = await fs.promises.readFile(jsonPath, 'utf-8');
 
-      const modelFileInfo = {
-        name: path.basename(modelFilePath, path.extname(modelFilePath)),
-        file: modelFilePath,
-        jsonPath: jsonPath,
-        ext: path.extname(modelFilePath), // Added ext property
-        // Potentially other path info derived from modelFilePath or jsonPath if modelParser needs it
-      };
-      // Call parseModelDetailFromJsonContent with jsonContent, sourceId, and modelFileInfo
-      const detail = parseModelDetailFromJsonContent(jsonContent, sourceId, modelFileInfo);
+
+    try {
+      const sourceConfigForParser = { id: sourceId };
+      
+      log.debug(`[LocalDataSource readModelDetail] Calling parseSingleModelFile with modelFilePath: "${modelFilePath}", supportedExts: ${JSON.stringify(this.config.supportedExts)}, sourceConfig: ${JSON.stringify(sourceConfigForParser)}`);
+
+      // Call parseSingleModelFile from modelParser.js
+      // It expects: modelFullPath, supportedExtensions, sourceConfig
+      const modelDetail = await parseSingleModelFile(
+        modelFilePath,
+        [],
+        sourceConfigForParser,
+        true
+      );
+
       const duration = Date.now() - startTime;
-      // 日志级别调整为 debug，因为成功读取不一定是 info 级别事件
-      log.debug(`[LocalDataSource] 读取并解析模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
-      return detail;
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      // If file doesn't exist (ENOENT) or cannot be accessed, return empty object
-      if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource] 读取模型详情失败 (文件不存在): ${jsonPath}, 耗时: ${duration}ms`);
-        return {};
+      if (modelDetail) {
+        // parseSingleModelFile logs its own success/failure details internally.
+        log.debug(`[LocalDataSource readModelDetail] Successfully processed model detail for: "${modelFilePath}" using parseSingleModelFile. 耗时: ${duration}ms. Result keys: ${Object.keys(modelDetail).join(', ')}`);
+        return modelDetail;
+      } else {
+        // parseSingleModelFile returned null, indicating an issue (e.g., file not found, unsupported extension, read error).
+        // parseSingleModelFile should have logged the specific reason.
+        log.warn(`[LocalDataSource readModelDetail] parseSingleModelFile returned null for: "${modelFilePath}". Check modelParser logs for details. 耗时: ${duration}ms`);
+        return {}; // Consistent with original error return, callers might expect an object.
       }
-      // Log other errors (parsing errors, permission errors, etc.)
-      log.error(`[LocalDataSource] 读取模型详情时出错: ${jsonPath}, 耗时: ${duration}ms`, error.message, error.stack);
-      return {};
+    } catch (error) {
+      // This catch block is for unexpected errors *from the call to parseSingleModelFile* itself,
+      // or from the surrounding logic in readModelDetail if any.
+      // parseSingleModelFile is designed to catch its internal errors and return null.
+      const duration = Date.now() - startTime;
+      log.error(`[LocalDataSource readModelDetail] Unexpected error processing model detail for: "${modelFilePath}". 耗时: ${duration}ms`, error.message, error.stack);
+      return {}; // Consistent error return
     }
   }
 /**
@@ -173,15 +183,17 @@ class LocalDataSource extends DataSource {
    * @returns {Promise<void>} 操作完成时解析的 Promise。
    * @throws {Error} 如果写入失败。
    */
-  async writeModelJson(filePath, dataToWrite) { // dataToWrite is now an object (modelJsonInfo)
+  async writeModelJson(filePath, dataToWrite) { // dataToWrite is now a JSON string
     const startTime = Date.now();
     log.info(`[LocalDataSource] 开始写入模型 JSON: ${filePath}`);
      if (!filePath) {
         log.error('[LocalDataSource] writeModelJson 调用时 filePath 为空');
         throw new Error('File path cannot be empty for writing model JSON.');
     }
-    // dataToWrite is an object (modelJsonInfo), so the string check is removed.
-    // modelService.js will pass the raw modelJsonInfo object.
+    if (typeof dataToWrite !== 'string') {
+        log.error('[LocalDataSource] writeModelJson 调用时 dataToWrite 不是字符串');
+        throw new Error('Data to write must be a string for model JSON.');
+    }
 
     try {
       // 确保目录存在
@@ -198,8 +210,8 @@ class LocalDataSource extends DataSource {
         }
       }
 
-      // Serialize the dataToWrite object to a formatted JSON string and write to file
-      await fs.promises.writeFile(filePath, JSON.stringify(dataToWrite, null, 2), 'utf-8');
+      // dataToWrite is already a JSON string, write directly to file
+      await fs.promises.writeFile(filePath, dataToWrite, 'utf-8');
       const duration = Date.now() - startTime;
       log.info(`[LocalDataSource] 成功写入模型 JSON: ${filePath}, 耗时: ${duration}ms`);
     } catch (error) {

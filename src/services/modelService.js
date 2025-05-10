@@ -47,8 +47,8 @@ class ModelService {
       log.debug(`[ModelService saveModel] Data prepared for saving. Keys: ${Object.keys(dataToSave)}`);
 
       // 3. Serialize data
-      // const dataToWrite = JSON.stringify(dataToSave, null, 2); // Pretty-print JSON // Removed as per review
-      log.debug(`[ModelService saveModel] Data (object) prepared for writing to: ${modelObj.jsonPath}`);
+      const jsonDataString = JSON.stringify(dataToSave, null, 2); // Pretty-print JSON
+      log.debug(`[ModelService saveModel] Data (string) prepared for writing to: ${modelObj.jsonPath}`);
 
       // 4. Define modelIdentifier for dataSourceInterface.writeModelJson
       const modelIdentifier = {
@@ -58,11 +58,16 @@ class ModelService {
       };
 
       // 5. Write data using dataSourceInterface
-      await dataSourceInterface.writeModelJson(sourceConfig, modelIdentifier, dataToSave);
-      log.info('[ModelService saveModel] Model saved successfully', { sourceId: modelObj.sourceId, jsonPath: modelObj.jsonPath });
-      return { success: true };
+      await dataSourceInterface.writeModelJson(sourceConfig, modelIdentifier, jsonDataString);
+      log.info('[ModelService saveModel] Model JSON data written successfully', { sourceId: modelObj.sourceId, jsonPath: modelObj.jsonPath });
+
+      // 新增：获取并返回完全更新的 modelObj
+      const updatedFullModelObj = await this.getModelDetail(modelObj.sourceId, modelObj.jsonPath, modelObj.file);
+      log.info('[ModelService saveModel] Successfully retrieved updated full model object after save.', { sourceId: modelObj.sourceId, jsonPath: modelObj.jsonPath });
+      return updatedFullModelObj; // 返回完整的、新解析的 modelObj
+
     } catch (error) {
-      log.error('[ModelService] Failed to save model:', error.message, error.stack, { modelObj });
+      log.error('[ModelService] Failed to save model or retrieve updated details:', error.message, error.stack, { modelObj });
       throw error; // Re-throw the error to be handled by the caller (e.g., IPC layer)
     }
   }
@@ -203,9 +208,11 @@ class ModelService {
    */
   async getModelDetail(sourceId, jsonPath, modelFilePath = null) { // Added modelFilePath as per typical usage, though instructions focus on jsonPath
     log.info(`[ModelService] getModelDetail called. sourceId: ${sourceId}, jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath}`);
+    log.debug(`[ModelService getModelDetail] Entry. sourceId: ${sourceId}, jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath}`);
     try {
       // 1. Get source configuration using DataSourceService
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
+      log.debug(`[ModelService getModelDetail] sourceConfig:`, sourceConfig ? JSON.stringify(sourceConfig) : 'Not found');
        if (!sourceConfig) {
         return {}; // Return empty object if source config is missing
       }
@@ -215,6 +222,7 @@ class ModelService {
       // dataSourceInterface.readModelDetail now returns a modelObj
       // It might need modelFilePath for constructing the full modelObj if jsonPath alone isn't enough for all base info.
       const modelObj = await dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath);
+      log.debug('[ModelService getModelDetail] modelObj from dataSourceInterface:', JSON.stringify(modelObj, null, 2));
       log.info(`[ModelService getModelDetail] Successfully retrieved model detail (modelObj) for source ${sourceId}, path ${jsonPath}`);
       return modelObj;
     } catch (error) {
