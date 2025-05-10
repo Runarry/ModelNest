@@ -35,14 +35,13 @@ class LocalDataSource extends DataSource {
     }
   }
 
-  async listModels(directory = null, supportedExts = []) { // 添加 supportedExts 参数
+  async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
     const startTime = Date.now();
-    const root = this.config.path;
-    const startPath = directory ? path.join(root, directory) : root; // 确定起始路径
-    log.info(`[LocalDataSource] 开始列出模型. Root: ${root}, Directory: ${directory}, Calculated startPath: ${startPath}, SupportedExts: ${supportedExts}`); // 修改日志，添加 supportedExts
+    const root = this.config.path; // Root path for this data source instance
+    const startPath = directory ? path.join(root, directory) : root;
+    log.info(`[LocalDataSource] 开始列出模型. Root: ${root}, Directory: ${directory}, StartPath: ${startPath}, SourceId: ${sourceConfig ? sourceConfig.id : 'N/A'}, SupportedExts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, ShowSubDir: ${showSubdirectory}`);
 
     try {
-      // Check existence using access
       await fs.promises.access(startPath);
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -51,56 +50,70 @@ class LocalDataSource extends DataSource {
         return [];
       }
       log.error(`[LocalDataSource] 访问模型目录时出错: ${startPath}, 耗时: ${duration}ms`, error.message, error.stack);
-      return []; // Return empty on other access errors too
+      return [];
     }
 
     let allModels = [];
-    // Make walk async, pass supportedExts explicitly
-    const walk = async (dir, currentSupportedExts) => { // 参数名改为 currentSupportedExts 避免遮蔽
+    const walk = async (dir, currentSourceConfig, currentSupportedExts, currentShowSubdirectory) => {
       try {
-        // Use async readdir
         const files = await fs.promises.readdir(dir, { withFileTypes: true });
-        // Assuming parseLocalModels remains synchronous. If it becomes async, add await.
-        const modelObjs = await parseLocalModels(dir, currentSupportedExts); // 使用传入的 currentSupportedExts
+        // Call parseLocalModels, passing sourceConfig
+        // parseLocalModels now needs sourceConfig to get sourceId
+        const modelObjs = await parseLocalModels(dir, currentSupportedExts, currentSourceConfig);
         allModels = allModels.concat(modelObjs);
 
-        // Use for...of loop for async iteration
-        for (const f of files) {
-          if (f.isDirectory()) {
-            // Await the recursive call, passing currentSupportedExts
-            await walk(path.join(dir, f.name), currentSupportedExts); // 传递 currentSupportedExts
+        if (currentShowSubdirectory) { // Control recursion based on showSubdirectory
+          for (const f of files) {
+            if (f.isDirectory()) {
+              // Pass all relevant parameters in recursive call
+              await walk(path.join(dir, f.name), currentSourceConfig, currentSupportedExts, currentShowSubdirectory);
+            }
           }
         }
       } catch (error) {
-        // Handle errors, especially ENOENT (directory not found) which might occur
-        // if a directory is deleted between readdir and the recursive walk call.
         if (error.code === 'ENOENT') {
              log.warn(`[LocalDataSource] 遍历时目录不存在 (可能已被删除): ${dir}`);
         } else {
              log.error(`[LocalDataSource] 遍历目录时出错: ${dir}`, error.message, error.stack);
         }
-        // Continue walking other directories even if one fails
       }
     };
 
-    log.debug(`[LocalDataSource] 开始递归遍历模型目录: ${startPath} with exts: ${supportedExts}`);
-    await walk(startPath, supportedExts); // 在初始调用时传递 supportedExts
+    log.debug(`[LocalDataSource] 开始递归遍历模型目录: ${startPath} with exts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, showSubDir: ${showSubdirectory}`);
+    // Initial call to walk, passing all necessary parameters
+    await walk(startPath, sourceConfig, supportedExts, showSubdirectory);
     const duration = Date.now() - startTime;
     log.info(`[LocalDataSource] 列出模型完成: ${startPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型`);
     return allModels;
   }
-  async readModelDetail(jsonPath) {
+  async readModelDetail(jsonPath, modelFilePath, sourceId) {
     const startTime = Date.now();
     if (!jsonPath) {
         log.warn('[LocalDataSource] readModelDetail 调用时 jsonPath 为空');
         return {};
     }
-    log.debug(`[LocalDataSource] 开始读取模型详情: ${jsonPath}`);
+    if (!modelFilePath) {
+        log.warn(`[LocalDataSource] readModelDetail 调用时 modelFilePath 为空 (jsonPath: ${jsonPath})`);
+        return {};
+    }
+    if (!sourceId) {
+        log.warn(`[LocalDataSource] readModelDetail 调用时 sourceId 为空 (jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath})`);
+        return {};
+    }
+    log.debug(`[LocalDataSource] 开始读取模型详情: jsonPath=${jsonPath}, modelFilePath=${modelFilePath}, sourceId=${sourceId}`);
     try {
-      // Check existence using access before reading
       await fs.promises.access(jsonPath);
       const jsonContent = await fs.promises.readFile(jsonPath, 'utf-8');
-      const detail = parseModelDetailFromJsonContent(jsonContent, jsonPath); // 使用新函数解析
+
+      const modelFileInfo = {
+        name: path.basename(modelFilePath, path.extname(modelFilePath)),
+        file: modelFilePath,
+        jsonPath: jsonPath,
+        ext: path.extname(modelFilePath), // Added ext property
+        // Potentially other path info derived from modelFilePath or jsonPath if modelParser needs it
+      };
+      // Call parseModelDetailFromJsonContent with jsonContent, sourceId, and modelFileInfo
+      const detail = parseModelDetailFromJsonContent(jsonContent, sourceId, modelFileInfo);
       const duration = Date.now() - startTime;
       // 日志级别调整为 debug，因为成功读取不一定是 info 级别事件
       log.debug(`[LocalDataSource] 读取并解析模型详情成功: ${jsonPath}, 耗时: ${duration}ms`);
@@ -160,17 +173,15 @@ class LocalDataSource extends DataSource {
    * @returns {Promise<void>} 操作完成时解析的 Promise。
    * @throws {Error} 如果写入失败。
    */
-  async writeModelJson(filePath, dataToWrite) {
+  async writeModelJson(filePath, dataToWrite) { // dataToWrite is now an object (modelJsonInfo)
     const startTime = Date.now();
     log.info(`[LocalDataSource] 开始写入模型 JSON: ${filePath}`);
      if (!filePath) {
         log.error('[LocalDataSource] writeModelJson 调用时 filePath 为空');
         throw new Error('File path cannot be empty for writing model JSON.');
     }
-    if (typeof dataToWrite !== 'string') {
-        log.error('[LocalDataSource] writeModelJson 调用时 dataToWrite 不是字符串');
-        throw new Error('Data to write must be a string.');
-    }
+    // dataToWrite is an object (modelJsonInfo), so the string check is removed.
+    // modelService.js will pass the raw modelJsonInfo object.
 
     try {
       // 确保目录存在
@@ -187,8 +198,8 @@ class LocalDataSource extends DataSource {
         }
       }
 
-      // 写入文件
-      await fs.promises.writeFile(filePath, dataToWrite, 'utf-8');
+      // Serialize the dataToWrite object to a formatted JSON string and write to file
+      await fs.promises.writeFile(filePath, JSON.stringify(dataToWrite, null, 2), 'utf-8');
       const duration = Date.now() - startTime;
       log.info(`[LocalDataSource] 成功写入模型 JSON: ${filePath}, 耗时: ${duration}ms`);
     } catch (error) {

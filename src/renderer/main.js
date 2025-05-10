@@ -3,7 +3,7 @@ import './styles/index.css'; // 导入主 CSS 文件
 import { initThemeSwitcher } from './js/utils/theme.js';
 // Import updateSingleModelCard along with other functions
 import { initMainView, loadModels as loadModelsForView, renderSources, updateSingleModelCard } from './js/components/main-view.js';
-import { initDetailModel, showDetailModel, hideDetailModel } from './js/components/detail-model.js';
+import { initDetailModel, show, hideDetailModel } from './js/components/detail-model.js';
 import { initsettingsModal } from './js/components/settings-modal.js';
 // ui-utils are mostly used internally by other modules, but setLoading might be useful here
 import { setLoading } from './js/utils/ui-utils.js';
@@ -86,7 +86,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   initMainView(mainViewConfig, (modelData, sourceId, isReadOnlyFlag) => { // Accept all params from main-view's _showDetail call
       // Use the sourceId and isReadOnlyFlag passed directly from main-view
       if (sourceId) {
-          showDetailModel(modelData, sourceId, isReadOnlyFlag);
+          show(modelData, sourceId, isReadOnlyFlag);
       } else {
            // Task 1: Error Logging (Should ideally not happen if UI is consistent)
           logMessage('error', "[Renderer] 无法显示详情：main-view 未能在回调中提供 sourceId");

@@ -58,6 +58,7 @@ class ConfigService {
 
       // Ensure default keys exist if missing from file
       loadedConfig = { ...deepClone(DEFAULT_CONFIG), ...loadedConfig };
+      log.debug(`[ConfigService _loadConfigFromFile] supportedExtensions after merge. Value: ${JSON.stringify(loadedConfig.supportedExtensions)}, Type: ${typeof loadedConfig.supportedExtensions}`);
 
       // Ensure each modelSource has a readOnly property (defaulting to false)
       if (Array.isArray(loadedConfig.modelSources)) {

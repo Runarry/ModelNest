@@ -18,59 +18,51 @@ class ModelService {
 
   /**
    * Saves model data.
-   * @param {object} modelData - The model data object, must include sourceId and jsonPath.
+   * @param {object} modelObj - The model object, now in the new structure { ...modelBaseInfo, modelJsonInfo: { ... } }.
    * @returns {Promise<{success: boolean}>} - Resolves with success status or rejects on error.
    */
-  async saveModel(modelData) {
-    log.info('[ModelService] saveModel called', { jsonPath: modelData?.jsonPath, sourceId: modelData?.sourceId });
+  async saveModel(modelObj) {
+    log.info('[ModelService] saveModel called', { jsonPath: modelObj?.jsonPath, sourceId: modelObj?.sourceId });
     try {
-      if (!modelData || !modelData.jsonPath) {
-        throw new Error('Model JSON path (modelData.jsonPath) is required for saving.');
+      if (!modelObj || !modelObj.jsonPath) {
+        throw new Error('Model JSON path (modelObj.jsonPath) is required for saving.');
       }
-      if (!modelData.sourceId) {
-        throw new Error('Source ID (modelData.sourceId) is required for saving.');
+      if (!modelObj.sourceId) {
+        throw new Error('Source ID (modelObj.sourceId) is required for saving.');
+      }
+      if (!modelObj.modelJsonInfo) {
+        throw new Error('modelJsonInfo is required for saving.');
       }
 
-      // 1. Get source configuration using DataSourceService (Moved up)
-      const sourceConfig = await this.dataSourceService.getSourceConfig(modelData.sourceId);
+      // 1. Get source configuration using DataSourceService
+      const sourceConfig = await this.dataSourceService.getSourceConfig(modelObj.sourceId);
       if (!sourceConfig) {
-        // DataSourceService already logs error if config not found
-        throw new Error(`Configuration for source ID ${modelData.sourceId} not found.`);
+        throw new Error(`Configuration for source ID ${modelObj.sourceId} not found.`);
       }
-      log.debug(`[ModelService saveModel] Retrieved source config for ID: ${modelData.sourceId}`);
+      log.debug(`[ModelService saveModel] Retrieved source config for ID: ${modelObj.sourceId}`);
 
-      // 2. Read existing data using dataSourceInterface
-      let existingData = {};
-      try {
-        // Use readModelDetail which handles different source types and returns {} on error/not found
-        existingData = await dataSourceInterface.readModelDetail(sourceConfig, modelData.jsonPath);
-        if (Object.keys(existingData).length > 0) {
-             log.debug(`[ModelService saveModel] Successfully read existing model data via interface: ${modelData.jsonPath}`);
-        } else {
-             log.info(`[ModelService saveModel] Existing model JSON not found or empty via interface (${modelData.jsonPath}). Will create new file or overwrite.`);
-        }
-      } catch (readError) {
-          // Although readModelDetail handles errors internally and returns {},
-          // catch potential errors from the interface call itself (e.g., invalid config passed).
-          log.warn(`[ModelService saveModel] Error calling readModelDetail for ${modelData.jsonPath}: ${readError.message}. Assuming no existing data.`);
-          existingData = {}; // Ensure starting from an empty object on interface error
-      }
+      // 2. Prepare data for saving using modelParser
+      // modelParser.prepareModelDataForSaving now expects modelObj and returns a deep copy of modelObj.modelJsonInfo
+      const dataToSave = prepareModelDataForSaving(modelObj);
+      log.debug(`[ModelService saveModel] Data prepared for saving. Keys: ${Object.keys(dataToSave)}`);
 
+      // 3. Serialize data
+      // const dataToWrite = JSON.stringify(dataToSave, null, 2); // Pretty-print JSON // Removed as per review
+      log.debug(`[ModelService saveModel] Data (object) prepared for writing to: ${modelObj.jsonPath}`);
 
-      // 3. Prepare final data using modelParser
-      const finalDataToSave = prepareModelDataForSaving(existingData, modelData);
-      log.debug(`[ModelService saveModel] Data prepared for saving. Keys: ${Object.keys(finalDataToSave)}`);
+      // 4. Define modelIdentifier for dataSourceInterface.writeModelJson
+      const modelIdentifier = {
+        jsonPath: modelObj.jsonPath,
+        sourceId: modelObj.sourceId
+        // Add any other fields required by dataSourceInterface.writeModelJson for identification
+      };
 
-      // 4. Serialize data
-      const dataToWrite = JSON.stringify(finalDataToSave, null, 2); // Pretty-print JSON
-      log.debug(`[ModelService saveModel] Serialized data prepared for writing to: ${modelData.jsonPath}`);
-
-      // 5. Write data using dataSourceInterface (Source config already retrieved)
-      await dataSourceInterface.writeModelJson(sourceConfig, modelData, dataToWrite);
-      log.info('[ModelService saveModel] Model saved successfully', { sourceId: modelData.sourceId, jsonPath: modelData.jsonPath });
+      // 5. Write data using dataSourceInterface
+      await dataSourceInterface.writeModelJson(sourceConfig, modelIdentifier, dataToSave);
+      log.info('[ModelService saveModel] Model saved successfully', { sourceId: modelObj.sourceId, jsonPath: modelObj.jsonPath });
       return { success: true };
     } catch (error) {
-      log.error('[ModelService] Failed to save model:', error.message, error.stack, { modelData });
+      log.error('[ModelService] Failed to save model:', error.message, error.stack, { modelObj });
       throw error; // Re-throw the error to be handled by the caller (e.g., IPC layer)
     }
   }
@@ -79,51 +71,58 @@ class ModelService {
    * Lists models within a specific directory of a data source.
    * @param {string} sourceId - The ID of the data source.
    * @param {string} directory - The directory path relative to the source root.
-   * @returns {Promise<Array<object>>} - Resolves with an array of model info objects or rejects on error.
+   * @returns {Promise<Array<object>>} - Resolves with an array of model objects (new modelObj structure) or rejects on error.
    */
-  async listModels(sourceId, directory, filters = {}) { // Added filters parameter
-    log.info(`[ModelService] listModels called. sourceId: ${sourceId}, directory: ${directory}, filters: ${JSON.stringify(filters)}`);
+  async listModels(sourceId, directory, filters = {}, supportedExtensions = null, showSubdirectory = false) { // Added supportedExtensions and showSubdirectory for consistency, though not directly used by current logic based on instructions
+    log.info(`[ModelService] listModels called. sourceId: ${sourceId}, directory: ${directory}, filters: ${JSON.stringify(filters)}, showSubdirectory: ${showSubdirectory}`);
+    log.debug('[ModelService listModels] Entry point. Parameters:', { sourceId, directory, filters, supportedExtensions, showSubdirectory });
     try {
       // 1. Get source configuration and supported extensions using DataSourceService
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
       if (!sourceConfig) {
-        // DataSourceService already logs error if config not found
-        return []; // Return empty array if source config is missing
+        return [];
       }
-      const supportedExts = await this.dataSourceService.getSupportedExtensions();
-      log.debug(`[ModelService listModels] Retrieved source config and supported extensions: ${supportedExts}`);
+      // Use provided supportedExtensions if available, otherwise fetch from service.
+      // The instruction implies dataSourceInterface.listModels will handle supportedExtensions.
+      const extsToUse = supportedExtensions || await this.dataSourceService.getSupportedExtensions();
+      log.debug(`[ModelService listModels] Retrieved source config. Using supported extensions: ${extsToUse}`);
 
       // 2. List models using dataSourceInterface
-      let models = await dataSourceInterface.listModels(sourceConfig, directory, supportedExts);
-      log.info(`[ModelService listModels] Found ${models.length} raw models for source ${sourceId} in directory ${directory}`);
+      // dataSourceInterface.listModels now returns an array of modelObj
+      let modelObjs = await dataSourceInterface.listModels(sourceConfig, directory, extsToUse, showSubdirectory);
+      log.debug(`[ModelService listModels] Raw modelObjs from dataSourceInterface (length: ${modelObjs.length}):`, JSON.stringify(modelObjs.slice(0, 5), null, 2)); // Log first 5 for brevity
+      log.info(`[ModelService listModels] Found ${modelObjs.length} raw model objects for source ${sourceId} in directory ${directory}`);
 
 
-      // 3. Apply filters if any
+      // 3. Apply filters if any (filters now apply to modelObj properties)
+      log.debug(`[ModelService listModels] Before filtering. Count: ${modelObjs.length}`);
       if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) )) {
         const baseModelFilter = (filters.baseModel && Array.isArray(filters.baseModel)) ? filters.baseModel.map(bm => bm.toLowerCase()) : [];
         const modelTypeFilter = (filters.modelType && Array.isArray(filters.modelType)) ? filters.modelType.map(mt => mt.toLowerCase()) : [];
 
-        models = models.filter(model => {
+        modelObjs = modelObjs.filter(modelObj => {
           let passesBaseModel = true;
           if (baseModelFilter.length > 0) {
-            passesBaseModel = model.baseModel && typeof model.baseModel === 'string' && baseModelFilter.includes(model.baseModel.toLowerCase());
+            // Access baseModel from the top-level of modelObj
+            passesBaseModel = modelObj.baseModel && typeof modelObj.baseModel === 'string' && baseModelFilter.includes(modelObj.baseModel.toLowerCase());
           }
 
           let passesModelType = true;
           if (modelTypeFilter.length > 0) {
-            passesModelType = model.modelType && typeof model.modelType === 'string' && modelTypeFilter.includes(model.modelType.toLowerCase());
+            // Access modelType from the top-level of modelObj
+            passesModelType = modelObj.modelType && typeof modelObj.modelType === 'string' && modelTypeFilter.includes(modelObj.modelType.toLowerCase());
           }
           
           return passesBaseModel && passesModelType;
         });
-        log.debug(`[ModelService listModels] Filtered models. Count: ${models.length}`);
+        log.debug(`[ModelService listModels] Filtered model objects. Count: ${modelObjs.length}`);
       }
 
-      log.info(`[ModelService listModels] Returning ${models.length} filtered models for source ${sourceId} in directory ${directory}`);
+      log.info(`[ModelService listModels] Returning ${modelObjs.length} filtered model objects for source ${sourceId} in directory ${directory}`);
 
       // Helper function to check if the directory is default or root
       function _isDefaultDirectory(dir) {
-        return dir === '' || dir === '/' || dir === './' || dir === null;
+        return dir === '' || dir === '/' || dir === './' || dir === null || typeof dir === 'undefined';
       }
 
       // Helper function to check if filters are empty or not set
@@ -131,36 +130,27 @@ class ModelService {
         if (!fltrs || Object.keys(fltrs).length === 0) {
           return true;
         }
-        // Check specific filter properties if they exist
         const { baseModel, modelType } = fltrs;
-        const isBaseModelFilterEmpty = baseModel && Array.isArray(baseModel) && baseModel.length === 0;
-        const isModelTypeFilterEmpty = modelType && Array.isArray(modelType) && modelType.length === 0;
-
-        // This logic implies that if ONLY baseModel and modelType are present and empty,
-        // it's considered as "empty filters" for the purpose of this cache update.
-        // If other filters might exist and have values, this condition might need adjustment.
-        if (Object.keys(fltrs).length === 2 && isBaseModelFilterEmpty && isModelTypeFilterEmpty) {
-          return true;
-        }
-        // If only one of them is present and empty, and it's the only filter
-        if (Object.keys(fltrs).length === 1 && (isBaseModelFilterEmpty || isModelTypeFilterEmpty)) {
-            return true;
-        }
-
-        return false; // Filters are present and not considered empty for caching
+        const isBaseModelFilterEmpty = !baseModel || (Array.isArray(baseModel) && baseModel.length === 0);
+        const isModelTypeFilterEmpty = !modelType || (Array.isArray(modelType) && modelType.length === 0);
+        
+        // Consider filters empty if all specified filter arrays are effectively empty
+        return isBaseModelFilterEmpty && isModelTypeFilterEmpty;
       }
       
       // Update cache when listing root directory with no filters
+      // The cache update logic should now use modelObj properties
       if (_isDefaultDirectory(directory) && _areFiltersEmpty(filters)) {
         const baseModels = new Set();
         const modelTypes = new Set();
 
-        models.forEach(model => {
-          if (model.baseModel && typeof model.baseModel === 'string' && model.baseModel.trim() !== '') {
-            baseModels.add(model.baseModel.trim());
+        modelObjs.forEach(modelObj => {
+          // Access baseModel and modelType from the top-level of modelObj
+          if (modelObj.baseModel && typeof modelObj.baseModel === 'string' && modelObj.baseModel.trim() !== '') {
+            baseModels.add(modelObj.baseModel.trim());
           }
-          if (model.modelType && typeof model.modelType === 'string' && model.modelType.trim() !== '') {
-            modelTypes.add(model.modelType.trim().toUpperCase());
+          if (modelObj.modelType && typeof modelObj.modelType === 'string' && modelObj.modelType.trim() !== '') {
+            modelTypes.add(modelObj.modelType.trim().toUpperCase());
           }
         });
 
@@ -171,7 +161,7 @@ class ModelService {
         log.debug(`[ModelService listModels] Updated filter options cache for source ${sourceId}`);
       }
 
-      return models;
+      return modelObjs;
     } catch (error) {
       log.error(`[ModelService] Error listing models for source ${sourceId} in directory ${directory}:`, error.message, error.stack);
       throw error; // Re-throw the error
@@ -208,31 +198,27 @@ class ModelService {
    * Gets the detailed information for a specific model.
    * @param {string} sourceId - The ID of the data source.
    * @param {string} jsonPath - The path to the model's JSON file relative to the source root.
-   * @returns {Promise<object>} - Resolves with the model detail object or rejects on error.
+   * @param {string} [modelFilePath] - Optional: The path to the main model file (e.g. .safetensors). Used by dataSourceInterface if needed.
+   * @returns {Promise<object>} - Resolves with the model detail object (new modelObj structure) or rejects on error.
    */
-  async getModelDetail(sourceId, jsonPath) {
-    log.info(`[ModelService] getModelDetail called. sourceId: ${sourceId}, jsonPath: ${jsonPath}`);
+  async getModelDetail(sourceId, jsonPath, modelFilePath = null) { // Added modelFilePath as per typical usage, though instructions focus on jsonPath
+    log.info(`[ModelService] getModelDetail called. sourceId: ${sourceId}, jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath}`);
     try {
       // 1. Get source configuration using DataSourceService
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
        if (!sourceConfig) {
-        // DataSourceService already logs error if config not found
-        // The original IPC handler returned {}, let's mimic that for consistency,
-        // although throwing might be cleaner. Interface also handles this.
-        return {};
+        return {}; // Return empty object if source config is missing
       }
       log.debug(`[ModelService getModelDetail] Retrieved source config for ID: ${sourceId}`);
 
       // 2. Read model detail using dataSourceInterface
-      // The interface function handles internal try/catch and logging, returning {} on error.
-      const detail = await dataSourceInterface.readModelDetail(sourceConfig, jsonPath);
-      log.info(`[ModelService getModelDetail] Successfully retrieved model detail for source ${sourceId}, path ${jsonPath}`);
-      return detail;
+      // dataSourceInterface.readModelDetail now returns a modelObj
+      // It might need modelFilePath for constructing the full modelObj if jsonPath alone isn't enough for all base info.
+      const modelObj = await dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath);
+      log.info(`[ModelService getModelDetail] Successfully retrieved model detail (modelObj) for source ${sourceId}, path ${jsonPath}`);
+      return modelObj;
     } catch (error) {
-      // This catch block might be redundant if the interface handles all errors,
-      // but keep it for safety to catch unexpected issues (like sourceConfig failing).
       log.error(`[ModelService] Error getting model detail for source ${sourceId}, path ${jsonPath}:`, error.message, error.stack);
-      // Re-throw to allow caller (IPC) to handle it, consistent with original IPC logic.
       throw error;
     }
   }
@@ -242,66 +228,82 @@ class ModelService {
    * If a sourceId is provided, options are fetched only for that source.
    * Otherwise, options are aggregated from all sources.
    * @param {string} [sourceId=null] - Optional ID of the data source.
+   * @param {string} [directory=''] - Optional directory to scan.
+   * @param {string[]} [supportedExtensions=null] - Optional list of supported extensions.
    * @returns {Promise<{baseModels: Array<string>, modelTypes: Array<string>}>}
    */
-  async getAvailableFilterOptions(sourceId = null) {
-    log.info(`[ModelService] getAvailableFilterOptions called. sourceId: ${sourceId || 'all'}`);
-    // If sourceId is null or undefined, return empty options immediately.
+  async getAvailableFilterOptions(sourceId = null, directory = '', supportedExtensions = null) { // Added directory and supportedExtensions as per typical usage
+    log.info(`[ModelService] getAvailableFilterOptions called. sourceId: ${sourceId || 'all'}, directory: ${directory}`);
     if (!sourceId) {
       log.debug('[ModelService getAvailableFilterOptions] sourceId is null or undefined, returning empty options immediately.');
       return { baseModels: [], modelTypes: [] };
     }
 
-    // Check cache first
+    // Cache key could be more specific if directory/extensions matter for filter options,
+    // but current logic updates cache based on root listing.
+    // For simplicity, using sourceId as cache key as before.
     if (this.filterOptionsCache.has(sourceId)) {
       log.debug(`[ModelService getAvailableFilterOptions] Using cached filter options for source ${sourceId}`);
       return this.filterOptionsCache.get(sourceId);
     }
 
     try {
-      let modelsToProcess = [];
+      let modelObjsToProcess = [];
 
-      // Fetch models for the specific source (sourceId is guaranteed to be non-null here)
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
       if (!sourceConfig) {
         log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
         return { baseModels: [], modelTypes: [] };
       }
+
+      const extsToUse = supportedExtensions || await this.dataSourceService.getSupportedExtensions();
+
       try {
-        // Fetch all models from the root of the specified source, no pre-filtering
-        modelsToProcess = await this.listModels(sourceId, '', {});
-        log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelsToProcess.length} models for source ${sourceId}`);
+        // Fetch all modelObjs from the specified directory (or root if empty) of the source, no pre-filtering.
+        // listModels now returns modelObjs.
+        // Pass empty filter {} and showSubdirectory=true to get all models for accurate filter options.
+        // The cache update in listModels is for root directory and no filters.
+        // This function might need to call listModels with specific parameters to ensure it gets all data for options.
+        // For now, assuming listModels called with empty directory and no filters is sufficient for populating cache,
+        // or that this function's primary role is to read the cache populated by a general listModels call.
+        // Based on instruction 4, this function calls `this.listModels`.
+        // We should list models from the root to get comprehensive filter options.
+        modelObjsToProcess = await this.listModels(sourceId, '', {}, extsToUse, true); // List all models in root, including subdirectories
+        log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelObjsToProcess.length} modelObjs for source ${sourceId} to build filter options.`);
       } catch (error) {
-        log.error(`[ModelService getAvailableFilterOptions] Error listing models for source ${sourceId}: ${error.message}`);
-        // Return empty options if listing models for the specific source fails
+        log.error(`[ModelService getAvailableFilterOptions] Error listing modelObjs for source ${sourceId}: ${error.message}`);
         return { baseModels: [], modelTypes: [] };
       }
 
       const baseModels = new Set();
       const modelTypes = new Set();
 
-      modelsToProcess.forEach(model => {
-        if (model.baseModel && typeof model.baseModel === 'string' && model.baseModel.trim() !== '') {
-          baseModels.add(model.baseModel.trim());
+      modelObjsToProcess.forEach(modelObj => {
+        // Extract from modelObj's top-level properties (modelBaseInfo part)
+        if (modelObj.baseModel && typeof modelObj.baseModel === 'string' && modelObj.baseModel.trim() !== '') {
+          baseModels.add(modelObj.baseModel.trim());
         }
-        if (model.modelType && typeof model.modelType === 'string' && model.modelType.trim() !== '') {
-          // Convert to uppercase and add to Set for unique, uppercase model types.
-          modelTypes.add(model.modelType.trim().toUpperCase());
+        if (modelObj.modelType && typeof modelObj.modelType === 'string' && modelObj.modelType.trim() !== '') {
+          modelTypes.add(modelObj.modelType.trim().toUpperCase());
         }
       });
       
       const sortedBaseModels = Array.from(baseModels).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
       const sortedModelTypes = Array.from(modelTypes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
 
-
-      log.info(`[ModelService getAvailableFilterOptions] Options found - BaseModels: ${sortedBaseModels.length}, ModelTypes: ${sortedModelTypes.length}`);
-      return {
+      const options = {
         baseModels: sortedBaseModels,
         modelTypes: sortedModelTypes,
       };
+      
+      // Update cache with newly generated options for this sourceId
+      // This ensures that if listModels (which also updates cache) hasn't run for root yet,
+      // we still populate the cache here.
+      this.filterOptionsCache.set(sourceId, options);
+      log.info(`[ModelService getAvailableFilterOptions] Options generated and cached for source ${sourceId} - BaseModels: ${sortedBaseModels.length}, ModelTypes: ${sortedModelTypes.length}`);
+      return options;
     } catch (error) {
       log.error('[ModelService] Error in getAvailableFilterOptions:', error.message, error.stack);
-      // Return empty options on error to prevent UI breakage
       return { baseModels: [], modelTypes: [] };
     }
   }

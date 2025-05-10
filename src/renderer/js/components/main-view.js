@@ -104,33 +104,35 @@ function handleModelClick(event) {
     const clickedCardElement = event.target.closest('.model-card');
     const rowElement = event.target.closest('.list-item-row, .virtual-scroll-row');
 
-    let modelFileStr = null;
+    let modelIdentifierStr = null;
 
-    if (clickedCardElement && clickedCardElement.dataset.modelFile) {
-        // Prefer modelFile from the card itself (for card view and list view's inner card)
-        modelFileStr = clickedCardElement.dataset.modelFile;
-    } else if (rowElement && rowElement.dataset.modelFile) {
-        // Fallback to row's dataset (primarily for list view clicks on the row but outside the card)
-        modelFileStr = rowElement.dataset.modelFile;
+    if (clickedCardElement && clickedCardElement.dataset.modelIdentifier) {
+        modelIdentifierStr = clickedCardElement.dataset.modelIdentifier;
+    } else if (rowElement && rowElement.dataset.modelIdentifier) {
+        modelIdentifierStr = rowElement.dataset.modelIdentifier;
     }
 
-    if (modelFileStr) {
+    if (modelIdentifierStr) {
         try {
-            const modelFile = JSON.parse(modelFileStr);
-            const model = models.find(m => JSON.stringify(m.file) === JSON.stringify(modelFile));
+            const modelIdentifier = JSON.parse(modelIdentifierStr); // { file, jsonPath, sourceId }
+            const model = models.find(m =>
+                m.file === modelIdentifier.file &&
+                m.jsonPath === modelIdentifier.jsonPath &&
+                m.sourceId === modelIdentifier.sourceId
+            );
             if (model && _showDetail) {
                 logMessage('info', `[UI] Clicked model: ${model.name}`);
                 const isReadOnly = currentSourceConfig?.readOnly === true;
-                _showDetail(model, currentSourceId, isReadOnly);
+                // Pass the full modelObj, its sourceId (already part of modelObj but explicit for clarity), and readOnly status
+                _showDetail(model, model.sourceId, isReadOnly);
             } else {
-                logMessage('warn', '[MainView] Clicked model not found in state or _showDetail missing for file:', modelFileStr);
+                logMessage('warn', '[MainView] Clicked model not found in state or _showDetail missing for identifier:', modelIdentifierStr);
             }
         } catch (e) {
-            logMessage('error', '[MainView] Error parsing modelFile from dataset:', e, modelFileStr);
+            logMessage('error', '[MainView] Error parsing modelIdentifier from dataset:', e, modelIdentifierStr);
         }
     } else if (rowElement || clickedCardElement) {
-        // Log if a clickable-looking element was found but no modelFile data
-        logMessage('warn', '[MainView] Click detected on a row or card, but no modelFile data found.', {
+        logMessage('warn', '[MainView] Click detected on a row or card, but no modelIdentifier data found.', {
             clickedCardDataset: clickedCardElement?.dataset,
             rowElementDataset: rowElement?.dataset
         });
@@ -268,7 +270,12 @@ function _renderVirtualListItem(model) {
     const listItemRow = document.createElement('div');
     listItemRow.className = 'list-item-row'; // Class for the virtual scroll item row
     // Set dataset on the row for click handling delegation
-    listItemRow.dataset.modelFile = JSON.stringify(model.file);
+    // Store { file, jsonPath, sourceId } as the identifier
+    listItemRow.dataset.modelIdentifier = JSON.stringify({
+        file: model.file,
+        jsonPath: model.jsonPath,
+        sourceId: model.sourceId
+    });
 
     // 2. Render the original card structure using the existing function
     //    _renderSingleModelElement returns an <li> element with class 'model-card'
@@ -381,25 +388,32 @@ export async function renderSources() {
 
 const MAX_VISIBLE_TAGS = 6; // Keep consistent or define separately for list/card if needed
 
-function _renderSingleModelElement(model) { // Renders the core card structure, used by both views now
+function _renderSingleModelElement(modelObj) { // Renders the core card structure, used by both views now
     const card = document.createElement('li'); // Use LI as it was likely styled as such
     card.className = 'model-card'; // Keep the original class for styling
     // Set dataset here for both card view and list view's inner card element
-    card.dataset.modelFile = JSON.stringify(model.file);
+    // Store { file, jsonPath, sourceId } as the identifier
+    card.dataset.modelIdentifier = JSON.stringify({
+        file: modelObj.file,
+        jsonPath: modelObj.jsonPath,
+        sourceId: modelObj.sourceId
+    });
 
     const fragment = document.createDocumentFragment();
 
     // --- Image ---
     const imageContainer = document.createElement('div');
-    // Use specific class if list view image container needs different styles than card view's .custom-img-container
-    imageContainer.className = 'model-card-image-container'; // Example: use a more generic name or specific one
+    imageContainer.className = 'model-card-image-container';
     let imageElement;
-    if (model.image) {
+    if (modelObj.image) {
         imageElement = document.createElement('img');
-        imageElement.className = 'model-image'; // Shared class for image itself
-        imageElement.setAttribute('data-image-path', model.image);
-        imageElement.setAttribute('data-source-id', currentSourceId);
-        imageElement.alt = model.name || t('modelImageAlt');
+        imageElement.className = 'model-image';
+        imageElement.setAttribute('data-image-path', modelObj.image);
+        // currentSourceId is still relevant for loadImage if image path is relative to source
+        // but modelObj.sourceId should be the definitive source for this model's image.
+        // Assuming loadImage can handle absolute paths or uses modelObj.sourceId if provided.
+        imageElement.setAttribute('data-source-id', modelObj.sourceId);
+        imageElement.alt = modelObj.name || t('modelImageAlt');
         imageElement.loading = 'lazy';
         imageObserver.observe(imageElement);
     } else {
@@ -408,47 +422,54 @@ function _renderSingleModelElement(model) { // Renders the core card structure, 
         imageElement.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect><circle cx="8.5" cy="8.5" r="1.5"></circle><polyline points="21 15 16 10 5 21"></polyline></svg>`;
     }
     imageContainer.appendChild(imageElement);
-    // Overlay logic might differ between views, handle in CSS or conditionally here if needed
-    if (displayMode === 'card' && model.baseModel) { // Example: Only show overlay in card view
+    if (displayMode === 'card' && modelObj.baseModel) {
         let overlay = document.createElement('span');
         overlay.className = 'custom-img-overlay';
-        overlay.textContent = model.baseModel;
+        overlay.textContent = modelObj.baseModel;
         imageContainer.appendChild(overlay);
     }
     fragment.appendChild(imageContainer);
 
     // --- Info ---
     const contentDiv = document.createElement('div');
-    contentDiv.className = 'model-info'; // Shared class for info section
+    contentDiv.className = 'model-info';
     const nameH3 = document.createElement('h3');
-    nameH3.className = 'model-name'; // Shared class
-    nameH3.textContent = model.name;
+    nameH3.className = 'model-name';
+    nameH3.textContent = modelObj.name;
     const typeSpan = document.createElement('span');
-    typeSpan.className = 'model-type'; // Shared class
-    typeSpan.textContent = model.modelType ? model.modelType.toUpperCase() : t('uncategorized').toUpperCase();
+    typeSpan.className = 'model-type';
+    typeSpan.textContent = modelObj.modelType ? modelObj.modelType.toUpperCase() : t('uncategorized').toUpperCase();
     contentDiv.appendChild(nameH3);
     contentDiv.appendChild(typeSpan);
-    // Add description conditionally for list view if needed
-    // if (displayMode === 'list' && model.description) { ... }
+
+    // Description (conditionally for list view, or if design changes)
+    if (displayMode === 'list' && modelObj.modelJsonInfo && modelObj.modelJsonInfo.description) {
+        const descriptionP = document.createElement('p');
+        descriptionP.className = 'model-description-list-view'; // Specific class for styling
+        descriptionP.textContent = modelObj.modelJsonInfo.description.substring(0, 100) + (modelObj.modelJsonInfo.description.length > 100 ? '...' : ''); // Example: truncate
+        contentDiv.appendChild(descriptionP);
+    }
     fragment.appendChild(contentDiv);
+
 
     // --- Tags ---
     const tagsContainer = document.createElement('div');
-    tagsContainer.className = 'tags-container'; // Shared class for tags section
-    if (model.tags && model.tags.length > 0) {
+    tagsContainer.className = 'tags-container';
+    const tags = modelObj.modelJsonInfo && modelObj.modelJsonInfo.tags ? modelObj.modelJsonInfo.tags : [];
+    if (tags.length > 0) {
         const isCardView = displayMode === 'card';
-        const maxTagsToShow = isCardView ? MAX_VISIBLE_TAGS : Infinity; // Show all tags in list view
+        const maxTagsToShow = isCardView ? MAX_VISIBLE_TAGS : Infinity;
 
-        model.tags.forEach((tagText, index) => {
+        tags.forEach((tagText, index) => {
             if (index < maxTagsToShow) {
                 const tagElementVisible = document.createElement('span');
-                tagElementVisible.className = 'tag'; // Shared tag class
+                tagElementVisible.className = 'tag';
                 tagElementVisible.textContent = tagText;
                 tagsContainer.appendChild(tagElementVisible);
             }
         });
 
-        if (isCardView && model.tags.length > maxTagsToShow) {
+        if (isCardView && tags.length > maxTagsToShow) {
             const ellipsis = document.createElement('span');
             ellipsis.className = 'tag tag-ellipsis';
             ellipsis.textContent = '...';
@@ -515,21 +536,35 @@ function renderModels() {
 }
 
 
-export function updateSingleModelCard(updatedModelData) { // Renamed for clarity, now generic
-    if (!updatedModelData || !updatedModelData.file) return;
-    logMessage('info', `[MainView] Updating single model item: ${updatedModelData.name}`);
+export function updateSingleModelCard(updatedModelObj) {
+    if (!updatedModelObj || !updatedModelObj.file || !updatedModelObj.jsonPath || !updatedModelObj.sourceId) {
+        logMessage('warn', '[MainView] updateSingleModelCard called with incomplete model identifier.', updatedModelObj);
+        return;
+    }
+    logMessage('info', `[MainView] Updating single model item: ${updatedModelObj.name}`);
 
-    const modelIndex = models.findIndex(m => JSON.stringify(m.file) === JSON.stringify(updatedModelData.file));
+    const modelIndex = models.findIndex(m =>
+        m.file === updatedModelObj.file &&
+        m.jsonPath === updatedModelObj.jsonPath &&
+        m.sourceId === updatedModelObj.sourceId
+    );
+
     if (modelIndex !== -1) {
-        models[modelIndex] = { ...models[modelIndex], ...updatedModelData };
+        // Ensure not to mutate original modelJsonInfo if it's part of updatedModelObj
+        // Create a new object for the updated model to maintain immutability if needed elsewhere
+        const newModelData = { ...models[modelIndex], ...updatedModelObj };
+        if (updatedModelObj.modelJsonInfo) { // If modelJsonInfo is being updated
+            newModelData.modelJsonInfo = { ...(models[modelIndex].modelJsonInfo || {}), ...updatedModelObj.modelJsonInfo };
+        }
+        models[modelIndex] = newModelData;
+
         if (virtualScrollInstance) {
-            // Re-transform data and update virtual scroll
             const newItemsData = _transformModelsToVirtualScrollItems();
             virtualScrollInstance.updateItems(newItemsData);
             virtualScrollInstance.refresh();
         }
     } else {
-        logMessage('warn', `[MainView] Updated model ${updatedModelData.file} not in current models array.`);
+        logMessage('warn', `[MainView] Updated model (file: ${updatedModelObj.file}, json: ${updatedModelObj.jsonPath}, source: ${updatedModelObj.sourceId}) not in current models array.`);
     }
 }
 
@@ -632,22 +667,26 @@ function handleModelListMouseOverForTagsTooltip(event) {
     if (displayMode !== 'card' || !globalTagsTooltip) return; // Tooltip only for card view for now
     const tagsContainer = event.target.closest('.tags-container');
     if (!tagsContainer) return;
-    // Find the parent card element from the tags container
     const cardElement = tagsContainer.closest('.model-card');
-    if (!cardElement || !cardElement.dataset.modelFile) { // Check if cardElement itself has the data
-        // logMessage('debug', '[MainView Tooltip] Mouseover tags, but parent card or modelFile data missing.');
+    if (!cardElement || !cardElement.dataset.modelIdentifier) {
         return;
     }
 
-    const modelFileStr = cardElement.dataset.modelFile; // Get modelFile directly from the card
+    const modelIdentifierStr = cardElement.dataset.modelIdentifier;
 
     try {
-        const modelFile = JSON.parse(modelFileStr);
-        const model = models.find(m => JSON.stringify(m.file) === JSON.stringify(modelFile));
+        const modelIdentifier = JSON.parse(modelIdentifierStr);
+        const modelObj = models.find(m =>
+            m.file === modelIdentifier.file &&
+            m.jsonPath === modelIdentifier.jsonPath &&
+            m.sourceId === modelIdentifier.sourceId
+        );
 
-        if (model && model.tags && model.tags.length > MAX_VISIBLE_TAGS) {
+        const tags = modelObj && modelObj.modelJsonInfo && modelObj.modelJsonInfo.tags ? modelObj.modelJsonInfo.tags : [];
+
+        if (tags.length > MAX_VISIBLE_TAGS) {
             clearChildren(globalTagsTooltip);
-            model.tags.forEach(tagText => {
+            tags.forEach(tagText => {
                 const tagElementFull = document.createElement('span');
                 tagElementFull.className = 'tag';
                 tagElementFull.textContent = tagText;
@@ -667,7 +706,7 @@ function handleModelListMouseOverForTagsTooltip(event) {
             globalTagsTooltip.classList.add('tooltip-active');
         }
     } catch (e) {
-        logMessage('error', '[MainView] Error for tags tooltip:', e);
+        logMessage('error', '[MainView] Error for tags tooltip:', e, modelIdentifierStr);
     }
 }
 

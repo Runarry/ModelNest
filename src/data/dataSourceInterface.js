@@ -179,7 +179,7 @@ async function listModels(sourceConfig, directory = null, supportedExts = []) { 
         // 获取数据源实例
         const ds = getDataSourceInstance(sourceConfig);
         // 调用标准接口方法
-        const models = await ds.listModels(directory, supportedExts);
+        const models = await ds.listModels(directory, sourceConfig, supportedExts);
         const duration = Date.now() - startTime;
         log.info(`[DataSourceInterface] Successfully listed models for sourceId: ${sourceId}, directory: ${directory}. Found ${models.length} models. 耗时: ${duration}ms`);
         return models;

@@ -9,15 +9,15 @@ let detailName;
 let detailImage;
 let detailDescriptionContainer; // The element where description/tabs/inputs are rendered
 // References to pre-defined input elements in detailModel
-let modelTypeInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput, modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP;
+let modelTypeInput, modelBaseModelInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput, modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP; // Added modelBaseModelInput
 let detailSaveBtn, detailFeedbackEl, detailReadOnlyIndicatorEl;
 
 let detailCloseBtn;
 
 // ===== Module State =====
-let currentModel = null; // Store the model currently being displayed/edited
+let currentModel = null; // Store the model object (modelObj) currently being displayed/edited
 let currentSourceId = null; // Store the sourceId needed for image loading/saving
-let currentIsReadOnly = false; // 新增：存储当前模型的只读状态
+let currentIsReadOnly = false; // Stores the read-only status of the current model's source
 
 // ===== Initialization =====
 
@@ -34,12 +34,11 @@ export function initDetailModel(config) {
     detailModel = document.getElementById(config.ModelId);
     detailName = document.getElementById(config.nameId);
     detailImage = document.getElementById(config.imageId);
-    detailDescriptionContainer = document.getElementById(config.descriptionContainerId); // This is the main container for tabs and content
+    detailDescriptionContainer = document.getElementById(config.descriptionContainerId);
     detailCloseBtn = document.getElementById(config.closeBtnId);
 
-    // Get references to specific pre-defined elements within the detailModel
-    // These IDs are now defined in index.html for the static skeleton
     modelTypeInput = detailModel.querySelector('#detail-model-type');
+    modelBaseModelInput = detailModel.querySelector('#detail-model-base-model'); // Added for base model
     modelFileInput = detailModel.querySelector('#detail-model-file');
     modelJsonPathInput = detailModel.querySelector('#detail-model-jsonPath');
     modelTriggerInput = detailModel.querySelector('#detail-model-trigger');
@@ -48,48 +47,42 @@ export function initDetailModel(config) {
     extraInfoGroupContainer = detailModel.querySelector('#detail-model-extra-info-group');
     noExtraInfoP = detailModel.querySelector('#detail-model-no-extra-info');
     
-    detailSaveBtn = detailModel.querySelector('#detailSaveBtn'); // Corrected ID from HTML
-    detailFeedbackEl = detailModel.querySelector('#detailModelFeedback'); // Corrected ID from HTML
-    detailReadOnlyIndicatorEl = detailModel.querySelector('#detailReadOnlyIndicator'); // Corrected ID from HTML
+    detailSaveBtn = detailModel.querySelector('#detailSaveBtn');
+    detailFeedbackEl = detailModel.querySelector('#detailModelFeedback');
+    detailReadOnlyIndicatorEl = detailModel.querySelector('#detailReadOnlyIndicator');
+
+    const requiredElements = {
+        detailModel, detailName, detailImage, detailDescriptionContainer, detailCloseBtn,
+        modelTypeInput, modelFileInput, modelJsonPathInput, modelTriggerInput, modelTagsInput,
+        modelDescriptionTextarea, extraInfoGroupContainer, noExtraInfoP, detailSaveBtn,
+        detailFeedbackEl, detailReadOnlyIndicatorEl
+        // modelBaseModelInput is optional, will be handled if null
+    };
+
+    let allEssentialFound = true;
+    for (const key in requiredElements) {
+        if (!requiredElements[key] && key !== 'modelBaseModelInput') { // modelBaseModelInput is not strictly essential for basic operation
+            allEssentialFound = false;
+            logMessage('error', `[DetailModel] 初始化失败：必需的 DOM 元素 '${key}' 未找到。`);
+        }
+    }
+    if (!modelBaseModelInput) {
+        logMessage('warn', "[DetailModel] 初始化警告：基础模型输入框 #detail-model-base-model 未找到。该字段将作为动态“其他信息”处理。");
+    }
 
 
-    if (!detailModel || !detailName || !detailImage || !detailDescriptionContainer || !detailCloseBtn ||
-        !modelTypeInput || !modelFileInput || !modelJsonPathInput || !modelTriggerInput || !modelTagsInput ||
-        !modelDescriptionTextarea || !extraInfoGroupContainer || !noExtraInfoP || !detailSaveBtn || !detailFeedbackEl || !detailReadOnlyIndicatorEl
-    ) {
-        // Task 1: Error Logging
-        logMessage('error', "[DetailModel] 初始化失败：一个或多个必需的 DOM 元素未找到。请检查配置和 HTML 中的 ID:", {
-            config,
-            detailModelExists: !!detailModel,
-            detailNameExists: !!detailName,
-            detailImageExists: !!detailImage,
-            detailDescriptionContainerExists: !!detailDescriptionContainer,
-            detailCloseBtnExists: !!detailCloseBtn,
-            modelTypeInputExists: !!modelTypeInput,
-            modelFileInputExists: !!modelFileInput,
-            modelJsonPathInputExists: !!modelJsonPathInput,
-            modelTriggerInputExists: !!modelTriggerInput,
-            modelTagsInputExists: !!modelTagsInput,
-            modelDescriptionTextareaExists: !!modelDescriptionTextarea,
-            extraInfoGroupContainerExists: !!extraInfoGroupContainer,
-            noExtraInfoPExists: !!noExtraInfoP,
-            detailSaveBtnExists: !!detailSaveBtn,
-            detailFeedbackElExists: !!detailFeedbackEl,
-            detailReadOnlyIndicatorElExists: !!detailReadOnlyIndicatorEl
-        });
+    if (!allEssentialFound) {
+        logMessage('error', "[DetailModel] 由于一个或多个必需的 DOM 元素未找到，初始化中止。请检查配置和 HTML 中的 ID。");
         return;
     }
 
-    // Task 4: Click Event Logging
     detailCloseBtn.addEventListener('click', () => {
         logMessage('info', '[UI] 点击了详情弹窗的关闭按钮');
         hideDetailModel();
     });
 
-    // Close Model if clicking on the backdrop
     detailModel.addEventListener('click', (event) => {
         if (event.target === detailModel) {
-            // Task 4: Click Event Logging
             logMessage('info', '[UI] 点击了详情弹窗的背景遮罩');
             hideDetailModel();
         }
@@ -99,76 +92,155 @@ export function initDetailModel(config) {
 // ===== Core Functions =====
 
 /**
- * Shows the detail Model with information for the given model.
- * @param {object} model - The model object to display.
+ * Shows the detail Modal with information for the given model object.
+ * @param {object} modelObj - The model object (new structure) to display.
  * @param {string} sourceId - The ID of the source the model belongs to.
  * @param {boolean} isReadOnly - Whether the source is read-only.
  */
-export async function showDetailModel(model, sourceId, isReadOnly) {
+export async function show(modelObj, sourceId, isReadOnly) { // Renamed from showDetailModel
     const startTime = Date.now();
-    logMessage('info', `[DetailModel] 开始显示模型详情: ${model?.name} (Source: ${sourceId})`);
+    logMessage('info', `[DetailModel] 开始显示模型详情: ${modelObj?.name} (Source: ${sourceId})`);
     if (!detailModel) {
-        logMessage('error', "[DetailModel] showDetailModel 失败：弹窗元素未初始化");
+        logMessage('error', "[DetailModel] show 失败：弹窗元素未初始化");
         return;
     }
-     if (!model) {
-        logMessage('error', "[DetailModel] showDetailModel 失败：传入的 model 为空");
+    if (!modelObj) {
+        logMessage('error', "[DetailModel] show 失败：传入的 modelObj 为空");
         return;
     }
 
+    currentModel = modelObj; // Store the full modelObj
+    currentSourceId = sourceId;
+    currentIsReadOnly = isReadOnly === true;
+    logMessage('debug', `[DetailModel] Setting read-only status to: ${currentIsReadOnly}`);
 
-    currentModel = model; // Store the model
-    currentSourceId = sourceId; // Store the source ID
-    currentIsReadOnly = isReadOnly === true; // Store the read-only status, ensure boolean
-    logMessage('info', `[DetailModel] Setting read-only status to: ${currentIsReadOnly}`);
-    
-    detailName.textContent = model.name || '';
+    clearModelInputs(); // Clear previous inputs before populating
 
-    // --- Load Image ---
-    detailImage.src = ''; // Clear previous image
-    // Keep image hidden initially, its display will be controlled by tab logic
+    // --- 基础信息 (通常不可编辑或从 modelBaseInfo 获取) ---
+    detailName.textContent = modelObj.name || '';
+    if (modelFileInput) modelFileInput.textContent = modelObj.file || t('notAvailable');
+    if (modelJsonPathInput) modelJsonPathInput.textContent = modelObj.jsonPath || t('notAvailable');
+
+    // --- 预览图 ---
+    detailImage.src = '';
     detailImage.style.display = 'none';
-    if (model.image) {
-        // Use ui-utils loadImage, passing the img element and necessary data
-        detailImage.setAttribute('data-image-path', model.image);
+    if (modelObj.image) {
+        detailImage.setAttribute('data-image-path', modelObj.image);
         detailImage.setAttribute('data-source-id', sourceId);
-        detailImage.alt = model.name || t('modelImageAlt');
-        await loadImage(detailImage); // loadImage should handle setting src and display
-        // We might need loadImage to return a promise that resolves when the image is set or fails
-        // For simplicity, we assume loadImage sets display style or handles errors internally.
-        // If loadImage doesn't handle display, uncomment the line below after await.
-        // if (detailImage.src && detailImage.src !== window.location.href) detailImage.style.display = 'block';
-         if (detailImage.complete && detailImage.naturalHeight !== 0 && detailImage.style.display !== 'block') {
-             // If loadImage finished synchronously and successfully (e.g., cached), ensure it's visible
-             detailImage.style.display = 'block';
-         } else if (!detailImage.src || detailImage.src === window.location.href) {
-             // Ensure it's hidden if loadImage failed or didn't set src
-             detailImage.style.display = 'none';
-         }
-         // Add onload listener to ensure display is set correctly after async loading
-         detailImage.onload = () => {
-             logMessage('debug', `[DetailModel] 图片加载成功: ${model.image}`);
-             detailImage.style.display = 'block';
-         };
-         detailImage.onerror = () => {
-             // Task 1: Error Logging
-             logMessage('warn', `[DetailModel] 图片初始加载尝试失败 (可能稍后成功): ${model.image} (Source: ${sourceId})`);
-             detailImage.style.display = 'none';
-         };
+        detailImage.alt = modelObj.name || t('modelImageAlt');
+        await loadImage(detailImage);
+        if (detailImage.complete && detailImage.naturalHeight !== 0 && detailImage.style.display !== 'block') {
+            detailImage.style.display = 'block';
+        } else if (!detailImage.src || detailImage.src === window.location.href) {
+            detailImage.style.display = 'none';
+        }
+        detailImage.onload = () => {
+            logMessage('debug', `[DetailModel] 图片加载成功: ${modelObj.image}`);
+            detailImage.style.display = 'block';
+        };
+        detailImage.onerror = () => {
+            logMessage('warn', `[DetailModel] 图片加载失败: ${modelObj.image} (Source: ${sourceId})`);
+            detailImage.style.display = 'none';
+        };
+    } else {
+        logMessage('info', `[DetailModel] 模型 ${modelObj.name} 没有图片`);
+    }
 
+    const modelJson = modelObj.modelJsonInfo || {};
 
-   } else {
-       logMessage('info', `[DetailModel] 模型 ${model.name} 没有图片`);
-   }
+    // --- 可编辑的核心元数据 (来自 modelJsonInfo) ---
+    if (modelTypeInput) modelTypeInput.value = modelJson.modelType || '';
+    if (modelBaseModelInput) { // If dedicated input exists
+        modelBaseModelInput.value = modelJson.baseModel || modelJson.basic || '';
+    }
+    if (modelTriggerInput) modelTriggerInput.value = modelJson.triggerWord || '';
+    if (modelTagsInput) modelTagsInput.value = (modelJson.tags || []).join(', ');
 
-   // --- Render Dynamic Content (Tabs, Inputs) ---
-   logMessage('debug', '[DetailModel] 开始渲染弹窗内容');
-   renderModelContent(model);
-   logMessage('debug', '[DetailModel] 弹窗内容渲染完成');
+    // --- 详情描述 (来自 modelJsonInfo) ---
+    if (modelDescriptionTextarea) {
+        modelDescriptionTextarea.value = modelJson.description || '';
+    }
 
-   detailModel.classList.add('active');
-   const duration = Date.now() - startTime;
-   logMessage('info', `[DetailModel] 显示模型详情完成: ${model.name}, 耗时: ${duration}ms`);
+    // --- 其他信息 (动态字段，来自 modelJsonInfo) ---
+    if (extraInfoGroupContainer && noExtraInfoP) {
+        extraInfoGroupContainer.innerHTML = ''; // Clear previous extra fields
+        const processedKeys = new Set([
+            'modelType', 'baseModel', 'basic', 'triggerWord', 'tags', 'description',
+            'name', 'image', // These are typically not in modelJsonInfo or handled by other parts
+            '_id', '_rev', // Internal fields from some DBs, should not be user-editable here
+            // modelObj top-level keys like 'file', 'jsonPath', 'sourceId' are not in modelJsonInfo
+        ]);
+
+        // If modelBaseModelInput doesn't exist, 'baseModel' and 'basic' should not be in processedKeys
+        // so they can be rendered dynamically if present in modelJson.
+        if (!modelBaseModelInput) {
+            processedKeys.delete('baseModel');
+            processedKeys.delete('basic');
+        }
+
+        const dynamicEntries = Object.entries(modelJson).filter(([key]) => !processedKeys.has(key));
+
+        if (dynamicEntries.length > 0) {
+            renderExtraFieldsContainer(dynamicEntries, extraInfoGroupContainer);
+            noExtraInfoP.style.display = 'none';
+        } else {
+            noExtraInfoP.textContent = t('detail.noExtraInfo');
+            noExtraInfoP.style.display = 'block';
+        }
+    } else {
+        logMessage('warn', "[DetailModel] Extra info container or noExtraInfoP element not found.");
+    }
+    
+    // --- UI 更新和事件监听器 ---
+    detailModel.classList.add('active');
+    
+    setTimeout(() => {
+        const imageTabPane = detailModel.querySelector('#image-tab .image-container');
+        if (imageTabPane && detailImage) {
+            if (!imageTabPane.contains(detailImage)) {
+                imageTabPane.appendChild(detailImage);
+            }
+            const imageTabButton = detailModel.querySelector('.tab-btn[data-tab="image"]');
+            if (detailImage.src && detailImage.src !== window.location.href && imageTabButton && imageTabButton.classList.contains('active')) {
+                detailImage.style.display = 'block';
+            } else if (!detailImage.src || detailImage.src === window.location.href) {
+                 detailImage.style.display = 'none';
+            }
+        }
+
+        attachTabListeners();
+        attachSaveListener(); // Ensure save listener is correctly configured for the new model data
+        applyReadOnlyState(); // Apply read-only state based on currentIsReadOnly
+
+        if (modelDescriptionTextarea) {
+            function autoResize() {
+                modelDescriptionTextarea.style.height = 'auto';
+                modelDescriptionTextarea.style.height = (modelDescriptionTextarea.scrollHeight + 10) + 'px';
+            }
+            requestAnimationFrame(autoResize); // Initial resize
+            modelDescriptionTextarea.removeEventListener('input', autoResize); // Remove previous if any
+            modelDescriptionTextarea.addEventListener('input', autoResize);
+            modelDescriptionTextarea.style.resize = 'none';
+            modelDescriptionTextarea.style.overflowY = 'hidden';
+        }
+
+        // Ensure the first tab (image) is active and its content visible
+        const firstTabButton = detailModel.querySelector('.tab-btn[data-tab="image"]');
+        const firstTabContent = detailModel.querySelector('#image-tab');
+        if (firstTabButton && firstTabContent) {
+            detailModel.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            detailModel.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            firstTabButton.classList.add('active');
+            firstTabContent.classList.add('active');
+            if (detailImage.src && detailImage.src !== window.location.href) {
+                 detailImage.style.display = 'block';
+            } else {
+                 detailImage.style.display = 'none';
+            }
+        }
+        const duration = Date.now() - startTime;
+        logMessage('info', `[DetailModel] 显示模型详情完成: ${modelObj.name}, 耗时: ${duration}ms`);
+    }, 0);
 }
 
 /** Hides the detail Model. */
@@ -245,22 +317,20 @@ export function hideDetailModel() {
  */
 function clearModelInputs() {
     if (modelTypeInput) modelTypeInput.value = '';
-    if (modelFileInput) modelFileInput.textContent = '';
-    if (modelJsonPathInput) modelJsonPathInput.textContent = '';
+    if (modelBaseModelInput) modelBaseModelInput.value = ''; // Clear base model input
+    if (modelFileInput) modelFileInput.textContent = ''; // Use textContent for display elements
+    if (modelJsonPathInput) modelJsonPathInput.textContent = ''; // Use textContent for display elements
     if (modelTriggerInput) modelTriggerInput.value = '';
     if (modelTagsInput) modelTagsInput.value = '';
     if (modelDescriptionTextarea) modelDescriptionTextarea.value = '';
     if (extraInfoGroupContainer) extraInfoGroupContainer.innerHTML = ''; // Clear dynamically added extra fields
-    if (noExtraInfoP) noExtraInfoP.style.display = 'none';
-    if (detailFeedbackEl) detailFeedbackEl.textContent = '';
+    if (noExtraInfoP) noExtraInfoP.style.display = 'none'; // Hide 'no extra info' message
+    if (detailFeedbackEl) detailFeedbackEl.textContent = ''; // Clear feedback message
 
     // Reset image
     if (detailImage) {
-        const imageTabContainer = detailModel.querySelector('#image-tab .image-container');
-        if (imageTabContainer && imageTabContainer.contains(detailImage)) {
-            // Only remove if it's currently in the image tab
-            // It might have already been removed or not added yet if no image
-        }
+        // The image is moved into a tab, so direct removal from a fixed parent might not be needed.
+        // Clearing src and hiding is generally sufficient.
         detailImage.src = '';
         detailImage.style.display = 'none';
         detailImage.removeAttribute('data-image-path');
@@ -269,117 +339,7 @@ function clearModelInputs() {
     }
 }
 
-
-/**
- * Populates the pre-defined DOM elements with model data.
- * @param {object} model - The model data.
- */
-function renderModelContent(model) {
-    if (!detailModel) { // Check if the main modal element is available
-        logMessage('error', "[DetailModel] renderModelContent called but detailModel is not initialized.");
-        return;
-    }
-
-    // --- Populate Basic Info Tab ---
-    if (modelTypeInput) modelTypeInput.value = model.modelType || '';
-    if (modelFileInput) modelFileInput.textContent = model.file || t('notAvailable');
-    if (modelJsonPathInput) modelJsonPathInput.textContent = model.jsonPath || t('notAvailable');
-    if (modelTriggerInput) modelTriggerInput.value = model.triggerWord || '';
-    if (modelTagsInput) modelTagsInput.value = (model.tags || []).join(', ');
-
-    // --- Populate Description Tab ---
-    if (modelDescriptionTextarea) {
-        modelDescriptionTextarea.value = model.description || '';
-    }
-
-    // --- Populate Extra Info Tab ---
-    if (extraInfoGroupContainer && noExtraInfoP) {
-        extraInfoGroupContainer.innerHTML = ''; // Clear previous extra fields
-        const extraEntries = Object.entries(model.extra || {});
-        const filteredExtraEntries = extraEntries.filter(([key]) =>
-            !['name', 'type', 'modelType', 'description', 'triggerWord', 'image', 'file', 'jsonPath', 'tags', 'id', 'sourceId'].includes(key)
-        );
-
-        if (filteredExtraEntries.length > 0) {
-            renderExtraFieldsContainer(filteredExtraEntries, extraInfoGroupContainer);
-            noExtraInfoP.style.display = 'none';
-        } else {
-            noExtraInfoP.textContent = t('detail.noExtraInfo');
-            noExtraInfoP.style.display = 'block';
-        }
-    } else {
-        logMessage('warn', "[DetailModel] Extra info container or noExtraInfoP element not found.");
-    }
-
-
-    // Use setTimeout to ensure elements are in the DOM and populated before further actions
-    setTimeout(() => {
-        // Move the existing detailImage element into the image tab's container
-        const imageTabPane = detailModel.querySelector('#image-tab .image-container');
-        if (imageTabPane && detailImage) {
-            if (!imageTabPane.contains(detailImage)) { // Append only if not already there
-                imageTabPane.appendChild(detailImage);
-            }
-            // Visibility is controlled by tab logic and image loading success
-            // Ensure it's visible if the image tab is active and image is loaded
-            const imageTabButton = detailModel.querySelector('.tab-btn[data-tab="image"]');
-            if (detailImage.src && detailImage.src !== window.location.href && imageTabButton && imageTabButton.classList.contains('active')) {
-                detailImage.style.display = 'block';
-            } else if (!detailImage.src || detailImage.src === window.location.href) {
-                 detailImage.style.display = 'none';
-            }
-        } else {
-            logMessage('warn', '[DetailModel] Could not find image tab container or detailImage element to move.');
-        }
-
-        attachTabListeners();
-        attachSaveListener(); // Ensure save listener is (re)attached or correctly configured
-        applyReadOnlyState();
-
-        // --- Textarea Auto Height ---
-        if (modelDescriptionTextarea) {
-            function autoResize() {
-                modelDescriptionTextarea.style.height = 'auto';
-                modelDescriptionTextarea.style.height = (modelDescriptionTextarea.scrollHeight + 10) + 'px';
-            }
-            requestAnimationFrame(autoResize); // Initial resize
-            modelDescriptionTextarea.removeEventListener('input', autoResize); // Remove previous if any
-            modelDescriptionTextarea.addEventListener('input', autoResize);
-
-            // Adjust on tab switch (ensure this doesn't add multiple listeners over time)
-            // This part of tab listener should be idempotent or managed carefully
-            // For now, we assume attachTabListeners handles tab switching correctly and autoResize is called if description tab becomes active.
-            // Or, better, trigger resize when the description tab becomes active.
-            // The existing tab listener logic in attachTabListeners might need a hook for this,
-            // or we can rely on the description tab itself to trigger resize when it becomes visible.
-            // For simplicity, the input event is the primary trigger.
-
-            modelDescriptionTextarea.style.resize = 'none';
-            modelDescriptionTextarea.style.overflowY = 'hidden';
-            // Read-only state for textarea is handled by applyReadOnlyState
-        } else {
-            logMessage('warn', '[DetailModel] Could not find description textarea #detail-model-description for auto-height.');
-        }
-        // --- End Textarea Auto Height ---
-         // Ensure the first tab (image) is active and its content visible
-        const firstTabButton = detailModel.querySelector('.tab-btn[data-tab="image"]');
-        const firstTabContent = detailModel.querySelector('#image-tab');
-        if (firstTabButton && firstTabContent) {
-            detailModel.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
-            detailModel.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
-            firstTabButton.classList.add('active');
-            firstTabContent.classList.add('active');
-            if (detailImage.src && detailImage.src !== window.location.href) {
-                 detailImage.style.display = 'block';
-            } else {
-                 detailImage.style.display = 'none';
-            }
-        }
-
-
-    }, 0);
-}
-
+// renderModelContent function is removed as its logic is integrated into the new show() function.
 
 /**
  * Renders the container for extra fields.
@@ -490,10 +450,9 @@ function applyReadOnlyState() {
     const isReadOnly = currentIsReadOnly;
     logMessage('debug', `[DetailModel] Applying read-only state: ${isReadOnly}`);
 
-    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, #detail-model-description'); // Use specific ID for textarea
-    // const saveBtn = detailModel.querySelector('#detailSaveBtn'); // Already referenced as detailSaveBtn
-    // const readOnlyIndicator = detailModel.querySelector('#detailReadOnlyIndicator'); // Already referenced as detailReadOnlyIndicatorEl
-
+    const inputs = detailModel.querySelectorAll('.editable-input, .extra-input, #detail-model-description, #detail-model-base-model');
+    // Note: #detail-model-base-model might be null if not found, querySelectorAll handles this gracefully.
+    
     inputs.forEach(input => {
         if (input) input.disabled = isReadOnly;
     });
@@ -511,28 +470,25 @@ function applyReadOnlyState() {
 
 /** Attaches the event listener to the save button. */
 function attachSaveListener() {
-    // const saveBtn = detailModel.querySelector('#detailSaveBtn'); // Already referenced as detailSaveBtn
-    // const feedbackEl = detailModel.querySelector('#detailModelFeedback'); // Already referenced as detailFeedbackEl
-
     if (detailSaveBtn) {
-        // Remove previous listener before adding a new one to prevent multiple executions
+        // Clone and replace to remove old listeners, ensuring a fresh listener for the current state.
         const newSaveBtn = detailSaveBtn.cloneNode(true);
         detailSaveBtn.parentNode.replaceChild(newSaveBtn, detailSaveBtn);
         detailSaveBtn = newSaveBtn; // Update reference
 
         detailSaveBtn.addEventListener('click', async () => {
-            // --- Read-only Check ---
             if (currentIsReadOnly) {
                 logMessage('warn', `[DetailModel] 保存操作被阻止，因为数据源是只读的 (Model: ${currentModel?.name})`);
-                return; // Do not proceed if read-only
+                if (detailFeedbackEl) {
+                    detailFeedbackEl.textContent = t('errors.readOnlyDataSource');
+                    detailFeedbackEl.className = 'Model-feedback feedback-error';
+                }
+                return;
             }
-            // ---
 
-            // Task 4: Click Event Logging
             logMessage('info', `[UI] 点击了详情弹窗的保存按钮 (Model: ${currentModel?.name})`);
 
             if (!currentModel || !currentSourceId) {
-                // Task 1: Error Logging
                 logMessage('error', "[DetailModel] 保存失败：currentModel 或 currentSourceId 丢失");
                 if (detailFeedbackEl) {
                     detailFeedbackEl.textContent = t('detail.saveErrorMissingData');
@@ -543,79 +499,98 @@ function attachSaveListener() {
 
             detailSaveBtn.disabled = true;
             if (detailFeedbackEl) {
-                detailFeedbackEl.textContent = t('detail.saving'); // Indicate saving
-                detailFeedbackEl.className = 'Model-feedback feedback-info'; // Use info class
+                detailFeedbackEl.textContent = t('detail.saving');
+                detailFeedbackEl.className = 'Model-feedback feedback-info';
             }
 
-            // --- Collect Updated Data ---
-            logMessage('debug', '[DetailModel] 开始收集更新后的模型数据');
-            // --- Collect Standard Data ---
-            const standardData = {
-                id: currentModel.id,
-                sourceId: currentSourceId,
-                jsonPath: currentModel.jsonPath, // Preserved from original model
-                name: detailName.textContent, // Name is from the modal title
-                modelType: modelTypeInput?.value || currentModel.modelType,
-                triggerWord: modelTriggerInput?.value || currentModel.triggerWord,
-                description: modelDescriptionTextarea?.value || currentModel.description,
-                tags: (modelTagsInput?.value || '')
+            // --- Collect Updated Data for modelJsonInfo ---
+            logMessage('debug', '[DetailModel] 开始收集更新后的模型JSON数据');
+            
+            // Create a deep copy of the original modelJsonInfo to modify.
+            // This ensures we only update modelJsonInfo and don't alter other parts of currentModel unintentionally yet.
+            const updatedJsonInfo = JSON.parse(JSON.stringify(currentModel.modelJsonInfo || {}));
+
+            // --- Collect Standard Editable Data for modelJsonInfo ---
+            if (modelTypeInput) updatedJsonInfo.modelType = modelTypeInput.value.trim();
+            if (modelBaseModelInput) { // If dedicated input exists
+                updatedJsonInfo.baseModel = modelBaseModelInput.value.trim();
+                // If 'basic' was the original key and it's different from baseModel, decide how to handle.
+                // For now, assume baseModel is the primary key. 'basic' might be an alias.
+                // If 'basic' existed and baseModel is now the source, remove 'basic' if it's not the same.
+                if (currentModel.modelJsonInfo && typeof currentModel.modelJsonInfo.basic !== 'undefined' &&
+                    updatedJsonInfo.baseModel !== currentModel.modelJsonInfo.basic) {
+                    // If 'basic' was just an alias for 'baseModel', and we now use 'baseModel',
+                    // we might want to remove 'basic' to avoid redundancy if they were meant to be the same.
+                    // Or, if they are distinct concepts, keep 'basic' if it's not empty.
+                    // For now, if baseModel is set, it takes precedence.
+                    // If 'basic' was the key used for input, this logic might need adjustment.
+                    // Assuming 'baseModel' is the canonical key now.
+                }
+            }
+            if (modelTriggerInput) updatedJsonInfo.triggerWord = modelTriggerInput.value.trim();
+            if (modelTagsInput) {
+                updatedJsonInfo.tags = (modelTagsInput.value || '')
                     .split(',')
                     .map(tag => tag.trim())
-                    .filter(tag => tag.length > 0),
-                // file and image are not part of the editable form, they are part of model identity
+                    .filter(tag => tag.length > 0);
+            }
+            if (modelDescriptionTextarea) updatedJsonInfo.description = modelDescriptionTextarea.value.trim();
+
+            // --- Collect "Other Information" (Dynamic Fields) for modelJsonInfo ---
+            const dynamicData = collectExtraData(extraInfoGroupContainer); // collectExtraData should return flat key-value pairs for modelJsonInfo
+            for (const key in dynamicData) {
+                if (Object.prototype.hasOwnProperty.call(dynamicData, key)) {
+                    // Ensure not to overwrite already processed core fields if dynamicData somehow contains them
+                    // (though renderExtraFieldsContainer should filter them out)
+                    if (!['modelType', 'baseModel', 'basic', 'triggerWord', 'tags', 'description'].includes(key)) {
+                         updatedJsonInfo[key] = dynamicData[key]; // Assuming dynamicData values are already trimmed if necessary
+                    } else if (key === 'baseModel' && !modelBaseModelInput && dynamicData.baseModel) {
+                        // If baseModel was rendered dynamically because no dedicated input
+                        updatedJsonInfo.baseModel = dynamicData.baseModel.trim();
+                    }
+                }
+            }
+            
+            logMessage('debug', "[DetailModel] 更新后的 modelJsonInfo:", updatedJsonInfo);
+
+            // Construct the model object to be saved. Start with a shallow copy of the currentModel (original modelObj),
+            // then replace its modelJsonInfo property with the updatedJsonInfo.
+            const modelToSave = {
+                ...currentModel, // This includes name, file, jsonPath, image, sourceId (if part of modelObj), and the *old* modelJsonInfo
+                modelJsonInfo: updatedJsonInfo // This overwrites modelJsonInfo with the new data
             };
+            
+            // Ensure essential non-editable fields from modelBaseInfo are preserved.
+            // Spread operator (...) on currentModel should handle this.
+            // modelToSave.name, .file, .jsonPath, .image should be from the original currentModel.
 
-            // --- Collect Extra Data ---
-            // extraInfoGroupContainer is the direct parent of .extra-item elements
-            const extraData = collectExtraData(extraInfoGroupContainer);
-            logMessage('debug', "[DetailModel] 收集到的额外数据:", extraData);
-
-            // --- Combine Data ---
-            // Start with an empty object, spread collected extra data, then standard data.
-            // Standard data comes last to ensure its values overwrite any conflicting keys from extraData.
-            // Also include essential original fields like file paths if they aren't editable here.
-            const updatedModelData = {
-                ...extraData, // Spread extra fields first
-                ...standardData, // Spread standard fields, overwriting any conflicts
-            };
-
-            // Remove the 'extra' container property if it exists from original model spread (no longer needed)
-            // delete updatedModelData.extra; // This is no longer needed as we build from scratch
-
-            logMessage('debug', "[DetailModel] 最终发送的模型数据:", updatedModelData);
+            logMessage('debug', "[DetailModel] 最终发送给 saveModel 的对象:", modelToSave);
 
             // --- Call API ---
             const saveStartTime = Date.now();
-            logMessage('info', `[DetailModel] 调用 API 保存模型: ${updatedModelData.name}`);
+            logMessage('info', `[DetailModel] 调用 API 保存模型: ${modelToSave.name}`);
             try {
-                await saveModel(updatedModelData); // 使用导入的函数
+                await saveModel(modelToSave); // Pass the entire updated modelObj (currentModel with new modelJsonInfo)
                 const saveDuration = Date.now() - saveStartTime;
-                logMessage('info', `[DetailModel] API 保存模型成功: ${updatedModelData.name}, 耗时: ${saveDuration}ms`);
+                logMessage('info', `[DetailModel] API 保存模型成功: ${modelToSave.name}, 耗时: ${saveDuration}ms`);
+                
                 if (detailFeedbackEl) {
                     detailFeedbackEl.textContent = t('detail.saveSuccess');
                     detailFeedbackEl.className = 'Model-feedback feedback-success';
                 }
-                // Optionally close Model after a short delay
+                
                 setTimeout(() => {
-                    // Check if Model is still open before hiding
                     if (detailModel.classList.contains('active')) {
-                         // Prepare data specifically for the event, including the file path
-                         const eventDetail = {
-                             ...updatedModelData,
-                             file: currentModel.file, // Add the original file path back for identification
-                             image: currentModel.image // Add image path back in case card re-render needs it
-                         };
                          hideDetailModel();
-                         // Notify the main view to potentially reload/refresh the specific model card
-                         logMessage('info', `[DetailModel] 触发 model-updated 事件: ${eventDetail.name}`);
-                         window.dispatchEvent(new CustomEvent('model-updated', { detail: eventDetail }));
+                         logMessage('info', `[DetailModel] 触发 model-updated 事件: ${modelToSave.name}`);
+                         // Dispatch event with the fully updated model object (modelToSave)
+                         window.dispatchEvent(new CustomEvent('model-updated', { detail: modelToSave }));
                     }
                 }, 1500);
 
             } catch (e) {
-                 const saveDuration = Date.now() - saveStartTime;
-                // Task 1: Error Logging
-                logMessage('error', `[DetailModel] API 保存模型失败: ${updatedModelData.name}, 耗时: ${saveDuration}ms`, e.message, e.stack, e);
+                const saveDuration = Date.now() - saveStartTime;
+                logMessage('error', `[DetailModel] API 保存模型失败: ${modelToSave.name}, 耗时: ${saveDuration}ms`, e.message, e.stack, e);
                 if (detailFeedbackEl) {
                     if (e.message && (e.message.includes('read-only') || e.message.includes('只读'))) {
                         detailFeedbackEl.textContent = t('errors.readOnlyDataSource');

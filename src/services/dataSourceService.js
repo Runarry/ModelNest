@@ -73,6 +73,7 @@ class DataSourceService {
   async getSupportedExtensions() {
     try {
       const config = await this.#configService.getConfig();
+      log.debug(`[DataSourceService getSupportedExtensions] Value from configService: ${JSON.stringify(config.supportedExtensions)}, Type: ${typeof config.supportedExtensions}`);
       return config.supportedExtensions || [];
     } catch (error) {
       log.error('DataSourceService: Error getting supported extensions:', error);
