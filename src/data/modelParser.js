@@ -70,7 +70,7 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
   const modelFileExt = path.extname(modelFileName).toLowerCase();
   if (!ignorExtSupport) {
     if (!supportedExtensions.includes(modelFileExt)) {
-      log.warn(`[modelParser] 不支持的模型文件扩展名: ${modelFileExt} for file ${modelFullPath}`);
+      log.debug(`[modelParser] 不支持的模型文件扩展名: ${modelFileExt} for file ${modelFullPath}`);
       return null; // 如果扩展名不支持，则返回 null
     }
   }

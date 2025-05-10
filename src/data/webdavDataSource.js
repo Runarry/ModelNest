@@ -108,7 +108,7 @@ class WebDavDataSource extends DataSource {
       log.debug(`[WebDavDataSource][${sourceId}] 在 ${resolvedCurrentPath} 中找到 ${items.length} 个项目`);
 
       if (!Array.isArray(items)) {
-        log.warn(`[WebDavDataSource][${sourceId}] getDirectoryContents (deep: false) did not return an array for ${resolvedCurrentPath}. Received: ${typeof items}. Content:`, JSON.stringify(items));
+       // log.warn(`[WebDavDataSource][${sourceId}] getDirectoryContents (deep: false) did not return an array for ${resolvedCurrentPath}. Received: ${typeof items}. Content:`, JSON.stringify(items));
         if (typeof items === 'object' && items !== null) {
           if (Array.isArray(items.data)) { items = items.data; }
           else if (Array.isArray(items.items)) { items = items.items; }

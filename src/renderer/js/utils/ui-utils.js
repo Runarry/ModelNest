@@ -92,54 +92,155 @@ export function setLoading(isLoading) {
  *                                        Requires `data-source-id` and `data-image-path`.
  */
 export async function loadImage(imgElement) {
-  const sourceId = imgElement.dataset.sourceId;
-  const imagePath = imgElement.dataset.imagePath;
-  const logPrefix = `[ImageLoader ${sourceId}] ${imagePath}:`;
-
-  if (!sourceId || !imagePath) {
-    logMessage('error', `${logPrefix} 加载失败 - <img> 元素缺少 data-source-id 或 data-image-path 属性`, imgElement);
-    imgElement.alt = 'Error: Missing data attributes';
-    imgElement.src = ''; // Clear src to prevent broken image icon
+  // 入口处的 isLoadingCancelled 检查
+  if (imgElement.dataset.isLoadingCancelled === 'true') {
+    // logMessage('debug', `[loadImage] Initial load cancelled for ${imgElement.dataset.imagePath || 'unknown image'}`);
     return;
   }
 
-  // 为该图片元素设置一个唯一的 cacheKey，以便后续可以释放
-  // 注意：如果 imagePath 本身可能包含 '::'，需要选择更安全的组合方式或对 imagePath进行编码
-  const cacheKey = generateCacheKey(sourceId, imagePath); // Use imported function
-  imgElement.dataset.blobCacheKey = cacheKey;
-  // 清除旧的 src，以防是之前的 blob url
-  imgElement.src = '';
+  const sourceId = imgElement.dataset.sourceId;
+  const imagePath = imgElement.dataset.imagePath;
 
+  if (!sourceId || !imagePath) {
+    logMessage('error', `[ImageLoader] 加载失败 - <img> 元素缺少 data-source-id 或 data-image-path 属性`, imgElement);
+    imgElement.alt = 'Error: Missing data attributes';
+    imgElement.src = ''; // Clear src to prevent broken image icon
+    if (imgElement.dataset.blobCacheKey) {
+        delete imgElement.dataset.blobCacheKey;
+    }
+    return;
+  }
 
-  logMessage('debug', `${logPrefix} 开始加载图片 (using BlobUrlCache)`);
+  
+  if (imgElement.dataset.blobCacheKey) {
+    // logMessage('debug', `[loadImage] Clearing old blobCacheKey: ${imgElement.dataset.blobCacheKey} for ${imagePath}`);
+    delete imgElement.dataset.blobCacheKey;
+  }
+
+  const currentCacheKey = generateCacheKey(sourceId, imagePath);
+  const logPrefix = `[loadImage ${currentCacheKey}]`;
+
+  // logMessage('debug', `${logPrefix} 开始加载图片 (using BlobUrlCache)`);
 
   try {
     const blobUrl = await BlobUrlCache.getOrCreateBlobUrl(sourceId, imagePath);
 
+    // 获取 blobUrl 后，再次检查 isLoadingCancelled
+    if (imgElement.dataset.isLoadingCancelled === 'true') {
+      if (blobUrl) {
+        // logMessage('debug', `${logPrefix} Load cancelled after fetch, before src set. Releasing blob URL.`);
+        BlobUrlCache.releaseBlobUrlByKey(currentCacheKey); // 我们创建了这个 blobUrl，所以我们负责释放
+      }
+      return;
+    }
+
     if (blobUrl) {
-      logMessage('info', `${logPrefix} 从 BlobUrlCache 获取到 URL: ${blobUrl}`);
+      // logMessage('info', `${logPrefix} 从 BlobUrlCache 获取到 URL.`);
+      imgElement.dataset.blobCacheKey = currentCacheKey; // 存储 cacheKey
       imgElement.src = blobUrl;
 
-      // onload 和 onerror 仍然有用，用于知道图片是否实际显示成功
-      // 但它们不再负责 revokeObjectURL
       imgElement.onload = () => {
-        logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功: ${blobUrl}`);
+        // logMessage('info', `${logPrefix} 图片从 Blob URL 加载成功.`);
+        imgElement.alt = ''; // 清除可能存在的错误提示
       };
       imgElement.onerror = () => {
-        logMessage('error', `${logPrefix} 从 Blob URL 加载图片失败: ${blobUrl}`);
+        // logMessage('error', `${logPrefix} 从 Blob URL 加载图片失败.`);
         imgElement.alt = 'Error loading image from blob';
-        // 注意：这里不应该 revoke，因为 BlobUrlCache 会管理生命周期
-        // 如果加载失败，可能是 Blob 本身有问题或 URL 已被意外撤销
-        // 可以考虑在这里尝试从 BlobUrlCache 中移除有问题的条目，但这需要 BlobUrlCache 提供相应接口
-        // 或者让 BlobUrlCache 内部在创建时就处理好无法加载的 Blob
+        // 清除与此失败加载相关的 key
+        if (imgElement.dataset.blobCacheKey === currentCacheKey) {
+            delete imgElement.dataset.blobCacheKey;
+        }
+        // 注意：BlobUrlCache 内部可能已经处理了错误，但如果 onerror 触发，
+        // 意味着这个特定的 src (blobUrl) 无法被 img 元素加载。
+        // 可以考虑是否需要主动调用 BlobUrlCache.releaseBlobUrlByKey(currentCacheKey)
       };
     } else {
-      logMessage('warn', `${logPrefix} BlobUrlCache未能提供 Blob URL (可能获取数据失败).`);
+      // logMessage('warn', `${logPrefix} BlobUrlCache未能提供 Blob URL (可能获取数据失败).`);
       imgElement.alt = 'Image not available';
+      delete imgElement.dataset.blobCacheKey; // 确保清除 key
+      if (imgElement.dataset.isLoadingCancelled === 'true') return; // 再次检查，以防异步操作间隙状态改变
+      if (imgElement.onerror) imgElement.onerror(); else imgElement.style.display = 'none';
     }
   } catch (error) {
-    logMessage('error', `${logPrefix} 调用 BlobUrlCache.getOrCreateBlobUrl 时出错:`, error);
+    // logMessage('error', `${logPrefix} 调用 BlobUrlCache.getOrCreateBlobUrl 时出错:`, error);
     imgElement.alt = 'Error loading image data';
+    delete imgElement.dataset.blobCacheKey; // 确保清除 key
+    if (imgElement.dataset.isLoadingCancelled === 'true') return; // 再次检查
+    if (imgElement.onerror) imgElement.onerror(); else imgElement.style.display = 'none';
+  }
+}
+
+/**
+ * @typedef {object} ImageLoadHandle
+ * @property {string | null} blobUrl - The Blob URL for the image, or null if loading failed or was cancelled.
+ * @property {string | null} cacheKey - The cache key used for this image.
+ * @property {() => void} release - A function to release the Blob URL from the cache. Call this when the image is no longer needed.
+ * @property {any} [error] - An error object or message if loading failed or was cancelled.
+ */
+
+/**
+ * Loads an image and returns a handle for managing its Blob URL.
+ * This function does NOT directly manipulate the imgElement's src or event handlers.
+ * The caller is responsible for setting the src from blobUrl and managing the lifecycle via the release method.
+ *
+ * @param {HTMLImageElement} imgElement - The image element, used to check `dataset.isLoadingCancelled`.
+ *                                        It's NOT directly modified by this function for src or events.
+ * @param {string} imagePath - The path of the image to load.
+ * @param {string} sourceId - The ID of the image source.
+ * @returns {Promise<ImageLoadHandle>} A promise that resolves to an ImageLoadHandle.
+ */
+export async function loadImageWithHandle(imgElement, imagePath, sourceId) {
+  const cacheKey = generateCacheKey(sourceId, imagePath);
+  const logPrefix = `[loadImageWithHandle ${cacheKey}]`;
+
+  // Check for cancellation at the very beginning
+  if (imgElement.dataset.isLoadingCancelled === 'true') {
+    // logMessage('debug', `${logPrefix} Load cancelled at entry for ${imagePath}`);
+    return { blobUrl: null, cacheKey, release: () => {}, error: 'cancelled_at_entry' };
+  }
+
+  // logMessage('debug', `${logPrefix} Attempting to load image ${imagePath} from source ${sourceId}`);
+
+  try {
+    const blobUrl = await BlobUrlCache.getOrCreateBlobUrl(sourceId, imagePath);
+
+    // Check for cancellation again after the blob URL has been fetched (or attempted)
+    if (imgElement.dataset.isLoadingCancelled === 'true') {
+      if (blobUrl) {
+        // logMessage('debug', `${logPrefix} Load cancelled after fetch for ${imagePath}. Releasing fetched blob URL.`);
+        BlobUrlCache.releaseBlobUrlByKey(cacheKey); // Release the just-acquired blob
+      } else {
+        // logMessage('debug', `${logPrefix} Load cancelled after failed fetch for ${imagePath}.`);
+      }
+      return { blobUrl: null, cacheKey, release: () => {}, error: 'cancelled_after_fetch' };
+    }
+
+    if (blobUrl) {
+      // logMessage('info', `${logPrefix} Successfully obtained blob URL for ${imagePath}`);
+      return {
+        blobUrl,
+        cacheKey,
+        release: () => {
+          // logMessage('debug', `${logPrefix} Releasing blob URL for ${imagePath} via handle.`);
+          BlobUrlCache.releaseBlobUrlByKey(cacheKey);
+        },
+      };
+    } else {
+      // logMessage('warn', `${logPrefix} Failed to obtain blob URL for ${imagePath} (BlobUrlCache returned null).`);
+      return { blobUrl: null, cacheKey, release: () => {}, error: 'fetch_failed_cache_returned_null' };
+    }
+  } catch (error) {
+    // logMessage('error', `${logPrefix} Error during loadImageWithHandle for ${imagePath}:`, error);
+    // Check for cancellation one last time in case it happened during the error handling itself
+    // or if the error itself is due to a cancellation that wasn't caught earlier.
+    if (imgElement.dataset.isLoadingCancelled === 'true') {
+        // logMessage('debug', `${logPrefix} Load cancelled during error handling for ${imagePath}.`);
+        // If a blobUrl was somehow created before the error and cancellation, it should have been handled by BlobUrlCache.
+        // No explicit release here unless we are sure a blob was created AND not yet released.
+        // Given the flow, if an error occurs in getOrCreateBlobUrl, blobUrl would be null or undefined.
+        return { blobUrl: null, cacheKey, release: () => {}, error: 'cancelled_during_error_handling' };
+    }
+    return { blobUrl: null, cacheKey, release: () => {}, error: error || 'fetch_failed_exception' };
   }
 }
 

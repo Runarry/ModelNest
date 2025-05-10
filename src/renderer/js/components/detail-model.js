@@ -1,4 +1,4 @@
-import { loadImage } from '../utils/ui-utils.js';
+import { loadImageWithHandle } from '../utils/ui-utils.js'; // Updated import
 import { t } from '../core/i18n.js';
 import { logMessage, saveModel } from '../apiBridge.js';
 import { BlobUrlCache } from '../core/blobUrlCache.js';
@@ -18,6 +18,7 @@ let detailCloseBtn;
 let currentModel = null; // Store the model object (modelObj) currently being displayed/edited
 let currentSourceId = null; // Store the sourceId needed for image loading/saving
 let currentIsReadOnly = false; // Stores the read-only status of the current model's source
+let currentImageHandle = null; // Stores the handle from loadImageWithHandle
 
 // ===== Initialization =====
 
@@ -114,7 +115,14 @@ export async function show(modelObj, sourceId, isReadOnly) { // Renamed from sho
     currentIsReadOnly = isReadOnly === true;
     logMessage('debug', `[DetailModel] Setting read-only status to: ${currentIsReadOnly}`);
 
-    clearModelInputs(); // Clear previous inputs before populating
+    // Release previous image handle if it exists
+    if (currentImageHandle && typeof currentImageHandle.release === 'function') {
+        logMessage('debug', `[DetailModel] Releasing previous image handle in show() for key: ${currentImageHandle.cacheKey}`);
+        currentImageHandle.release();
+    }
+    currentImageHandle = null;
+
+    clearModelInputs(); // Clear previous inputs before populating, this will also release its own handle if any
 
     // --- 基础信息 (通常不可编辑或从 modelBaseInfo 获取) ---
     detailName.textContent = modelObj.name || '';
@@ -124,26 +132,55 @@ export async function show(modelObj, sourceId, isReadOnly) { // Renamed from sho
     // --- 预览图 ---
     detailImage.src = '';
     detailImage.style.display = 'none';
+
+    // 在设置 src 和事件监听器之前，清除可能存在的旧的取消标记
+    if (detailImage.dataset.isLoadingCancelled) {
+        delete detailImage.dataset.isLoadingCancelled;
+    }
+
     if (modelObj.image) {
-        detailImage.setAttribute('data-image-path', modelObj.image);
-        detailImage.setAttribute('data-source-id', sourceId);
+        const imagePath = modelObj.image;
         detailImage.alt = modelObj.name || t('modelImageAlt');
-        await loadImage(detailImage);
-        if (detailImage.complete && detailImage.naturalHeight !== 0 && detailImage.style.display !== 'block') {
-            detailImage.style.display = 'block';
-        } else if (!detailImage.src || detailImage.src === window.location.href) {
-            detailImage.style.display = 'none';
+        // Ensure isLoadingCancelled is not set from a previous attempt for this element
+        if (detailImage.dataset.isLoadingCancelled) {
+            delete detailImage.dataset.isLoadingCancelled;
         }
-        detailImage.onload = () => {
-            logMessage('debug', `[DetailModel] 图片加载成功: ${modelObj.image}`);
-            detailImage.style.display = 'block';
-        };
-        detailImage.onerror = () => {
-            logMessage('warn', `[DetailModel] 图片加载失败: ${modelObj.image} (Source: ${sourceId})`);
+
+        // Show spinner or placeholder
+        // if (spinner) spinner.style.display = 'block';
+        detailImage.style.display = 'none'; // Hide image until loaded
+
+        logMessage('debug', `[DetailModel] Calling loadImageWithHandle for: ${imagePath}, source: ${sourceId}`);
+        currentImageHandle = await loadImageWithHandle(detailImage, imagePath, sourceId);
+
+        if (detailImage.dataset.isLoadingCancelled === 'true') {
+            logMessage('debug', `[DetailModel] Image loading was cancelled (checked after loadImageWithHandle) for ${imagePath}.`);
+            // currentImageHandle.release() should have been called by loadImageWithHandle if cancelled after fetch
+            // or it would return a no-op release.
+            // Ensure UI is clean.
+            detailImage.src = '';
             detailImage.style.display = 'none';
-        };
+            // if (spinner) spinner.style.display = 'none';
+        } else if (currentImageHandle && currentImageHandle.blobUrl) {
+            logMessage('debug', `[DetailModel] Image loaded successfully via handle: ${imagePath}`);
+            detailImage.src = currentImageHandle.blobUrl;
+            detailImage.style.display = 'block';
+            // if (spinner) spinner.style.display = 'none';
+        } else {
+            logMessage('warn', `[DetailModel] Image loading failed or was cancelled for: ${imagePath}. Error: ${currentImageHandle?.error}`);
+            detailImage.src = ''; // Clear src to prevent broken image icon
+            detailImage.style.display = 'none';
+            // if (spinner) spinner.style.display = 'none';
+            // Display error message or placeholder
+            detailImage.alt = currentImageHandle?.error === 'cancelled_at_entry' || currentImageHandle?.error === 'cancelled_after_fetch'
+                ? t('detail.imageLoadingCancelled')
+                : t('detail.imageLoadingFailed');
+        }
     } else {
         logMessage('info', `[DetailModel] 模型 ${modelObj.name} 没有图片`);
+        detailImage.src = '';
+        detailImage.style.display = 'none';
+        // if (spinner) spinner.style.display = 'none';
     }
 
     const modelJson = modelObj.modelJsonInfo || {};
@@ -246,6 +283,13 @@ export async function show(modelObj, sourceId, isReadOnly) { // Renamed from sho
 /** Hides the detail Model. */
 export function hideDetailModel() {
     logMessage('info', `[DetailModel] 开始隐藏模型详情: ${currentModel?.name || '未知'}`);
+
+    // 在函数的开头，如果 detailImage 存在，则为其添加一个 dataset 属性作为取消标记
+    if (detailImage) { // 确保 detailImage 已初始化
+        detailImage.dataset.isLoadingCancelled = 'true';
+        logMessage('debug', '[DetailModel] Set isLoadingCancelled = true on detailImage.');
+    }
+
     if (detailModel) {
         detailModel.classList.remove('active');
 
@@ -254,33 +298,26 @@ export function hideDetailModel() {
         // The loadImage function in ui-utils.js now stores the cacheKey in imgElement.dataset.blobCacheKey,
         // but it's safer to use the sourceId and imagePath that were used to load it,
         // as detailImage element might be reused or its dataset manipulated elsewhere.
-        if (currentModel && currentModel.image && currentSourceId && detailImage) {
-            logMessage('debug', `[DetailModel] Preparing to release Blob URL for image: ${currentModel.image} from source: ${currentSourceId}`);
-            // It's good practice to clear the src *before* releasing,
-            // though BlobUrlCache handles the actual revoke.
-            // Clearing src prevents the browser from trying to access a (soon-to-be) revoked URL.
-            if (detailImage.src.startsWith('blob:')) {
-                 // We can directly use currentSourceId and currentModel.image as these were used to load it.
-                BlobUrlCache.releaseBlobUrl(currentSourceId, currentModel.image);
-                logMessage('debug', `[DetailModel] Called BlobUrlCache.releaseBlobUrl for ${currentSourceId}::${currentModel.image}`);
-            }
+        // NEW: Use currentImageHandle
+        if (currentImageHandle && typeof currentImageHandle.release === 'function') {
+            logMessage('debug', `[DetailModel] Releasing image handle in hideDetailModel() for key: ${currentImageHandle.cacheKey}`);
+            currentImageHandle.release();
+        }
+        currentImageHandle = null;
+
+        if (detailImage) {
             detailImage.src = ''; // Clear src
-            detailImage.removeAttribute('data-blob-cache-key'); // Remove the key if it was set
             detailImage.style.display = 'none';
-        } else if (detailImage && detailImage.src.startsWith('blob:')) {
-            // Fallback if currentModel/currentSourceId somehow became null but image still has a blob src
-            // This case is less ideal as we might not have the original sourceId/imagePath
-            // but if data-blob-cache-key was reliably set, we could use that.
-            // For now, we'll log a warning if this less specific path is taken.
-            logMessage('warn', `[DetailModel] currentModel/currentSourceId is null, but detailImage.src is a blob. Cannot reliably release via BlobUrlCache without original key. Old revoke logic removed.`);
-            // Old logic: URL.revokeObjectURL(detailImage.src);
-            detailImage.src = '';
-            detailImage.style.display = 'none';
+            // No need to manage data-blob-cache-key directly here anymore
         }
         // --- End Release Blob URL ---
 
         const performCleanup = () => {
-            clearModelInputs(); // Clear specific input fields
+            // clearModelInputs already called currentImageHandle.release if it existed.
+            // We call it again here to ensure all other inputs are cleared.
+            // currentImageHandle should be null by now if hideDetailModel was called after show().
+            // If hideDetailModel is called independently, clearModelInputs will handle its currentImageHandle.
+            clearModelInputs();
             currentModel = null;
             currentSourceId = null;
             logMessage('info', '[DetailModel] 模型详情已隐藏和清理完毕');
@@ -331,6 +368,16 @@ function clearModelInputs() {
     if (detailImage) {
         // The image is moved into a tab, so direct removal from a fixed parent might not be needed.
         // Clearing src and hiding is generally sufficient.
+detailImage.onload = null;
+        detailImage.onerror = null;
+
+        // Release current image handle if it exists
+        if (currentImageHandle && typeof currentImageHandle.release === 'function') {
+            logMessage('debug', `[DetailModel] Releasing image handle in clearModelInputs() for key: ${currentImageHandle.cacheKey}`);
+            currentImageHandle.release();
+        }
+        currentImageHandle = null; // Ensure it's nulled after release
+
         detailImage.src = '';
         detailImage.style.display = 'none';
         detailImage.removeAttribute('data-image-path');
