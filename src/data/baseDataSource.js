@@ -17,10 +17,9 @@ class DataSource {
   /**
    * 读取并解析指定路径的模型详情 JSON 文件。
    * @param {string} jsonPath - 模型 JSON 文件的完整路径。
-   * @returns {Promise<object>} 模型详情对象。
-   * @throws {Error} 如果子类未实现此方法。
+
    */
-  async readModelDetail(jsonPath) {
+  async readModelDetail(jsonPath, modelFilePath, sourceConfigId) {
     throw new Error(`'readModelDetail' method must be implemented by subclass. Received jsonPath: ${jsonPath}`);
   }
 

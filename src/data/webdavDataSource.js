@@ -385,54 +385,7 @@ class WebDavDataSource extends DataSource {
 
     log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Entry. Identifier: '${identifier}'`);
 
-    if (!identifier || typeof identifier !== 'string' || identifier.trim() === '') {
-      log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Identifier is empty or invalid. Cannot proceed.`);
-      return {};
-    }
-
-    let modelFileRelativePath;
-    // Determine the modelFileRelativePath from the identifier
-    const identifierExt = path.posix.extname(identifier).toLowerCase();
-    const identifierBaseNameWithoutExt = path.posix.basename(identifier, identifierExt);
-    const identifierDir = path.posix.dirname(identifier);
-
-    const supportedModelExts = Array.isArray(this.config.supportedExts) && this.config.supportedExts.length > 0
-      ? this.config.supportedExts
-      : ['.safetensors', '.ckpt', '.pt', '.bin', '.pth', '.lora', '.onnx'];
-
-    if (identifierExt === '.json') {
-      // Identifier is a JSON file, try to find a corresponding model file
-      let foundModel = false;
-      for (const ext of supportedModelExts) {
-        const potentialModelPath = path.posix.join(identifierDir, `${identifierBaseNameWithoutExt}${ext}`);
-        // Check if this potential model file exists. _statIfExists returns a stat object or null.
-        // We need the stat object for _buildModelEntry.
-        const stat = await this._statIfExists(potentialModelPath);
-        if (stat) {
-          modelFileRelativePath = potentialModelPath; // This is the relative path
-          // modelFileStat will be the actual FileStat object for the model file
-          // _buildModelEntry expects a FileStat object whose .filename is the *resolved* server path
-          // So, we pass `stat` directly to _buildModelEntry.
-          foundModel = true;
-          break; // Found the model file
-        }
-      }
-      if (!foundModel) {
-        log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] JSON path '${identifier}' provided, but no corresponding model file found with supported extensions.`);
-        return {};
-      }
-    } else if (supportedModelExts.includes(identifierExt)) {
-      // Identifier is a model file
-      modelFileRelativePath = identifier;
-    } else {
-      log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Identifier '${identifier}' is not a recognized model file extension nor a .json file.`);
-      return {};
-    }
-
-    // At this point, modelFileRelativePath should be the relative path to the actual model file.
-    // We need the FileStat object for this model file to pass to _buildModelEntry.
-    // The FileStat object's 'filename' property should be the *resolved* path on the server.
-    const modelFileStat = await this._statIfExists(modelFileRelativePath);
+    const modelFileStat = await this._statIfExists(modelFileName);
 
     if (!modelFileStat) {
       log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Critical: Model file '${modelFileRelativePath}' (from identifier '${identifier}') not found or inaccessible.`);
