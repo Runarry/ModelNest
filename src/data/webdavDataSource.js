@@ -163,7 +163,54 @@ class WebDavDataSource extends DataSource {
     return filesFound;
   }
 
-  async _buildModelEntry(modelFile, passedAllItemsInDir, passedSourceId, passedResolvedBasePath) {
+  /**
+   * Batch fetches content for multiple JSON files.
+   * @param {string[]} jsonFilePaths - An array of fully resolved paths to JSON files.
+   * @returns {Promise<Map<string, string|null>>} A map where keys are file paths and values are file contents (string) or null if fetching failed.
+   */
+  async _batchFetchJsonContents(jsonFilePaths) {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+    const sourceId = this.config.id;
+    const resultsMap = new Map();
+
+    if (!jsonFilePaths || jsonFilePaths.length === 0) {
+      log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: No JSON file paths provided.`);
+      return resultsMap;
+    }
+
+    log.info(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Starting batch fetch for ${jsonFilePaths.length} JSON files.`);
+
+    const fetchPromises = jsonFilePaths.map(filePath =>
+      this.client.getFileContents(filePath, { format: 'text' })
+        .then(content => ({ status: 'fulfilled', path: filePath, value: content }))
+        .catch(error => ({ status: 'rejected', path: filePath, reason: error }))
+    );
+
+    const settledResults = await Promise.allSettled(fetchPromises);
+
+    settledResults.forEach(result => {
+      if (result.status === 'fulfilled' && result.value.status === 'fulfilled') {
+        resultsMap.set(result.value.path, result.value.value);
+        log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Successfully fetched ${result.value.path}`);
+      } else if (result.status === 'fulfilled' && result.value.status === 'rejected') {
+        // This case handles errors caught within the individual fetchPromises' .catch
+        resultsMap.set(result.value.path, null); // Mark as failed to fetch
+        log.error(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Failed to fetch ${result.value.path}:`, result.value.reason.message, result.value.reason.response?.status);
+      } else if (result.status === 'rejected') {
+        // This case handles errors if Promise.allSettled itself has an issue with a promise (less common here)
+        // We need to know which path failed if possible, but result.reason might not contain it directly.
+        // For now, we assume the inner catch handles path association.
+        log.error(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: A promise in batch fetch was rejected unexpectedly:`, result.reason);
+      }
+    });
+
+    const duration = Date.now() - startTime;
+    log.info(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Finished batch fetch. ${resultsMap.size} results (some might be null for failures). Duration: ${duration}ms`);
+    return resultsMap;
+  }
+
+  async _buildModelEntry(modelFile, passedAllItemsInDir, passedSourceId, passedResolvedBasePath, preFetchedJsonContentsMap = new Map()) {
     const startTime = Date.now();
     await this.ensureInitialized(); // Ensure client is ready
 
@@ -263,10 +310,32 @@ class WebDavDataSource extends DataSource {
     if (jsonFile) {
       log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 尝试读取 JSON 文件 ${jsonFile.filename}`);
       try {
-        // jsonFile.filename is already a resolved path from getDirectoryContents
-        const jsonContent = await this.client.getFileContents(jsonFile.filename, { format: 'text' });
-        modelJsonInfo = JSON.parse(jsonContent);
-        log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功读取并解析 JSON ${jsonFile.filename}`);
+        let jsonContent;
+        if (preFetchedJsonContentsMap.has(jsonFile.filename)) {
+          jsonContent = preFetchedJsonContentsMap.get(jsonFile.filename);
+          if (jsonContent === null) { // Explicitly null means prefetch failed
+            log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Pre-fetch for JSON ${jsonFile.filename} failed. Will attempt individual fetch.`);
+            // Fall through to individual fetch
+          } else {
+            log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 使用预取的 JSON 内容 ${jsonFile.filename}`);
+          }
+        }
+
+        // If not pre-fetched or pre-fetch failed (jsonContent is null or undefined)
+        if (jsonContent === undefined || jsonContent === null) {
+          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: ${jsonContent === null ? '预取失败，' : ''}尝试单独读取 JSON 文件 ${jsonFile.filename}`);
+          jsonContent = await this.client.getFileContents(jsonFile.filename, { format: 'text' });
+          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功单独读取 JSON ${jsonFile.filename}`);
+        }
+        
+        if (typeof jsonContent === 'string') {
+          modelJsonInfo = JSON.parse(jsonContent);
+          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功解析 JSON ${jsonFile.filename}`);
+        } else {
+          // This case should ideally not be hit if prefetch stores null for failure and individual fetch throws error
+           log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: JSON content for ${jsonFile.filename} was not a string after fetch attempts. Content:`, jsonContent);
+        }
+
       } catch (error) {
         log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 读取或解析 JSON 文件 ${jsonFile.filename} 时出错:`, error.message, error.stack, error.response?.status);
         // modelJsonInfo 保持为 {}
@@ -354,31 +423,48 @@ class WebDavDataSource extends DataSource {
     }
 
 
+    // 收集所有潜在的 JSON 文件路径以进行批量预取
+    const potentialJsonFilePaths = new Set();
+    if (Array.isArray(allItemsFlatList)) {
+      modelFileItems.forEach(modelFile => {
+        const modelFileDir = path.posix.dirname(modelFile.filename);
+        const modelFileBase = path.posix.basename(modelFile.filename, path.posix.extname(modelFile.filename));
+        
+        // 在同一目录中查找同名的 .json 文件
+        const itemsInDir = this._allItemsCache.get(modelFileDir) || [];
+        itemsInDir.forEach(item => {
+          if (item.type === 'file' && path.posix.dirname(item.filename) === modelFileDir) {
+            const itemBase = path.posix.basename(item.filename, path.posix.extname(item.filename));
+            const itemExt = path.posix.extname(item.filename).toLowerCase();
+            if (itemBase === modelFileBase && itemExt === '.json') {
+              potentialJsonFilePaths.add(item.filename); // item.filename is already resolved
+            }
+          }
+        });
+      });
+    }
+    
+    const uniqueJsonFilePaths = Array.from(potentialJsonFilePaths);
+    let preFetchedJsonContentsMap = new Map();
+    if (uniqueJsonFilePaths.length > 0) {
+      log.info(`[WebDavDataSource][${sourceId}] 发现 ${uniqueJsonFilePaths.length} 个唯一的 JSON 文件需要预取.`);
+      preFetchedJsonContentsMap = await this._batchFetchJsonContents(uniqueJsonFilePaths);
+      log.info(`[WebDavDataSource][${sourceId}] 完成 ${uniqueJsonFilePaths.length} 个 JSON 文件的批量预取，获取到 ${preFetchedJsonContentsMap.size} 个结果 (部分可能为null).`);
+    } else {
+      log.info(`[WebDavDataSource][${sourceId}] 没有找到需要预取的 JSON 文件.`);
+    }
+
     const allModels = [];
     const modelBuildPromises = [];
 
     for (const modelFile of modelFileItems) {
       const modelFileDir = path.posix.dirname(modelFile.filename);
-      // 从 allItems 中筛选出与当前 modelFile 同目录的所有文件和文件夹
-      // 注意: _recursiveListAllFiles 返回的已经是扁平化的文件列表。
-      // _buildModelEntry 现在会优先使用 _allItemsCache。
-      // 如果缓存命中，allItemsInDirForModel 参数实际上不会被 _buildModelEntry 中的网络请求逻辑使用。
-      // 但为了保持接口一致性，并且在缓存未预热（例如直接调用 _buildModelEntry）的场景下，
-      // 传递从 allItemsFlatList 中筛选出的同目录项仍然是有意义的，或者传递 null/undefined 让其自行获取。
-      // 鉴于 listModels 已经构建了完整的 _allItemsCache，这里传递 null 让 _buildModelEntry 强制使用缓存。
-      // 或者，更优的是，_buildModelEntry 内部逻辑已调整为优先查缓存，所以 allItemsInDirForModel 参数可以继续传递，
-      // 如果缓存没有，它会用这个，如果缓存有，它会忽略这个。
-      // 实际上，由于 _allItemsCache 是在 listModels 中填充的，当 _buildModelEntry 从 listModels 调用时，
-      // 缓存应该总是命中的。
       const allItemsInDirForModelFromFlatList = this._allItemsCache.get(modelFileDir) || [];
-
 
       log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目. 其所在目录 ${modelFileDir} 中的项目将从缓存或传入列表获取.`);
       
-      // 直接调用并收集 Promise，后续并行处理
-      // _buildModelEntry 将优先使用 this._allItemsCache
       modelBuildPromises.push(
-        this._buildModelEntry(modelFile, allItemsInDirForModelFromFlatList, sourceId, resolvedBasePath)
+        this._buildModelEntry(modelFile, allItemsInDirForModelFromFlatList, sourceId, resolvedBasePath, preFetchedJsonContentsMap)
       );
     }
     
@@ -440,7 +526,9 @@ class WebDavDataSource extends DataSource {
     // Now call _buildModelEntry.
     // modelFileStat already contains the resolved filename.
     // Pass null for allItemsInDir and resolvedBasePath to trigger their dynamic fetching/calculation within _buildModelEntry.
-    const modelDetail = await this._buildModelEntry(modelFileStat, null, currentSourceId, null);
+    // For readModelDetail, we don't have a preFetchedJsonContentsMap readily available unless we decide to fetch it here.
+    // For now, it will default to an empty Map, and _buildModelEntry will fetch JSON individually.
+    const modelDetail = await this._buildModelEntry(modelFileStat, null, currentSourceId, null /* preFetchedJsonContentsMap is defaulted */);
 
     const duration = Date.now() - startTime;
     if (modelDetail && modelDetail.name) {
@@ -464,8 +552,8 @@ class WebDavDataSource extends DataSource {
     log.debug(`[WebDavDataSource][${this.config.id}] 开始获取图片数据: ${resolvedPath} (relative: ${relativePath})`);
     try {
       const content = await this.client.getFileContents(resolvedPath);
-      const duration = Date.now() - startTime;
-      log.debug(`[WebDavDataSource][${this.config.id}] 获取图片数据成功: ${resolvedPath}, 大小: ${content.length} bytes, 耗时: ${duration}ms`);
+
+      log.debug(`[WebDavDataSource][${this.config.id}] 获取图片数据成功: ${resolvedPath}, 大小: ${content.length} bytes`);
       return {
         path: relativePath, // Return the original relative path
         data: content,
