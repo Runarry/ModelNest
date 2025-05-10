@@ -10,7 +10,7 @@ class WebDavDataSource extends DataSource {
     // Store the subDirectory, remove trailing slash if present, default to empty string
     this.subDirectory = (config.subDirectory || '').replace(/\/$/, '');
     log.info(`[WebDavDataSource][${this.config.id}] Initialized with subDirectory: '${this.subDirectory}'`);
-
+    this._allItemsCache = new Map(); // 初始化 allItems 缓存
     this.initialized = this.initClient(config);
   }
 
@@ -182,20 +182,18 @@ class WebDavDataSource extends DataSource {
 
     log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 开始处理模型文件 ${modelFile.filename}. Passed params: allItemsInDir? ${!!passedAllItemsInDir}, resolvedBasePath? ${!!passedResolvedBasePath}, sourceId? ${!!passedSourceId}`);
 
-    if (!currentAllItemsInDir || currentAllItemsInDir === null || !currentResolvedBasePath || currentResolvedBasePath === null) {
-      log.info(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: allItemsInDir or resolvedBasePath not provided (or null) for ${modelFile.filename}. Fetching/Calculating.`);
-      
-      if (!currentResolvedBasePath || currentResolvedBasePath === null) {
-        currentResolvedBasePath = this._resolvePath('/');
-        log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Calculated resolvedBasePath: ${currentResolvedBasePath}`);
-      }
-
-      if (!currentAllItemsInDir || currentAllItemsInDir === null) {
+    // 尝试从缓存中获取同目录文件
+    if (this._allItemsCache && this._allItemsCache.has(modelFileDir)) {
+      currentAllItemsInDir = this._allItemsCache.get(modelFileDir);
+      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache hit for directory ${modelFileDir}. Found ${currentAllItemsInDir.length} items.`);
+    } else {
+      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache miss for directory ${modelFileDir}. Passed allItemsInDir is ${passedAllItemsInDir ? 'present' : 'absent'}.`);
+      // 如果 passedAllItemsInDir 存在，则使用它 (这主要用于 listModels 首次构建时)
+      // 否则，如果缓存未命中且没有传递 allItemsInDir (例如从 readModelDetail 调用)，则需要获取
+      if (!passedAllItemsInDir) {
+        log.info(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: allItemsInDir not provided and cache miss for ${modelFile.filename}. Fetching directory contents for ${modelFileDir}.`);
         try {
-          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetching directory contents for ${modelFileDir}`);
           const fetchedItems = await this.client.getDirectoryContents(modelFileDir, { deep: false, details: true });
-          
-          // Normalize fetchedItems similar to _recursiveListAllFiles
           if (!Array.isArray(fetchedItems)) {
             log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: getDirectoryContents for ${modelFileDir} did not return an array. Received: ${typeof fetchedItems}.`);
             if (typeof fetchedItems === 'object' && fetchedItems !== null) {
@@ -209,11 +207,26 @@ class WebDavDataSource extends DataSource {
             currentAllItemsInDir = fetchedItems;
           }
           log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetched ${currentAllItemsInDir.length} items for directory ${modelFileDir}`);
+          // 将获取到的数据存入缓存，以备后续同一目录的其他模型使用
+          if (this._allItemsCache) { // 确保缓存对象存在
+             this._allItemsCache.set(modelFileDir, currentAllItemsInDir);
+             log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Stored fetched items for ${modelFileDir} into _allItemsCache.`);
+          }
         } catch (error) {
           log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Error fetching directory contents for ${modelFileDir}:`, error.message, error.stack, error.response?.status);
           return null; // Cannot proceed without directory items
         }
+      } else {
+        // 使用传递的 allItemsInDir (来自 listModels 的初始构建过程)
+        currentAllItemsInDir = passedAllItemsInDir;
+        log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Using passedAllItemsInDir for ${modelFileDir}. Count: ${currentAllItemsInDir.length}`);
       }
+    }
+
+    // 确保 currentResolvedBasePath 已设置
+    if (!currentResolvedBasePath || currentResolvedBasePath === null) {
+      currentResolvedBasePath = this._resolvePath('/');
+      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Calculated/ensured resolvedBasePath: ${currentResolvedBasePath}`);
     }
 
     const modelFileBase = path.posix.basename(modelFile.filename, path.posix.extname(modelFile.filename));
@@ -285,19 +298,41 @@ class WebDavDataSource extends DataSource {
     await this.ensureInitialized();
     const sourceId = sourceConfig ? sourceConfig.id : this.config.id;
 
+    // 清空缓存，因为每次调用 listModels 都应重新构建
+    this._allItemsCache.clear();
+    log.debug(`[WebDavDataSource][${sourceId}] Cleared _allItemsCache for new listModels call.`);
+
     const relativeStartPath = directory ? (directory.startsWith('/') ? directory : `/${directory}`) : '/';
     const resolvedStartPath = this._resolvePath(relativeStartPath);
     const resolvedBasePath = this._resolvePath('/'); // Base path for the source, used in createWebDavModelObject
 
     log.info(`[WebDavDataSource][${sourceId}] 开始列出模型 (新逻辑). SubDir: '${this.subDirectory}', RelativeDir: '${directory}', ResolvedStartPath: ${resolvedStartPath}, SupportedExts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, ShowSubDir: ${showSubdirectory}`);
 
-    let allItems = [];
+    let allItemsFlatList = [];
     try {
       log.info(`[WebDavDataSource][${sourceId}] 开始递归列出所有文件项: ${resolvedStartPath}, ShowSubDir: ${showSubdirectory}`);
-      allItems = await this._recursiveListAllFiles(resolvedStartPath, showSubdirectory);
-      log.info(`[WebDavDataSource][${sourceId}] 递归列出文件项完成: ${resolvedStartPath}, 共找到 ${allItems.length} 个项`);
-      if (allItems.length > 0) {
-        log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles 返回的部分项目示例:`, allItems.slice(0, 5).map(item => ({ filename: item.filename, type: item.type })));
+      allItemsFlatList = await this._recursiveListAllFiles(resolvedStartPath, showSubdirectory);
+      log.info(`[WebDavDataSource][${sourceId}] 递归列出文件项完成: ${resolvedStartPath}, 共找到 ${allItemsFlatList.length} 个项`);
+
+      // 构建缓存
+      if (allItemsFlatList.length > 0) {
+        log.debug(`[WebDavDataSource][${sourceId}] Populating _allItemsCache with ${allItemsFlatList.length} items.`);
+        allItemsFlatList.forEach(item => {
+          const dir = path.posix.dirname(item.filename);
+          if (!this._allItemsCache.has(dir)) {
+            this._allItemsCache.set(dir, []);
+          }
+          this._allItemsCache.get(dir).push(item);
+        });
+        log.debug(`[WebDavDataSource][${sourceId}] _allItemsCache populated. Cache size: ${this._allItemsCache.size} directories.`);
+        // Log a sample from the cache if needed for debugging
+        // if (this._allItemsCache.size > 0) {
+        //   const firstKey = this._allItemsCache.keys().next().value;
+        //   log.debug(`[WebDavDataSource][${sourceId}] Sample cache entry for dir '${firstKey}':`, this._allItemsCache.get(firstKey).slice(0,2).map(i => i.basename));
+        // }
+      }
+      if (allItemsFlatList.length > 0) {
+        log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles 返回的部分项目示例:`, allItemsFlatList.slice(0, 5).map(item => ({ filename: item.filename, type: item.type })));
       }
     } catch (error) {
       const duration = Date.now() - startTime;
@@ -309,11 +344,11 @@ class WebDavDataSource extends DataSource {
       throw error;
     }
 
-    const modelFileItems = allItems.filter(item =>
+    const modelFileItems = allItemsFlatList.filter(item =>
       item.type === 'file' && supportedExts.some(ext => item.filename.endsWith(ext))
     );
 
-    log.info(`[WebDavDataSource][${sourceId}] 从 ${allItems.length} 个总项目中筛选出 ${modelFileItems.length} 个潜在模型文件.`);
+    log.info(`[WebDavDataSource][${sourceId}] 从 ${allItemsFlatList.length} 个总项目中筛选出 ${modelFileItems.length} 个潜在模型文件.`);
     if (modelFileItems.length > 0) {
       log.debug(`[WebDavDataSource][${sourceId}] 筛选出的模型文件示例:`, modelFileItems.slice(0, 5).map(f => f.filename));
     }
@@ -325,15 +360,25 @@ class WebDavDataSource extends DataSource {
     for (const modelFile of modelFileItems) {
       const modelFileDir = path.posix.dirname(modelFile.filename);
       // 从 allItems 中筛选出与当前 modelFile 同目录的所有文件和文件夹
-      // 注意: _recursiveListAllFiles 返回的已经是扁平化的文件列表，所以这里主要是为了传递给 _buildModelEntry
-      // _buildModelEntry 内部会再次确认目录是否匹配
-      const allItemsInDirForModel = allItems.filter(item => path.posix.dirname(item.filename) === modelFileDir);
+      // 注意: _recursiveListAllFiles 返回的已经是扁平化的文件列表。
+      // _buildModelEntry 现在会优先使用 _allItemsCache。
+      // 如果缓存命中，allItemsInDirForModel 参数实际上不会被 _buildModelEntry 中的网络请求逻辑使用。
+      // 但为了保持接口一致性，并且在缓存未预热（例如直接调用 _buildModelEntry）的场景下，
+      // 传递从 allItemsFlatList 中筛选出的同目录项仍然是有意义的，或者传递 null/undefined 让其自行获取。
+      // 鉴于 listModels 已经构建了完整的 _allItemsCache，这里传递 null 让 _buildModelEntry 强制使用缓存。
+      // 或者，更优的是，_buildModelEntry 内部逻辑已调整为优先查缓存，所以 allItemsInDirForModel 参数可以继续传递，
+      // 如果缓存没有，它会用这个，如果缓存有，它会忽略这个。
+      // 实际上，由于 _allItemsCache 是在 listModels 中填充的，当 _buildModelEntry 从 listModels 调用时，
+      // 缓存应该总是命中的。
+      const allItemsInDirForModelFromFlatList = this._allItemsCache.get(modelFileDir) || [];
 
-      log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目, 其所在目录 ${modelFileDir} 中有 ${allItemsInDirForModel.length} 个项目.`);
+
+      log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目. 其所在目录 ${modelFileDir} 中的项目将从缓存或传入列表获取.`);
       
       // 直接调用并收集 Promise，后续并行处理
+      // _buildModelEntry 将优先使用 this._allItemsCache
       modelBuildPromises.push(
-        this._buildModelEntry(modelFile, allItemsInDirForModel, sourceId, resolvedBasePath)
+        this._buildModelEntry(modelFile, allItemsInDirForModelFromFlatList, sourceId, resolvedBasePath)
       );
     }
     
