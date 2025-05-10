@@ -1,10 +1,10 @@
 {
   "name": "model-nest",
-  "version": "1.2.5",
+  "version": "1.3.1",
   "description": "跨平台 AIGC 模型管理与浏览工具，支持本地与 WebDAV 多数据源。",
   "main": "main.js",
   "scripts": {
-    "start": "cross-env LOG_LEVEL=warn IS_DEV_MODE=true electron .",
+    "start": "cross-env LOG_LEVEL=info IS_DEV_MODE=true electron .",
     "dev": "npm run build:renderer && npm start",
     "build:renderer": "cross-env NODE_ENV=production rollup -c rollup.config.mjs",
     "watch:renderer": "rollup -c rollup.config.mjs -w",
@@ -21,7 +21,7 @@
   },
   "devDependencies": {
     "@babel/core": "^7.27.1",
-    "@babel/preset-env": "^7.27.1",
+    "@babel/preset-env": "^7.27.2",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-node-resolve": "^16.0.1",
@@ -33,7 +33,7 @@
     "electron-builder": "^26.0.15",
     "postcss": "^8.5.3",
     "postcss-import": "^16.1.0",
-    "rollup": "^4.40.1",
+    "rollup": "^4.40.2",
     "rollup-plugin-postcss": "^4.0.2"
   },
   "author": "Banazzle",
