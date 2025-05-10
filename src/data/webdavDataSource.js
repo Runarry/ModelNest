@@ -163,214 +163,198 @@ class WebDavDataSource extends DataSource {
     return filesFound;
   }
 
+  async _buildModelEntry(modelFile, passedAllItemsInDir, passedSourceId, passedResolvedBasePath) {
+    const startTime = Date.now();
+    await this.ensureInitialized(); // Ensure client is ready
+
+    // Validate modelFile
+    if (!modelFile || !modelFile.filename || typeof modelFile.filename !== 'string') {
+      log.error(`[WebDavDataSource][_buildModelEntry] Invalid modelFile (or modelFile.filename) provided.`);
+      return null;
+    }
+
+    let currentSourceId = passedSourceId || this.config.id;
+    let currentAllItemsInDir = passedAllItemsInDir;
+    let currentResolvedBasePath = passedResolvedBasePath;
+
+    // modelFile.filename is expected to be the fully resolved path on the server
+    const modelFileDir = path.posix.dirname(modelFile.filename);
+
+    log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 开始处理模型文件 ${modelFile.filename}. Passed params: allItemsInDir? ${!!passedAllItemsInDir}, resolvedBasePath? ${!!passedResolvedBasePath}, sourceId? ${!!passedSourceId}`);
+
+    if (!currentAllItemsInDir || currentAllItemsInDir === null || !currentResolvedBasePath || currentResolvedBasePath === null) {
+      log.info(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: allItemsInDir or resolvedBasePath not provided (or null) for ${modelFile.filename}. Fetching/Calculating.`);
+      
+      if (!currentResolvedBasePath || currentResolvedBasePath === null) {
+        currentResolvedBasePath = this._resolvePath('/');
+        log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Calculated resolvedBasePath: ${currentResolvedBasePath}`);
+      }
+
+      if (!currentAllItemsInDir || currentAllItemsInDir === null) {
+        try {
+          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetching directory contents for ${modelFileDir}`);
+          const fetchedItems = await this.client.getDirectoryContents(modelFileDir, { deep: false, details: true });
+          
+          // Normalize fetchedItems similar to _recursiveListAllFiles
+          if (!Array.isArray(fetchedItems)) {
+            log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: getDirectoryContents for ${modelFileDir} did not return an array. Received: ${typeof fetchedItems}.`);
+            if (typeof fetchedItems === 'object' && fetchedItems !== null) {
+              if (Array.isArray(fetchedItems.data)) { currentAllItemsInDir = fetchedItems.data; }
+              else if (Array.isArray(fetchedItems.items)) { currentAllItemsInDir = fetchedItems.items; }
+              else if (Array.isArray(fetchedItems.files)) { currentAllItemsInDir = fetchedItems.files; }
+              else { throw new Error('Received object from getDirectoryContents, but could not find expected array property.'); }
+            } else { throw new Error(`Received unexpected non-array, non-object type from getDirectoryContents: ${typeof fetchedItems}.`); }
+            if (!Array.isArray(currentAllItemsInDir)) { throw new Error('Failed to extract array from object returned by getDirectoryContents.');}
+          } else {
+            currentAllItemsInDir = fetchedItems;
+          }
+          log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetched ${currentAllItemsInDir.length} items for directory ${modelFileDir}`);
+        } catch (error) {
+          log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Error fetching directory contents for ${modelFileDir}:`, error.message, error.stack, error.response?.status);
+          return null; // Cannot proceed without directory items
+        }
+      }
+    }
+
+    const modelFileBase = path.posix.basename(modelFile.filename, path.posix.extname(modelFile.filename));
+    let imageFile = null;
+    let jsonFile = null;
+
+    if (Array.isArray(currentAllItemsInDir)) {
+      for (const item of currentAllItemsInDir) {
+        if (item.type === 'file' && item.filename && typeof item.filename === 'string' && path.posix.dirname(item.filename) === modelFileDir) {
+          const itemBase = path.posix.basename(item.filename, path.posix.extname(item.filename));
+          const itemExt = path.posix.extname(item.filename).toLowerCase();
+
+          if (itemBase === modelFileBase) {
+            if (/\.(png|jpe?g|webp|gif)$/i.test(itemExt)) {
+              if (!imageFile) {
+                imageFile = item;
+                log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 找到关联图片 ${item.filename} for ${modelFile.filename}`);
+              }
+            } else if (itemExt === '.json') {
+              if (!jsonFile) {
+                jsonFile = item;
+                log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 找到关联 JSON ${item.filename} for ${modelFile.filename}`);
+              }
+            }
+          }
+        }
+      }
+    } else {
+      log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: currentAllItemsInDir is not an array for ${modelFile.filename}. Skipping file association.`);
+    }
+
+
+    let modelJsonInfo = {};
+    if (jsonFile) {
+      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 尝试读取 JSON 文件 ${jsonFile.filename}`);
+      try {
+        // jsonFile.filename is already a resolved path from getDirectoryContents
+        const jsonContent = await this.client.getFileContents(jsonFile.filename, { format: 'text' });
+        modelJsonInfo = JSON.parse(jsonContent);
+        log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 成功读取并解析 JSON ${jsonFile.filename}`);
+      } catch (error) {
+        log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 读取或解析 JSON 文件 ${jsonFile.filename} 时出错:`, error.message, error.stack, error.response?.status);
+        // modelJsonInfo 保持为 {}
+      }
+    } else {
+      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 模型 ${modelFile.filename} 没有关联的 JSON 文件`);
+    }
+
+    try {
+      const modelObj = createWebDavModelObject(
+        modelFile,
+        imageFile,
+        jsonFile,
+        modelJsonInfo,
+        currentSourceId,
+        currentResolvedBasePath
+      );
+      const duration = Date.now() - startTime;
+      log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 为 ${modelFile.filename} 创建模型对象完成, 耗时: ${duration}ms`);
+      return modelObj;
+    } catch (error) {
+      log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 调用 createWebDavModelObject 时出错 for ${modelFile.filename}:`, error.message, error.stack);
+      return null;
+    }
+  }
+
   async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
     const startTime = Date.now();
     await this.ensureInitialized();
-    const sourceId = sourceConfig ? sourceConfig.id : this.config.id; // Prefer sourceConfig.id if available
+    const sourceId = sourceConfig ? sourceConfig.id : this.config.id;
 
     const relativeStartPath = directory ? (directory.startsWith('/') ? directory : `/${directory}`) : '/';
     const resolvedStartPath = this._resolvePath(relativeStartPath);
-    const resolvedBasePath = this._resolvePath('/');
+    const resolvedBasePath = this._resolvePath('/'); // Base path for the source, used in createWebDavModelObject
 
-    log.info(`[WebDavDataSource][${sourceId}] 开始列出模型. SubDir: '${this.subDirectory}', RelativeDir: '${directory}', ResolvedStartPath: ${resolvedStartPath}, SupportedExts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, ShowSubDir: ${showSubdirectory}, SourceId: ${sourceId}`);
+    log.info(`[WebDavDataSource][${sourceId}] 开始列出模型 (新逻辑). SubDir: '${this.subDirectory}', RelativeDir: '${directory}', ResolvedStartPath: ${resolvedStartPath}, SupportedExts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, ShowSubDir: ${showSubdirectory}`);
 
     let allItems = [];
     try {
-      log.info(`[WebDavDataSource][${sourceId}] 开始列出文件 (递归受控于 showSubdirectory): ${resolvedStartPath}`);
-      allItems = await this._recursiveListAllFiles(resolvedStartPath, showSubdirectory); // Pass showSubdirectory
-      log.info(`[WebDavDataSource][${sourceId}] 递归列出文件完成: ${resolvedStartPath}, 共找到 ${allItems.length} 个文件项`);
-      // 打印 allItems 的前 5 个元素，检查内容和路径
+      log.info(`[WebDavDataSource][${sourceId}] 开始递归列出所有文件项: ${resolvedStartPath}, ShowSubDir: ${showSubdirectory}`);
+      allItems = await this._recursiveListAllFiles(resolvedStartPath, showSubdirectory);
+      log.info(`[WebDavDataSource][${sourceId}] 递归列出文件项完成: ${resolvedStartPath}, 共找到 ${allItems.length} 个项`);
       if (allItems.length > 0) {
-        log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles 返回的部分项目示例:`, allItems.slice(0, 5).map(item => ({ filename: item.filename, type: item.type, size: item.size, lastmod: item.lastmod })));
+        log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles 返回的部分项目示例:`, allItems.slice(0, 5).map(item => ({ filename: item.filename, type: item.type })));
       }
     } catch (error) {
       const duration = Date.now() - startTime;
-      log.error(`[WebDavDataSource][${sourceId}] 递归列出文件时出错: ${resolvedStartPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
-      // 检查是否是起始目录不存在
+      log.error(`[WebDavDataSource][${sourceId}] 递归列出文件项时出错: ${resolvedStartPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
       if (error.response && error.response.status === 404) {
-        log.warn(`[WebDavDataSource][${sourceId}] 列出模型失败 (起始目录不存在): ${resolvedStartPath}, 耗时: ${duration}ms`);
-        return []; // Directory doesn't exist
+        log.warn(`[WebDavDataSource][${sourceId}] 列出模型失败 (起始目录不存在): ${resolvedStartPath}`);
+        return [];
       }
-      // 对于其他错误，可以选择返回空列表或重新抛出
-      // return []; // 或者
       throw error;
     }
 
+    const modelFileItems = allItems.filter(item =>
+      item.type === 'file' && supportedExts.some(ext => item.filename.endsWith(ext))
+    );
 
-    // 使用 Map 按目录组织文件，方便查找关联文件
-    // Key: 目录路径 (posix), Value: { files: FileStat[], subDirs: string[] }
-    // const directoryMap = new Map(); // 这个 Map 暂时不需要，因为深度查询已获取所有文件
-
-    // 使用 Map 存储模型相关文件路径，Key: 模型基础名 (不含扩展名和路径), Value: { modelFile: FileStat, imageFile?: FileStat, jsonFile?: FileStat }
-    const modelFilesMap = new Map();
-    // 存储所有找到的 JSON 文件路径以供后续并行读取
-    const jsonPathsToRead = [];
-
-    for (const item of allItems) {
-      // ---> 日志点 2: 打印每个 item 的信息 <---
-      log.debug(`[WebDavDataSource][${sourceId}] 处理项: filename=${item.filename}, basename=${item.basename}, type=${item.type}, size=${item.size}, lastmod=${item.lastmod}`);
-      // 忽略根目录本身和可能存在的 . 或 .. 条目 (WebDAV 库通常会自动处理)
-      // if (item.filename === startPath || item.basename === '.' || item.basename === '..') {
-      //   continue;
-      // }
-
-      // 仅处理文件类型
-      if (item.type === 'file') {
-        const dirname = path.posix.dirname(item.filename);
-        const ext = path.posix.extname(item.filename);
-        const base = path.posix.basename(item.filename, ext);
-        const modelKey = `${dirname}/${base}`; // 使用目录+基础名作为唯一键
-
-        // 检查是否是模型文件
-        const isModelFile = supportedExts.some(supportedExt => item.filename.endsWith(supportedExt)); // 直接用 endsWith 匹配
-        // ---> 日志点 3: 打印模型文件判断结果 <---
-        log.debug(`[WebDavDataSource][${sourceId}] 文件: ${item.filename}, 是否模型文件 (${supportedExts.join(', ')}): ${isModelFile}`);
-
-        if (isModelFile) {
-          // ---> 日志点 4: 打印识别到的模型文件和 Key <---
-          log.info(`[WebDavDataSource][${sourceId}] 识别到模型文件: ${item.filename}, 生成 Key: ${modelKey}`);
-          if (!modelFilesMap.has(modelKey)) {
-            modelFilesMap.set(modelKey, { modelFile: item });
-          } else {
-            // 如果已存在模型文件，可能需要某种策略（例如，更新时间最新的？）
-            // 这里简单地覆盖，或者可以记录一个警告
-            log.warn(`[WebDavDataSource][${sourceId}] 发现重复的模型文件键，将覆盖: ${modelKey} with ${item.filename}`);
-            modelFilesMap.get(modelKey).modelFile = item; // 覆盖
-          }
-        }
-        // 检查是否是可能的封面图片文件
-        else if (/\.(png|jpe?g|webp|gif)$/i.test(ext)) { // 扩展图片格式检查
-          // --- 修复: 确保 key 存在再添加 imageFile ---
-          if (!modelFilesMap.has(modelKey)) {
-            modelFilesMap.set(modelKey, {}); // 如果 Key 不存在，先创建空对象
-          }
-          if (!modelFilesMap.get(modelKey).imageFile) { // 优先保留第一个找到的图片
-            modelFilesMap.get(modelKey).imageFile = item;
-            log.debug(`[WebDavDataSource][${sourceId}] Associated image ${item.filename} with key ${modelKey}`);
-          } else {
-            // log.debug(`[WebDavDataSource][${sourceId}] Model ${modelKey} already has an image ${modelFilesMap.get(modelKey).imageFile.filename}, skipping ${item.filename}`);
-          }
-        }
-        // 检查是否是 JSON 文件
-        else if (ext === '.json') {
-          // --- 修复: 确保 key 存在再添加 jsonFile ---
-          if (!modelFilesMap.has(modelKey)) {
-            modelFilesMap.set(modelKey, {}); // 如果 Key 不存在，先创建空对象
-          }
-          if (!modelFilesMap.get(modelKey).jsonFile) { // 优先保留第一个找到的 JSON
-            modelFilesMap.get(modelKey).jsonFile = item;
-            jsonPathsToRead.push(item.filename); // 添加到待读取列表
-            log.debug(`[WebDavDataSource][${sourceId}] Associated JSON ${item.filename} with key ${modelKey}`);
-          } else {
-            // log.debug(`[WebDavDataSource][${sourceId}] Model ${modelKey} already has a JSON ${modelFilesMap.get(modelKey).jsonFile.filename}, skipping ${item.filename}`);
-          }
-        }
-      } else if (item.type === 'directory') {
-        // 可以在这里处理目录信息，如果需要的话
-        // log.debug(`[WebDavDataSource][${sourceId}] Found directory: ${item.filename}`);
-      }
+    log.info(`[WebDavDataSource][${sourceId}] 从 ${allItems.length} 个总项目中筛选出 ${modelFileItems.length} 个潜在模型文件.`);
+    if (modelFileItems.length > 0) {
+      log.debug(`[WebDavDataSource][${sourceId}] 筛选出的模型文件示例:`, modelFileItems.slice(0, 5).map(f => f.filename));
     }
 
-    // 并行读取所有 JSON 文件内容
-    log.info(`[WebDavDataSource][${sourceId}] 开始并行读取 ${jsonPathsToRead.length} 个 JSON 文件`);
-    const jsonReadPromises = jsonPathsToRead.map(absoluteJsonPath => {
-      // Use the absolute path directly for reading from the server
-      log.debug(`[WebDavDataSource][${sourceId}] Preparing to read JSON: ${absoluteJsonPath}`);
-      // Calculate the relative path for use as the key and in the result
-      // Use the absolute path directly for reading from the server
-      // The key for jsonContentMap will be the absolute path for simplicity during this stage
-      return this.client.getFileContents(absoluteJsonPath, { format: 'text' })
-        .then(content => ({ status: 'fulfilled', absolutePath: absoluteJsonPath, content }))
-        .catch(error => ({ status: 'rejected', absolutePath: absoluteJsonPath, reason: error }));
-    });
 
-    const jsonResults = await Promise.allSettled(jsonReadPromises);
-    const jsonContentMap = new Map(); // Key: absoluteJsonPath, Value: parsed detail object (raw JSON object)
-
-    jsonResults.forEach(result => {
-      if (result.status === 'fulfilled' && result.value.status === 'fulfilled') {
-        const { absolutePath, content } = result.value;
-        try {
-          // For listModels, we need the raw JSON object, not the fully parsed model detail yet.
-          // modelParser.createWebDavModelObject expects modelJsonInfo (raw JSON data)
-          // So, we just parse the string to an object here.
-          const rawJsonInfo = JSON.parse(content);
-          jsonContentMap.set(absolutePath, rawJsonInfo);
-          log.debug(`[WebDavDataSource][${sourceId}] 成功读取并初步解析 JSON (raw): ${absolutePath}`);
-        } catch (parseError) {
-          log.error(`[WebDavDataSource][${sourceId}] 解析 JSON 文件内容 (raw) 时出错: ${absolutePath}`, parseError.message, parseError.stack);
-          jsonContentMap.set(absolutePath, {}); // Store empty object on parse failure
-        }
-      } else {
-        let failedPath = '未知路径';
-        let errorReason = '未知错误';
-        if (result.status === 'rejected') {
-          errorReason = result.reason;
-        } else { // result.status === 'fulfilled' but result.value.status === 'rejected'
-          failedPath = result.value.absolutePath || failedPath;
-          errorReason = result.value.reason;
-        }
-        log.error(`[WebDavDataSource][${sourceId}] 读取 WebDAV JSON 文件时出错: ${failedPath}`, errorReason?.message, errorReason?.stack, errorReason?.response?.status);
-        if (failedPath !== '未知路径') {
-          jsonContentMap.set(failedPath, {}); // Store empty object on read failure
-        }
-      }
-    });
-    log.info(`[WebDavDataSource][${sourceId}] JSON 文件并行读取完成. 尝试读取: ${jsonPathsToRead.length}, 成功解析或记录失败: ${jsonContentMap.size}`);
-
-
-    // 构建最终的模型列表
     const allModels = [];
-    // ---> 日志点 5: 打印 modelFilesMap 信息 <---
-    log.info(`[WebDavDataSource][${sourceId}] 开始构建模型列表. modelFilesMap 大小: ${modelFilesMap.size}`);
-    if (modelFilesMap.size > 0) {
-      log.debug(`[WebDavDataSource][${sourceId}] modelFilesMap Keys:`, Array.from(modelFilesMap.keys()));
-      // 打印 Map 的内容，检查 modelFile 是否正确关联
-      const mapContentDebug = {};
-      for (const [key, value] of modelFilesMap.entries()) {
-        mapContentDebug[key] = {
-          modelFile: value.modelFile?.filename,
-          imageFile: value.imageFile?.filename,
-          jsonFile: value.jsonFile?.filename,
-        };
-      }
-      log.debug(`[WebDavDataSource][${sourceId}] modelFilesMap 内容预览:`, JSON.stringify(mapContentDebug, null, 2));
-    }
-    for (const [modelKey, files] of modelFilesMap.entries()) {
-      // 确保有关联的模型文件才创建对象
-      if (!files.modelFile) {
-        log.warn(`[WebDavDataSource][${sourceId}] Model key ${modelKey} is missing modelFile, skipping.`);
-        continue;
-      }
+    const modelBuildPromises = [];
 
-      const { modelFile, imageFile, jsonFile } = files;
-      let modelJsonInfo = {}; // This will be the raw JSON object
-      // Lookup in jsonContentMap using the absolute path of the jsonFile
-      if (jsonFile && jsonContentMap.has(jsonFile.filename)) {
-        modelJsonInfo = jsonContentMap.get(jsonFile.filename);
-      } else if (jsonFile) {
-        log.warn(`[WebDavDataSource][${sourceId}] JSON file ${jsonFile.filename} not found or failed to parse in jsonContentMap.`);
-        // modelJsonInfo remains {}
-      } else {
-        log.debug(`[WebDavDataSource][${sourceId}] Model ${modelKey} has no associated JSON file.`);
-        // modelJsonInfo remains {}
-      }
+    for (const modelFile of modelFileItems) {
+      const modelFileDir = path.posix.dirname(modelFile.filename);
+      // 从 allItems 中筛选出与当前 modelFile 同目录的所有文件和文件夹
+      // 注意: _recursiveListAllFiles 返回的已经是扁平化的文件列表，所以这里主要是为了传递给 _buildModelEntry
+      // _buildModelEntry 内部会再次确认目录是否匹配
+      const allItemsInDirForModel = allItems.filter(item => path.posix.dirname(item.filename) === modelFileDir);
 
-      // createWebDavModelObject now expects modelJsonInfo (raw JSON data) as the fourth parameter
-      const modelObj = createWebDavModelObject(
-        modelFile,        // WebDAV file stat object for the model
-        imageFile,        // WebDAV file stat object for the image (optional)
-        jsonFile,         // WebDAV file stat object for the JSON (optional)
-        modelJsonInfo,    // Raw JSON data object from the .json file
-        sourceId,         // Source ID
-        resolvedBasePath  // Resolved base path for this source
+      log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目, 其所在目录 ${modelFileDir} 中有 ${allItemsInDirForModel.length} 个项目.`);
+      
+      // 直接调用并收集 Promise，后续并行处理
+      modelBuildPromises.push(
+        this._buildModelEntry(modelFile, allItemsInDirForModel, sourceId, resolvedBasePath)
       );
-      allModels.push(modelObj);
     }
+    
+    log.info(`[WebDavDataSource][${sourceId}] 开始并行构建 ${modelBuildPromises.length} 个模型条目.`);
+    const settledModelEntries = await Promise.allSettled(modelBuildPromises);
 
+    settledModelEntries.forEach(result => {
+      if (result.status === 'fulfilled' && result.value) {
+        allModels.push(result.value);
+        log.debug(`[WebDavDataSource][${sourceId}] 成功构建模型条目: ${result.value.name} (${result.value.path})`);
+      } else if (result.status === 'fulfilled' && !result.value) {
+        // _buildModelEntry returned null (e.g., createWebDavModelObject failed)
+        // Error already logged in _buildModelEntry
+        log.warn(`[WebDavDataSource][${sourceId}] _buildModelEntry 返回 null，跳过一个模型条目.`);
+      } else if (result.status === 'rejected') {
+        log.error(`[WebDavDataSource][${sourceId}] 构建模型条目时发生未捕获的错误:`, result.reason);
+      }
+    });
 
     const duration = Date.now() - startTime;
-    log.info(`[WebDavDataSource][${sourceId}] 列出模型完成: ${resolvedStartPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型 (通过深度查询)`);
+    log.info(`[WebDavDataSource][${sourceId}] 列出模型完成 (新逻辑): ${resolvedStartPath}, 耗时: ${duration}ms, 成功构建 ${allModels.length} 个模型 (总共尝试 ${modelFileItems.length} 个)`);
     return allModels;
   }
 
@@ -394,7 +378,7 @@ class WebDavDataSource extends DataSource {
     }
   }
 
-  async readModelDetail(identifier, fileName, sourceId) {
+  async readModelDetail(identifier, modelFileName, sourceId) {
     const startTime = Date.now();
     await this.ensureInitialized();
     const currentSourceId = sourceId;
