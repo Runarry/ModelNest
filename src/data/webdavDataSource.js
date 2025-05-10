@@ -378,10 +378,10 @@ class WebDavDataSource extends DataSource {
     }
   }
 
-  async readModelDetail(identifier, modelFileName, sourceId) {
+  async readModelDetail(identifier, modelFileName, passedSourceId) { // modelFileName is not strictly needed if identifier is the primary key
     const startTime = Date.now();
     await this.ensureInitialized();
-    const currentSourceId = sourceId;
+    const currentSourceId = passedSourceId || this.config.id;
 
     log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Entry. Identifier: '${identifier}'`);
 
@@ -391,200 +391,68 @@ class WebDavDataSource extends DataSource {
     }
 
     let modelFileRelativePath;
-    let jsonFileRelativePath;
-    let modelFileBaseName; // Basename of the model file, e.g., "model" (without ext)
-    let modelFileExt;      // Extension of the model file, e.g., ".safetensors"
-    // const modelFileNameWithExt; // Basename with extension, e.g., "model.safetensors"
-
+    // Determine the modelFileRelativePath from the identifier
     const identifierExt = path.posix.extname(identifier).toLowerCase();
     const identifierBaseNameWithoutExt = path.posix.basename(identifier, identifierExt);
     const identifierDir = path.posix.dirname(identifier);
 
     const supportedModelExts = Array.isArray(this.config.supportedExts) && this.config.supportedExts.length > 0
       ? this.config.supportedExts
-      : ['.safetensors', '.ckpt', '.pt', '.bin', '.pth', '.lora', '.onnx']; // Default if not configured
+      : ['.safetensors', '.ckpt', '.pt', '.bin', '.pth', '.lora', '.onnx'];
 
     if (identifierExt === '.json') {
-      jsonFileRelativePath = identifier;
-      modelFileBaseName = identifierBaseNameWithoutExt;
-      // Try to find the corresponding model file
+      // Identifier is a JSON file, try to find a corresponding model file
+      let foundModel = false;
       for (const ext of supportedModelExts) {
-        const potentialModelPath = path.posix.join(identifierDir, `${modelFileBaseName}${ext}`);
+        const potentialModelPath = path.posix.join(identifierDir, `${identifierBaseNameWithoutExt}${ext}`);
+        // Check if this potential model file exists. _statIfExists returns a stat object or null.
+        // We need the stat object for _buildModelEntry.
         const stat = await this._statIfExists(potentialModelPath);
         if (stat) {
-          modelFileRelativePath = potentialModelPath;
-          modelFileExt = ext;
-          break;
+          modelFileRelativePath = potentialModelPath; // This is the relative path
+          // modelFileStat will be the actual FileStat object for the model file
+          // _buildModelEntry expects a FileStat object whose .filename is the *resolved* server path
+          // So, we pass `stat` directly to _buildModelEntry.
+          foundModel = true;
+          break; // Found the model file
         }
       }
-      if (!modelFileRelativePath) {
+      if (!foundModel) {
         log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] JSON path '${identifier}' provided, but no corresponding model file found with supported extensions.`);
         return {};
       }
     } else if (supportedModelExts.includes(identifierExt)) {
+      // Identifier is a model file
       modelFileRelativePath = identifier;
-      modelFileExt = identifierExt;
-      modelFileBaseName = identifierBaseNameWithoutExt;
-      jsonFileRelativePath = path.posix.join(identifierDir, `${modelFileBaseName}.json`);
     } else {
       log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Identifier '${identifier}' is not a recognized model file extension nor a .json file.`);
       return {};
     }
 
-    log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Determined paths: Model='${modelFileRelativePath}', JSON='${jsonFileRelativePath || 'N/A'}'`);
-
-    let modelJsonInfo = {};
-    let jsonSucceeded = false;
-    let jsonFileStat = null;
-    let jsonContentStringForParser = ''; // Store the string content for the parser
-
-    if (jsonFileRelativePath) {
-      const resolvedJsonPath = this._resolvePath(jsonFileRelativePath);
-      log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Attempting to read JSON: ${resolvedJsonPath}`);
-      try {
-        jsonFileStat = await this._statIfExists(jsonFileRelativePath);
-        if (jsonFileStat) {
-          jsonContentStringForParser = await this.client.getFileContents(resolvedJsonPath, { format: 'text' });
-          log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] JSON content (length: ${jsonContentStringForParser.length}): ${jsonContentStringForParser.substring(0, 200)}${jsonContentStringForParser.length > 200 ? '...' : ''}`);
-          modelJsonInfo = JSON.parse(jsonContentStringForParser);
-          jsonSucceeded = true;
-        } else {
-          log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] JSON file ${jsonFileRelativePath} (resolved: ${resolvedJsonPath}) not found.`);
-        }
-      } catch (e) {
-        log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Failed to read or parse JSON file ${resolvedJsonPath}:`, e.message, e.response?.status);
-        // modelJsonInfo remains {}, jsonSucceeded is false, jsonContentStringForParser remains empty
-      }
-    }
-
+    // At this point, modelFileRelativePath should be the relative path to the actual model file.
+    // We need the FileStat object for this model file to pass to _buildModelEntry.
+    // The FileStat object's 'filename' property should be the *resolved* path on the server.
     const modelFileStat = await this._statIfExists(modelFileRelativePath);
+
     if (!modelFileStat) {
-      log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Critical: Model file '${modelFileRelativePath}' not found or inaccessible.`);
+      log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Critical: Model file '${modelFileRelativePath}' (from identifier '${identifier}') not found or inaccessible.`);
       return {};
     }
 
-    let coverImageRelativePath = '';
-    let imageFileStat = null;
-    const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
-
-    if (jsonSucceeded && modelJsonInfo && typeof modelJsonInfo === 'object') {
-      const modelDir = path.posix.dirname(modelFileRelativePath);
-      let imagePathFromJson = null;
-
-      if (modelJsonInfo.images && Array.isArray(modelJsonInfo.images) && modelJsonInfo.images.length > 0) {
-        const firstImageInfo = modelJsonInfo.images[0];
-        if (firstImageInfo && typeof firstImageInfo.url === 'string') {
-          imagePathFromJson = firstImageInfo.url;
-        }
-      } else if (typeof modelJsonInfo.cover_image_url === 'string') {
-        imagePathFromJson = modelJsonInfo.cover_image_url;
-      } else if (typeof modelJsonInfo.image === 'string') {
-        imagePathFromJson = modelJsonInfo.image;
-      }
-
-
-      if (imagePathFromJson) {
-        let potentialCoverPath = '';
-        if (imagePathFromJson.startsWith('http://') || imagePathFromJson.startsWith('https://')) {
-          log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Image path from JSON is an external URL, cannot use for cover: ${imagePathFromJson}`);
-        } else if (imagePathFromJson.startsWith('/')) {
-          potentialCoverPath = imagePathFromJson;
-        } else {
-          potentialCoverPath = path.posix.join(modelDir, imagePathFromJson);
-        }
-
-        if (potentialCoverPath) {
-          const stat = await this._statIfExists(potentialCoverPath);
-          if (stat) {
-            coverImageRelativePath = potentialCoverPath;
-            imageFileStat = stat;
-            log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Found cover image from JSON: ${coverImageRelativePath}`);
-          } else {
-            log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Image path from JSON '${imagePathFromJson}' (resolved to '${potentialCoverPath}') not found.`);
-          }
-        }
-      }
-    }
-
-    if (!coverImageRelativePath) {
-      const modelDir = path.posix.dirname(modelFileRelativePath);
-      for (const imgExt of imageExtensions) {
-        const potentialImagePath = path.posix.join(modelDir, `${modelFileBaseName}${imgExt}`);
-        const stat = await this._statIfExists(potentialImagePath);
-        if (stat) {
-          coverImageRelativePath = potentialImagePath;
-          imageFileStat = stat;
-          log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Found cover image by convention: ${coverImageRelativePath}`);
-          break;
-        }
-      }
-    }
-
-    let detail = {};
-    const modelFileInfoForParser = {
-      name: modelFileBaseName,
-      file: modelFileRelativePath,
-      jsonPath: jsonFileRelativePath || '',
-      ext: modelFileExt,
-    };
-
-    if (jsonSucceeded && jsonContentStringForParser) {
-      detail = parseModelDetailFromJsonContent(jsonContentStringForParser, currentSourceId, modelFileInfoForParser);
-    } else {
-      // JSON failed, was empty, or content string is not available.
-      // Initialize detail with basic info that parseModelDetailFromJsonContent would set.
-      detail = {
-        name: modelFileBaseName,
-        file: modelFileRelativePath,
-        jsonPath: jsonFileRelativePath || '',
-        sourceId: currentSourceId,
-        image: '', // Will be set later
-        modelType: modelFileExt.replace('.', '').toUpperCase() || 'UNKNOWN',
-        baseModel: '',
-        description: '',
-        triggerWord: '',
-        tags: [],
-        modelJsonInfo: {}, // No valid JSON info
-      };
-      log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] JSON not available or failed. Initializing detail with basic model file info.`);
-    }
-
-    detail.id = `${currentSourceId}_${modelFileRelativePath.replace(/[.\/\\]/g, '_')}`;
-    detail.name = modelFileBaseName; // Already set by parser or above
-    detail.fileName = path.posix.basename(modelFileRelativePath);
-    detail.sourceId = currentSourceId;
-    detail.path = modelFileRelativePath; // Already set
-    detail.jsonPath = jsonFileRelativePath || ''; // Already set
-
-    detail.coverImage = coverImageRelativePath || '';
-
-    if (modelFileStat) {
-      detail.fileSize = modelFileStat.size;
-      detail.lastModified = modelFileStat.lastmod ? new Date(modelFileStat.lastmod).getTime() : undefined;
-    }
-
-    // Ensure modelType is robustly set if parser didn't or if no JSON
-    if (!detail.modelType || detail.modelType === 'UNKNOWN') {
-      detail.modelType = modelFileExt.replace('.', '').toUpperCase() || 'UNKNOWN';
-    }
-    // Ensure other fields have defaults if not from JSON or parser
-    detail.baseModel = detail.baseModel || '';
-    detail.description = detail.description || '';
-    detail.triggerWord = detail.triggerWord || '';
-    detail.tags = Array.isArray(detail.tags) ? detail.tags : [];
-    // modelJsonInfo is set by parser or to {} if no JSON
-    detail.modelJsonInfo = (jsonSucceeded && Object.keys(modelJsonInfo).length > 0) ? modelJsonInfo : {};
-
+    // Now call _buildModelEntry.
+    // modelFileStat already contains the resolved filename.
+    // Pass null for allItemsInDir and resolvedBasePath to trigger their dynamic fetching/calculation within _buildModelEntry.
+    const modelDetail = await this._buildModelEntry(modelFileStat, null, currentSourceId, null);
 
     const duration = Date.now() - startTime;
-    if (Object.keys(detail).length > 0 && detail.name) {
-      log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Successfully processed model detail for: '${detail.fileName}'. Duration: ${duration}ms.`);
-      // log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Result detail:`, JSON.stringify(detail, null, 2));
+    if (modelDetail && modelDetail.name) {
+      log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Successfully processed model detail for: '${modelDetail.fileName || identifier}'. Duration: ${duration}ms.`);
+      // log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Result detail:`, JSON.stringify(modelDetail, null, 2));
+      return modelDetail;
     } else {
-      log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Failed to get sufficient model detail for identifier: '${identifier}'. Duration: ${duration}ms. Returning empty object.`);
+      log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Failed to get sufficient model detail for identifier: '${identifier}' using _buildModelEntry. Duration: ${duration}ms. Returning empty object.`);
       return {};
     }
-    return detail;
   }
 
   async getImageData(relativePath) {
