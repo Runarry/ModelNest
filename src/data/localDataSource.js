@@ -4,7 +4,6 @@ const path = require('path');
 const log = require('electron-log');
 const crypto = require('crypto'); // 引入 crypto 模块
 const DataSource = require('./baseDataSource'); // 导入新的基类
-const ModelInfoCacheService = require('../services/modelInfoCacheService'); // 新增：导入缓存服务
 
 // 本地数据源实现
 class LocalDataSource extends DataSource {
