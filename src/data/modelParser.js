@@ -132,9 +132,9 @@ async function findImageForModel(dir, modelNameWithoutExt, filesInDir) {
 }
 
 // 解析单个本地模型文件，返回标准模型对象
-async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false) {
+async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false, preloadedModelJsonInfo = null, preloadedJsonFileStats = null) {
   const sourceId = sourceConfig.id || 'local';
-  log.debug(`[modelParser] 解析单个模型文件: ${modelFullPath}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}`);
+  log.debug(`[modelParser] 解析单个模型文件: ${modelFullPath}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}, preloadedModelJsonInfo: ${!!preloadedModelJsonInfo}`);
 
   try {
     await fs.stat(modelFullPath); // 异步检查文件是否存在和可访问
@@ -176,14 +176,18 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
   const jsonFullPath = jsonFileName ? path.join(dir, jsonFileName) : '';
 
   let modelObj = {};
-  let jsonContent = '{}'; // 默认为空JSON字符串
+  let parsedJsonData = {}; // 用于存储解析后的 JSON 对象
 
-  if (jsonFullPath) {
+  if (preloadedModelJsonInfo) {
+    log.debug(`[modelParser] 使用预加载的 modelJsonInfo for ${modelFullPath}`);
+    parsedJsonData = preloadedModelJsonInfo;
+  } else if (jsonFullPath) {
     try {
-      jsonContent = await fs.readFile(jsonFullPath, 'utf-8');
+      const jsonFileContentString = await fs.readFile(jsonFullPath, 'utf-8');
+      parsedJsonData = _parseJsonContentToRawInfo(jsonFileContentString);
     } catch (e) {
-      log.error(`[modelParser] 读取模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
-      // jsonContent 保持 '{}'
+      log.error(`[modelParser] 读取或解析模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
+      // parsedJsonData 保持 {}
     }
   }
   
@@ -194,9 +198,9 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
     ext: modelFileExt // 传递模型文件扩展名用于 modelType 推断
   };
 
-  // 调用 parseModelDetailFromJsonContent
+  // 调用 parseModelDetailFromJsonContent，传递已解析的 JSON 对象
   // sourceId 用于填充 modelBaseInfo.sourceId
-  modelObj = parseModelDetailFromJsonContent(jsonContent, sourceId, modelFileInfo);
+  modelObj = parseModelDetailFromJsonContent(parsedJsonData, sourceId, modelFileInfo);
   
   // 确保顶层 image 路径被正确设置
   modelObj.image = imageFullPath;
@@ -215,12 +219,13 @@ function _parseJsonContentToRawInfo(jsonContentString) {
   }
 }
 
-// 修改：从 JSON 内容和文件信息解析模型详情
+// 修改：从已解析的 JSON 对象和文件信息解析模型详情
 // modelFileInfo: { name: string (不含扩展名), file: string (完整路径), jsonPath: string (完整路径), ext: string (模型文件扩展名) }
-function parseModelDetailFromJsonContent(jsonContentString, sourceIdentifier, modelFileInfo) {
-  log.debug(`[ModelParser parseModelDetailFromJsonContent] Entry. jsonContentString (length: ${jsonContentString?.length}), sourceIdentifier: ${sourceIdentifier}, modelFileInfo:`, JSON.stringify(modelFileInfo));
-  const modelJsonInfo = _parseJsonContentToRawInfo(jsonContentString);
-  log.debug('[ModelParser parseModelDetailFromJsonContent] modelJsonInfo from _parseJsonContentToRawInfo:', modelJsonInfo ? Object.keys(modelJsonInfo) : 'null/undefined');
+function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, modelFileInfo) {
+  log.debug(`[ModelParser parseModelDetailFromJsonContent] Entry. parsedJsonInfo (keys: ${parsedJsonInfo ? Object.keys(parsedJsonInfo).join(', ') : 'null/undefined'}), sourceIdentifier: ${sourceIdentifier}, modelFileInfo:`, JSON.stringify(modelFileInfo));
+  // const modelJsonInfo = _parseJsonContentToRawInfo(jsonContentString); // No longer needed, parsedJsonInfo is the object
+  const modelJsonInfo = parsedJsonInfo || {}; // Ensure modelJsonInfo is an object
+  log.debug('[ModelParser parseModelDetailFromJsonContent] Using provided parsedJsonInfo:', modelJsonInfo ? Object.keys(modelJsonInfo) : 'null/undefined');
 
   const modelBaseInfo = {
     name: modelFileInfo.name,
@@ -307,11 +312,11 @@ function _getRelativePath(absolutePath, basePath) {
 }
 
 // 新增：为 WebDAV 数据源创建模型对象
-function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, modelJsonInfo, sourceId, resolvedBasePath) {
+function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, parsedJsonInfo, sourceId, resolvedBasePath) {
   // modelFileItem: { filename: string, basename: string, size: number, lastmod: string, ... }
   // imageFileItem: { filename: string, ... } (optional)
   // jsonFileItem: { filename: string, ... } (optional)
-  // modelJsonInfo: 原始 JSON 解析结果
+  // parsedJsonInfo: 原始 JSON 解析结果 (对象)
   // sourceId: string
   // resolvedBasePath: string (用于计算相对路径)
 
@@ -323,40 +328,28 @@ function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, mod
   const imageFileRelativePath = imageFileItem ? _getRelativePath(imageFileItem.filename, resolvedBasePath) : '';
   const jsonFileRelativePath = jsonFileItem ? _getRelativePath(jsonFileItem.filename, resolvedBasePath) : '';
   
-  const modelBaseInfo = {
-    name: modelNameWithoutExt,
-    file: modelFileRelativePath,
-    jsonPath: jsonFileRelativePath,
-    sourceId: sourceId,
-    image: imageFileRelativePath,
-    modelType: '', // 将在下面处理
-    baseModel: '', // 将在下面处理
-    description: (modelJsonInfo.description || '').toString(),
-    triggerWord: (modelJsonInfo.triggerWord || '').toString(),
-    tags: Array.isArray(modelJsonInfo.tags) ? modelJsonInfo.tags : [],
-    size: modelFileItem.size,
-    lastModified: modelFileItem.lastmod ? new Date(modelFileItem.lastmod) : undefined, // 确保 lastmod 存在
+  const modelFileInfoForDetail = {
+      name: modelNameWithoutExt,
+      file: modelFileRelativePath, // WebDAV uses relative paths here
+      jsonPath: jsonFileRelativePath,
+      ext: modelFileExt
   };
 
-  // 处理 modelType
-  if (modelJsonInfo.modelType && typeof modelJsonInfo.modelType === 'string') {
-    modelBaseInfo.modelType = modelJsonInfo.modelType.trim();
-  } else {
-    modelBaseInfo.modelType = modelFileExt.replace('.', '').toUpperCase() || 'UNKNOWN';
-  }
+  // 调用已修改的 parseModelDetailFromJsonContent
+  // 它现在期望第一个参数是已解析的 JSON 对象
+  const modelObjFromDetail = parseModelDetailFromJsonContent(parsedJsonInfo, sourceId, modelFileInfoForDetail);
 
-  // 处理 baseModel (兼容 basic)
-  let rawBaseModel = modelJsonInfo.baseModel || modelJsonInfo.basic;
-  if (rawBaseModel && typeof rawBaseModel === 'string') {
-    modelBaseInfo.baseModel = rawBaseModel.trim();
-  } else {
-    modelBaseInfo.baseModel = ''; // 默认值
-  }
+  // 补充或覆盖 parseModelDetailFromJsonContent 返回对象中的字段
+  // (parseModelDetailFromJsonContent 已经处理了 name, file, jsonPath, sourceId, modelType, baseModel, description, triggerWord, tags)
+  // 我们需要确保 image, size, lastModified 被正确设置或覆盖
+  modelObjFromDetail.image = imageFileRelativePath; // 确保 image 被设置
+  modelObjFromDetail.size = modelFileItem.size;
+  modelObjFromDetail.lastModified = modelFileItem.lastmod ? new Date(modelFileItem.lastmod) : undefined;
+  
+  // modelJsonInfo 已经由 parseModelDetailFromJsonContent 嵌套
+  // modelObjFromDetail.modelJsonInfo = parsedJsonInfo; // This is already handled inside parseModelDetailFromJsonContent
 
-  return {
-    ...modelBaseInfo,
-    modelJsonInfo: modelJsonInfo,
-  };
+  return modelObjFromDetail;
 }
 
 
