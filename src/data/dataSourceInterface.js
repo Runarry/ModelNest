@@ -237,10 +237,7 @@ async function readModelDetail(sourceConfig, jsonPath, modelFilePath) {
         log.error('[DataSourceInterface] readModelDetail called with invalid sourceConfig:', sourceConfig);
         throw new Error('Invalid source configuration provided (missing type or id).');
     }
-     if (!jsonPath) {
-        log.error('[DataSourceInterface] readModelDetail called with invalid jsonPath:', jsonPath);
-        throw new Error('Invalid jsonPath provided for reading model detail.');
-    }
+
 
     const sourceId = sourceConfig.id;
     log.info(`[DataSourceInterface] Attempting to read model detail for sourceId: ${sourceId}, path: ${jsonPath}`);
@@ -249,7 +246,7 @@ async function readModelDetail(sourceConfig, jsonPath, modelFilePath) {
         // 获取数据源实例
         const ds = getDataSourceInstance(sourceConfig);
         // 调用标准接口方法
-        const detail = await ds.readModelDetail(jsonPath, modelFilePath, sourceConfig.id);
+        const detail = await ds.readModelDetail(jsonPath||"", modelFilePath, sourceConfig.id);
         log.debug('[DataSourceInterface readModelDetail] modelObj from concrete data source:', JSON.stringify(detail, null, 2));
         const duration = Date.now() - startTime;
         log.info(`[DataSourceInterface] Successfully read model detail for sourceId: ${sourceId}, path: ${jsonPath}. 耗时: ${duration}ms`);

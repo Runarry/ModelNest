@@ -174,7 +174,7 @@ class ModelInfoCacheService {
                 
                 // Return all relevant metadata for the caller (ModelService) to validate
                 return {
-                    data: JSON.parse(JSON.stringify(data)), // Deep clone
+                    data: structuredClone(data), // Deep clone
                     timestamp,
                     ttlMs: effectiveTtlMs,
                     sourceJsonStats, // Will be undefined if not set (e.g., for listModels)
@@ -205,7 +205,7 @@ class ModelInfoCacheService {
         }
 
         const itemTtlMs = options.ttlMs || this.l1TtlMs; // Use provided TTL or default L1 TTL
-        const clonedValue = JSON.parse(JSON.stringify(value));
+        const clonedValue = structuredClone(value);
         
         const cacheEntry = {
             data: clonedValue,
