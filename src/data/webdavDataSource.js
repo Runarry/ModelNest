@@ -10,7 +10,7 @@ class WebDavDataSource extends DataSource {
     // Store the subDirectory, remove trailing slash if present, default to empty string
     this.subDirectory = (config.subDirectory || '').replace(/\/$/, '');
     log.info(`[WebDavDataSource][${this.config.id}] Initialized with subDirectory: '${this.subDirectory}'`);
-    this._allItemsCache = new Map(); // 初始化 allItems 缓存
+    this._allItemsCache = []; // 初始化 allItems 缓存为数组
     this._lastRefreshedFromRootPath = null; // 跟踪上次从根路径刷新的时间或标识
     this.initialized = this.initClient(config);
     this.cacheServer = modelInfoCacheService;
@@ -95,18 +95,17 @@ class WebDavDataSource extends DataSource {
   }
 
   /**
-   * Non-recursively lists all files starting from a given base path using a queue.
-   * Populates this._allItemsCache with the direct contents of each scanned directory.
+   * Recursively populates this._allItemsCache (Array) with relative file paths.
    * @param {string} basePathToScan The fully resolved path on the server to start listing from.
-   * @param {boolean} scanSubdirectories If true, will scan subdirectories.
-   * @returns {Promise<Array<object>>} A promise resolving to a flat array of all file stat objects found.
    */
-  async _recursiveListAllFiles(basePathToScan, scanSubdirectories = true) {
+  async _populateAllItemsCache(basePathToScan) {
     const sourceId = this.config.id;
-    log.info(`[WebDavDataSource][${sourceId}] Starting non-recursive file listing from: ${basePathToScan}, ScanSubdirs: ${scanSubdirectories}`);
-    const allFilesFound = [];
+    log.info(`[WebDavDataSource][${sourceId}] Starting to populate _allItemsCache (Array) from: ${basePathToScan}`);
+    this._allItemsCache = []; // Ensure starting with an empty array
+
     const queue = [basePathToScan];
-    const visited = new Set(); // To avoid processing the same directory multiple times if symlinks or weird structures exist
+    const visited = new Set();
+    const sourceRoot = this._resolvePath('/'); // Get the resolved root of the WebDAV source
 
     while (queue.length > 0) {
       const currentPath = queue.shift();
@@ -117,11 +116,83 @@ class WebDavDataSource extends DataSource {
 
       let itemsInDir = [];
       try {
-        // log.debug(`[WebDavDataSource][${sourceId}] Fetching contents for directory: ${currentPath}`); // Verbose
         itemsInDir = await this.client.getDirectoryContents(currentPath, { deep: false, details: true });
 
         if (!Array.isArray(itemsInDir)) {
-          log.warn(`[WebDavDataSource][${sourceId}] getDirectoryContents for ${currentPath} did not return an array. Received: ${typeof itemsInDir}.`);
+          log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: getDirectoryContents for ${currentPath} did not return an array. Received: ${typeof itemsInDir}.`);
+          if (typeof itemsInDir === 'object' && itemsInDir !== null) {
+            if (Array.isArray(itemsInDir.data)) { itemsInDir = itemsInDir.data; }
+            else if (Array.isArray(itemsInDir.items)) { itemsInDir = itemsInDir.items; }
+            else if (Array.isArray(itemsInDir.files)) { itemsInDir = itemsInDir.files; }
+            else { throw new Error('Received object, but could not find expected array property.'); }
+          } else { throw new Error(`Received unexpected non-array, non-object type: ${typeof itemsInDir}.`); }
+          if (!Array.isArray(itemsInDir)) { throw new Error('Failed to extract array from object.'); }
+        }
+      } catch (error) {
+        log.error(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
+        if (error.response && (error.response.status === 404 || error.response.status === 403)) {
+          log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
+        }
+        continue;
+      }
+
+      for (const item of itemsInDir) {
+        if (item.basename === '.' || item.basename === '..') continue;
+
+        if (item.type === 'file') {
+          let relativeFilePath = item.filename;
+          if (relativeFilePath.startsWith(sourceRoot)) {
+            relativeFilePath = relativeFilePath.substring(sourceRoot.length);
+            // If sourceRoot itself is '/', item.filename like '/file.txt' becomes 'file.txt'
+            // If sourceRoot is '/dir/', item.filename like '/dir/file.txt' becomes 'file.txt'
+            // This logic ensures paths are relative to the effective root of the source.
+            if (sourceRoot === '/' && item.filename.startsWith('/')) { // Handles root being literally '/'
+                 // No change needed if sourceRoot is '/', substring(sourceRoot.length) already handles it.
+            } else if (sourceRoot.endsWith('/') && relativeFilePath.startsWith('/')) { // Avoid double slash if sourceRoot ends with / and relative starts with /
+                relativeFilePath = relativeFilePath.substring(1);
+            }
+          } else {
+            log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: File ${item.filename} does not start with source root ${sourceRoot}. Storing full path as fallback, but this might be an issue.`);
+          }
+          this._allItemsCache.push(relativeFilePath);
+        } else if (item.type === 'directory') {
+          if (item.filename && !visited.has(item.filename)) {
+            queue.push(item.filename);
+          }
+        }
+      }
+    }
+    log.info(`[WebDavDataSource][${sourceId}] _populateAllItemsCache complete. Found ${this._allItemsCache.length} file paths.`);
+  }
+ 
+  /**
+   * Non-recursively lists all files starting from a given base path using a queue.
+   * This method NO LONGER populates the old Map-based _allItemsCache.
+   * It returns a flat array of all file stat objects found for the given scope.
+   * @param {string} basePathToScan The fully resolved path on the server to start listing from.
+   * @param {boolean} scanSubdirectories If true, will scan subdirectories.
+   * @returns {Promise<Array<object>>} A promise resolving to a flat array of all file stat objects found.
+   */
+  async _recursiveListAllFiles(basePathToScan, scanSubdirectories = true) {
+    const sourceId = this.config.id;
+    log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: Path: ${basePathToScan}, ScanSubdirs: ${scanSubdirectories}`);
+    const allFilesFound = [];
+    const queue = [basePathToScan];
+    const visited = new Set(); // To avoid processing the same directory multiple times if symlinks or weird structures exist
+ 
+    while (queue.length > 0) {
+      const currentPath = queue.shift();
+      if (visited.has(currentPath)) {
+        continue;
+      }
+      visited.add(currentPath);
+ 
+      let itemsInDir = [];
+      try {
+        itemsInDir = await this.client.getDirectoryContents(currentPath, { deep: false, details: true });
+ 
+        if (!Array.isArray(itemsInDir)) {
+          log.warn(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: getDirectoryContents for ${currentPath} did not return an array. Received: ${typeof itemsInDir}.`);
           // Attempt to recover if it's a common wrapper object
           if (typeof itemsInDir === 'object' && itemsInDir !== null) {
             if (Array.isArray(itemsInDir.data)) { itemsInDir = itemsInDir.data; }
@@ -131,12 +202,10 @@ class WebDavDataSource extends DataSource {
           } else { throw new Error(`Received unexpected non-array, non-object type: ${typeof itemsInDir}.`); }
           if (!Array.isArray(itemsInDir)) { throw new Error('Failed to extract array from object.');}
         }
-        // log.debug(`[WebDavDataSource][${sourceId}] Fetched ${itemsInDir.length} items from ${currentPath}`); // Verbose
-        this._allItemsCache.set(currentPath, itemsInDir); // Cache the direct contents of this directory
-        // log.debug(`[WebDavDataSource][${sourceId}] Cached ${itemsInDir.length} items for directory ${currentPath}. Cache size: ${this._allItemsCache.size}`); // Verbose
-
+        // REMOVED: this._allItemsCache.set(currentPath, itemsInDir); // No longer populates the old Map cache
+ 
       } catch (error) {
-        log.error(`[WebDavDataSource][${sourceId}] Error fetching/caching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
+        log.error(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
         if (error.response && (error.response.status === 404 || error.response.status === 403)) {
           log.warn(`[WebDavDataSource][${sourceId}] Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
         }
@@ -156,7 +225,7 @@ class WebDavDataSource extends DataSource {
         }
       }
     }
-    log.info(`[WebDavDataSource][${sourceId}] Non-recursive listing from ${basePathToScan} complete. Found ${allFilesFound.length} files. Cache has ${this._allItemsCache.size} entries.`);
+    log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles from ${basePathToScan} complete. Found ${allFilesFound.length} file objects.`);
     return allFilesFound;
   }
 
@@ -253,46 +322,34 @@ class WebDavDataSource extends DataSource {
 
     // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 开始处理模型文件 ${modelFile.filename}. Passed params: allItemsInDir? ${!!passedAllItemsInDir}, resolvedBasePath? ${!!passedResolvedBasePath}, sourceId? ${!!passedSourceId}`); // Removed: Too verbose
 
-    // 尝试从缓存中获取同目录文件
-    if (this._allItemsCache && this._allItemsCache.has(modelFileDir)) {
-      currentAllItemsInDir = this._allItemsCache.get(modelFileDir);
-      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache hit for directory ${modelFileDir}. Found ${currentAllItemsInDir.length} items.`); // Removed: Too verbose
-    } else {
-      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Cache miss for directory ${modelFileDir}. Passed allItemsInDir is ${passedAllItemsInDir ? 'present' : 'absent'}.`); // Removed: Too verbose
-      // 如果 passedAllItemsInDir 存在，则使用它 (这主要用于 listModels 首次构建时)
-      // 否则，如果缓存未命中且没有传递 allItemsInDir (例如从 readModelDetail 调用)，则需要获取
-      if (!passedAllItemsInDir) {
-        log.info(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: allItemsInDir not provided and cache miss for ${modelFile.filename}. Fetching directory contents for ${modelFileDir}.`);
-        try {
-          const fetchedItems = await this.client.getDirectoryContents(modelFileDir, { deep: false, details: true });
-          if (!Array.isArray(fetchedItems)) {
-            log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: getDirectoryContents for ${modelFileDir} did not return an array. Received: ${typeof fetchedItems}.`);
-            if (typeof fetchedItems === 'object' && fetchedItems !== null) {
-              if (Array.isArray(fetchedItems.data)) { currentAllItemsInDir = fetchedItems.data; }
-              else if (Array.isArray(fetchedItems.items)) { currentAllItemsInDir = fetchedItems.items; }
-              else if (Array.isArray(fetchedItems.files)) { currentAllItemsInDir = fetchedItems.files; }
-              else { throw new Error('Received object from getDirectoryContents, but could not find expected array property.'); }
-            } else { throw new Error(`Received unexpected non-array, non-object type from getDirectoryContents: ${typeof fetchedItems}.`); }
-            if (!Array.isArray(currentAllItemsInDir)) { throw new Error('Failed to extract array from object returned by getDirectoryContents.');}
-          } else {
-            currentAllItemsInDir = fetchedItems;
-          }
-          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Fetched ${currentAllItemsInDir.length} items for directory ${modelFileDir}`); // Removed: Too verbose
-          // 将获取到的数据存入缓存，以备后续同一目录的其他模型使用
-          if (this._allItemsCache) { // 确保缓存对象存在
-             this._allItemsCache.set(modelFileDir, currentAllItemsInDir);
-             // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Stored fetched items for ${modelFileDir} into _allItemsCache.`); // Removed: Too verbose
-          }
-        } catch (error) {
-          log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Error fetching directory contents for ${modelFileDir}:`, error.message, error.stack, error.response?.status);
-          return null; // Cannot proceed without directory items
+    // currentAllItemsInDir is initialized from passedAllItemsInDir (line 317)
+    // If passedAllItemsInDir was null or undefined, currentAllItemsInDir will be null/undefined, triggering the fetch.
+    if (currentAllItemsInDir === null || typeof currentAllItemsInDir === 'undefined') {
+      log.info(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: allItemsInDir not provided for ${modelFile.filename}. Fetching directory contents for ${modelFileDir}.`);
+      try {
+        const fetchedItems = await this.client.getDirectoryContents(modelFileDir, { deep: false, details: true });
+        if (!Array.isArray(fetchedItems)) {
+          log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: getDirectoryContents for ${modelFileDir} did not return an array. Received: ${typeof fetchedItems}.`);
+          if (typeof fetchedItems === 'object' && fetchedItems !== null) {
+            if (Array.isArray(fetchedItems.data)) { currentAllItemsInDir = fetchedItems.data; }
+            else if (Array.isArray(fetchedItems.items)) { currentAllItemsInDir = fetchedItems.items; }
+            else if (Array.isArray(fetchedItems.files)) { currentAllItemsInDir = fetchedItems.files; }
+            else { throw new Error('Received object from getDirectoryContents, but could not find expected array property.'); }
+          } else { throw new Error(`Received unexpected non-array, non-object type from getDirectoryContents: ${typeof fetchedItems}.`); }
+          if (!Array.isArray(currentAllItemsInDir)) { throw new Error('Failed to extract array from object returned by getDirectoryContents.');}
+        } else {
+          currentAllItemsInDir = fetchedItems;
         }
-      } else {
-        // 使用传递的 allItemsInDir (来自 listModels 的初始构建过程)
-        currentAllItemsInDir = passedAllItemsInDir;
-        // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Using passedAllItemsInDir for ${modelFileDir}. Count: ${currentAllItemsInDir.length}`); // Removed: Too verbose
+        // Removed: log.debug for fetched items count
+        // Removed: _allItemsCache.set logic as _allItemsCache is now an array of paths, not a map of directory contents.
+      } catch (error) {
+        log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Error fetching directory contents for ${modelFileDir}:`, error.message, error.stack, error.response?.status);
+        return null; // Cannot proceed without directory items
       }
     }
+    // If currentAllItemsInDir was provided (e.g. from listModels), it's used directly.
+    // If it was fetched, it's now populated.
+    // If passedAllItemsInDir was an empty array [], it would be used, and the fetch block above skipped.
 
     // 确保 currentResolvedBasePath 已设置
     if (!currentResolvedBasePath || currentResolvedBasePath === null) {
@@ -407,69 +464,46 @@ class WebDavDataSource extends DataSource {
     let allItemsFlatList = [];
 
     const isEffectivelyRootRequest = resolvedRequestDir === resolvedRootOfSource;
-
-    log.debug(`[WebDavDataSource][${sourceId}] isEffectivelyRootRequest: ${isEffectivelyRootRequest}. Cache size: ${this._allItemsCache.size}. Last refresh path: ${this._lastRefreshedFromRootPath}`);
-
-    if (isEffectivelyRootRequest || this._allItemsCache.size === 0 || this._lastRefreshedFromRootPath !== resolvedRootOfSource) {
-      log.info(`[WebDavDataSource][${sourceId}] Refreshing cache from root: ${resolvedRootOfSource}. Reason: isRoot=${isEffectivelyRootRequest}, cacheEmpty=${this._allItemsCache.size === 0}, lastRefreshMismatch=${this._lastRefreshedFromRootPath !== resolvedRootOfSource}`);
-      this._allItemsCache.clear();
-      // _recursiveListAllFiles now populates the cache internally
-      // It needs to scan subdirectories if the original showSubdirectory was true, or if we always want full cache.
-      // For a root refresh, we always want to scan subdirectories to build a complete cache.
-      allItemsFlatList = await this._recursiveListAllFiles(resolvedRootOfSource, true); // Always scan subdirs for root refresh
-      this._lastRefreshedFromRootPath = resolvedRootOfSource;
-      log.info(`[WebDavDataSource][${sourceId}] Cache refreshed from root. Found ${allItemsFlatList.length} total files. Cache has ${this._allItemsCache.size} directory entries.`);
+ 
+    log.debug(`[WebDavDataSource][${sourceId}] isEffectivelyRootRequest: ${isEffectivelyRootRequest}. _allItemsCache (Array) length: ${this._allItemsCache.length}. Last refresh path: ${this._lastRefreshedFromRootPath}`);
+ 
+    // If effectively a root request, or cache (Array) is empty, or last refresh was for a different root path
+    if (isEffectivelyRootRequest || this._allItemsCache.length === 0 || this._lastRefreshedFromRootPath !== resolvedRootOfSource) {
+      log.info(`[WebDavDataSource][${sourceId}] Refreshing _allItemsCache (Array) from root: ${resolvedRootOfSource}. Reason: isRoot=${isEffectivelyRootRequest}, cacheEmpty=${this._allItemsCache.length === 0}, lastRefreshMismatch=${this._lastRefreshedFromRootPath !== resolvedRootOfSource}`);
       
-      // If the original request was for a sub-path of a root refresh, we need to filter `allItemsFlatList`
-      // to only include items within that sub-path if `showSubdirectory` for the original request was false.
-      // However, the current logic of `_recursiveListAllFiles` returns all files, and filtering happens later.
-      // If `showSubdirectory` is false for a root request, it means we only want models in the root.
-      // If `isEffectivelyRootRequest` is true, and `showSubdirectory` is false, then `allItemsFlatList` should only contain files from `resolvedRootOfSource`.
-      // The `_recursiveListAllFiles` when called with `scanSubdirectories=true` will fetch everything.
-      // The filtering for `showSubdirectory` needs to be applied carefully.
+      await this._populateAllItemsCache(resolvedRootOfSource); // Populate the new array cache
+      this._lastRefreshedFromRootPath = resolvedRootOfSource;
+      // log.info(`[WebDavDataSource][${sourceId}] _allItemsCache (Array) refreshed. Contains ${this._allItemsCache.length} file paths.`); // _populateAllItemsCache logs this
 
-      // If the request was for the root AND showSubdirectory is false, we need to filter allItemsFlatList
-      // to only include files directly in resolvedRootOfSource.
-      if (isEffectivelyRootRequest && !showSubdirectory) {
-        const itemsInActualRoot = this._allItemsCache.get(resolvedRootOfSource) || [];
-        allItemsFlatList = itemsInActualRoot.filter(item => item.type === 'file');
-        log.info(`[WebDavDataSource][${sourceId}] Root request with showSubdirectory=false. Filtered to ${allItemsFlatList.length} files in root.`);
-      } else if (!isEffectivelyRootRequest) {
-        // If the refresh was triggered by a non-root request (e.g. cache empty),
-        // we now have the full cache. We need to get items for the *originally requested path*.
-        log.info(`[WebDavDataSource][${sourceId}] Cache was refreshed due to non-root request. Now extracting items for originally requested path: ${resolvedRequestDir}`);
-        const itemsFromCacheForRequest = this._getRecursiveItemsFromCache(resolvedRequestDir, this._allItemsCache, new Set());
-        if (showSubdirectory) {
-          allItemsFlatList = itemsFromCacheForRequest.filter(item => item.type === 'file');
-        } else {
-          // Only files directly in resolvedRequestDir
-          const directItems = this._allItemsCache.get(resolvedRequestDir) || [];
-          allItemsFlatList = directItems.filter(item => item.type === 'file');
-        }
-        log.info(`[WebDavDataSource][${sourceId}] Extracted ${allItemsFlatList.length} files for ${resolvedRequestDir} from refreshed cache (showSubdirectory: ${showSubdirectory}).`);
+      // Now, get the list of file *objects* for the current request's scope using _recursiveListAllFiles
+      // _recursiveListAllFiles no longer populates the old Map cache.
+      if (isEffectivelyRootRequest) {
+        // If the request is for the root, _recursiveListAllFiles operates on the root.
+        // The 'showSubdirectory' parameter determines if it's recursive for file objects.
+        allItemsFlatList = await this._recursiveListAllFiles(resolvedRootOfSource, showSubdirectory);
+      } else {
+        // If the cache refresh was triggered (e.g., cache empty) by a non-root request,
+        // _recursiveListAllFiles should operate on the originally requested directory.
+        allItemsFlatList = await this._recursiveListAllFiles(resolvedRequestDir, showSubdirectory);
       }
-      // If it was a root request and showSubdirectory was true, allItemsFlatList is already correct (all files from root scan).
+      log.info(`[WebDavDataSource][${sourceId}] After _allItemsCache (Array) refresh, _recursiveListAllFiles fetched ${allItemsFlatList.length} file objects for path '${isEffectivelyRootRequest ? resolvedRootOfSource : resolvedRequestDir}' (showSubdir: ${showSubdirectory})`);
+
+      // Note: The old logic for filtering allItemsFlatList based on _allItemsCache.get() when showSubdirectory=false
+      // is problematic now because _allItemsCache is an array of paths, not a map of directory contents.
+      // _recursiveListAllFiles when called with scanSubdirectories=false should correctly return only direct files.
+      // If isEffectivelyRootRequest && !showSubdirectory, _recursiveListAllFiles(resolvedRootOfSource, false) handles this.
+      // If !isEffectivelyRootRequest, _recursiveListAllFiles(resolvedRequestDir, showSubdirectory) handles this.
+      // The logic within _recursiveListAllFiles (scanSubdirectories param) now controls the depth of file objects returned.
 
     } else {
-      // Cache exists, is not empty, and was last refreshed from the root.
-      // Request is for a specific directory (not root), or for root but we trust the cache.
-      log.info(`[WebDavDataSource][${sourceId}] Using existing cache for request path: ${resolvedRequestDir}. Cache size: ${this._allItemsCache.size}.`);
-      const itemsFromCache = this._getRecursiveItemsFromCache(resolvedRequestDir, this._allItemsCache, new Set());
-
-      if (showSubdirectory) {
-        // If showSubdirectory is true, we want all files under resolvedRequestDir.
-        // _getRecursiveItemsFromCache returns all items (files and dirs), so filter for files.
-        allItemsFlatList = itemsFromCache.filter(item => item.type === 'file');
-      } else {
-        // If showSubdirectory is false, we only want files *directly* in resolvedRequestDir.
-        // We can get these from the cache entry for resolvedRequestDir.
-        const directItems = this._allItemsCache.get(resolvedRequestDir) || [];
-        allItemsFlatList = directItems.filter(item => item.type === 'file');
-      }
-      log.info(`[WebDavDataSource][${sourceId}] Retrieved ${allItemsFlatList.length} files from cache for ${resolvedRequestDir} (showSubdirectory: ${showSubdirectory})`);
+      // _allItemsCache (Array) is populated and up-to-date for the source root.
+      // We still need to get file *objects* for the specific resolvedRequestDir and showSubdirectory scope.
+      log.info(`[WebDavDataSource][${sourceId}] Using existing _allItemsCache (Array) which has ${this._allItemsCache.length} paths. Fetching file objects for request path: ${resolvedRequestDir}.`);
+      allItemsFlatList = await this._recursiveListAllFiles(resolvedRequestDir, showSubdirectory);
+      log.info(`[WebDavDataSource][${sourceId}] Retrieved ${allItemsFlatList.length} file objects from ${resolvedRequestDir} (showSubdirectory: ${showSubdirectory}) using _recursiveListAllFiles (_allItemsCache (Array) was warm).`);
     }
     
-    // At this point, allItemsFlatList should contain the relevant file items based on resolvedRequestDir and showSubdirectory.
+    // At this point, allItemsFlatList should contain the relevant file *objects* based on resolvedRequestDir and showSubdirectory.
     // The _allItemsCache is populated (either fully from root, or incrementally if we change _recursiveListAllFiles later).
 
     const modelFileItems = allItemsFlatList.filter(item =>
@@ -491,19 +525,24 @@ class WebDavDataSource extends DataSource {
         
         // 在同一目录中查找同名的 .json 文件
         // modelFileDir is the resolved path of the directory containing the modelFile
-        const itemsInDir = this._allItemsCache.get(modelFileDir); // Should be populated by _recursiveListAllFiles
-        if (Array.isArray(itemsInDir)) {
-          itemsInDir.forEach(item => {
-            if (item.type === 'file' && path.posix.dirname(item.filename) === modelFileDir) {
+        // Filter allItemsFlatList (which contains file objects) to get files in the same directory as modelFile
+        const itemsInDir = allItemsFlatList.filter(item => path.posix.dirname(item.filename) === modelFileDir);
+
+        // itemsInDir will always be an array from filter.
+        itemsInDir.forEach(item => { // item here is a file object from allItemsFlatList
+          if (item.type === 'file') { // No need for path.posix.dirname(item.filename) === modelFileDir check again
             const itemBase = path.posix.basename(item.filename, path.posix.extname(item.filename));
             const itemExt = path.posix.extname(item.filename).toLowerCase();
             if (itemBase === modelFileBase && itemExt === '.json') {
               potentialJsonFilePaths.add(item.filename); // item.filename is already resolved
             }
           }
-          });
-        } else {
-          log.warn(`[WebDavDataSource][${sourceId}] Cache miss or invalid entry for directory ${modelFileDir} when looking for JSON files. This might indicate an issue with cache population.`);
+        });
+        if (itemsInDir.length === 0 && modelFileItems.some(mf => path.posix.dirname(mf.filename) === modelFileDir)) {
+           // Log a warning if the directory was expected to have items (e.g., the modelFile itself) but filter returned empty.
+           // This specific log might be too noisy or not perfectly accurate without more context on allItemsFlatList's state.
+           // For now, the original warning about cache miss is removed as it's not applicable.
+           // A general check for itemsInDir being empty might be useful if an associated JSON file is critical.
         }
       });
     }
@@ -524,11 +563,12 @@ class WebDavDataSource extends DataSource {
     for (const modelFile of modelFileItems) {
       const modelFileDir = path.posix.dirname(modelFile.filename); // modelFile.filename is resolved
       // _buildModelEntry expects items from the *specific directory* of the model file.
-      // This should be available in _allItemsCache.
-      const itemsInModelDirFromCache = this._allItemsCache.get(modelFileDir);
-      if (!itemsInModelDirFromCache) {
-        log.warn(`[WebDavDataSource][${sourceId}] Cache miss for directory ${modelFileDir} when building model entry for ${modelFile.filename}. This is unexpected if cache was properly populated.`);
-        // Potentially, _buildModelEntry could try to fetch it, but ideally, it should be in cache.
+      // Filter allItemsFlatList to get files in the same directory as modelFile.
+      const itemsInModelDirFromCache = allItemsFlatList.filter(item => path.posix.dirname(item.filename) === modelFileDir);
+
+      if (!itemsInModelDirFromCache || itemsInModelDirFromCache.length === 0) {
+        // Log if no items are found in the model's directory from allItemsFlatList, which might be unexpected.
+        log.warn(`[WebDavDataSource][${sourceId}] No items found in allItemsFlatList for directory ${modelFileDir} when preparing to build model entry for ${modelFile.filename}.`);
       }
 
       // log.debug(`[WebDavDataSource][${sourceId}] 为模型 ${modelFile.filename} 准备构建条目. 其所在目录 ${modelFileDir} 中的项目将从缓存或传入列表获取.`); // Removed: Too verbose
