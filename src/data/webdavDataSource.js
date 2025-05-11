@@ -4,7 +4,7 @@ const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
 
 class WebDavDataSource extends DataSource {
-  constructor(config) {
+  constructor(config,modelInfoCacheService) {
     super(config); // Calls base class constructor with the config
 
     // Store the subDirectory, remove trailing slash if present, default to empty string
@@ -13,6 +13,7 @@ class WebDavDataSource extends DataSource {
     this._allItemsCache = new Map(); // 初始化 allItems 缓存
     this._lastRefreshedFromRootPath = null; // 跟踪上次从根路径刷新的时间或标识
     this.initialized = this.initClient(config);
+    this.cacheServer = modelInfoCacheService;
   }
 
 
