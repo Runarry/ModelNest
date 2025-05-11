@@ -97,17 +97,18 @@ class WebDavDataSource extends DataSource {
   }
 
   /**
-   * Recursively populates this._allItemsCache (Array) with relative file paths.
+   * Helper method to recursively traverse directory items using a queue.
    * @param {string} basePathToScan The fully resolved path on the server to start listing from.
+   * @param {Function} itemHandlerAsync Async callback function to process each item: (item, currentWebdavPath, sourceId, sourceRoot) => Promise<void>.
+   * @param {boolean} processSubdirectories If true, will scan subdirectories.
+   * @param {string} sourceId The ID of the data source for logging.
+   * @param {string} [sourceRoot] The resolved root path of the WebDAV source, optional.
+   * @returns {Promise<void>}
+   * @private
    */
-  async _populateAllItemsCache(basePathToScan) {
-    const sourceId = this.config.id;
-    log.info(`[WebDavDataSource][${sourceId}] Starting to populate _allItemsCache (Array of file objects) from: ${basePathToScan}`);
-    this._allItemsCache = []; // Ensure starting with an empty array
-
+  async _traverseDirectoryItems(basePathToScan, itemHandlerAsync, processSubdirectories = true, sourceId, sourceRoot = null) {
     const queue = [basePathToScan];
     const visited = new Set();
-    const sourceRoot = this._resolvePath('/'); // Get the resolved root of the WebDAV source
 
     while (queue.length > 0) {
       const currentPath = queue.shift();
@@ -116,7 +117,7 @@ class WebDavDataSource extends DataSource {
       }
       visited.add(currentPath);
 
-      let actualContents = []; // 在 try 块外部声明 actualContents，确保作用域正确
+      let actualContents = [];
       try {
         // itemsInDir is now rawContents. The result of getDirectoryContents will be stored in rawContents.
         const rawContents = await this.client.getDirectoryContents(currentPath, { deep: false, details: true });
@@ -126,81 +127,100 @@ class WebDavDataSource extends DataSource {
           actualContents = rawContents;
         } else if (rawContents && typeof rawContents === 'object' && rawContents.filename) {
           // Handle case where a single file/directory object is returned.
-          // This assumes that a single item object will have a 'filename' property.
-          log.debug(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: getDirectoryContents for ${currentPath} returned a single item object, wrapping in array.`);
+          log.debug(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned a single item object, wrapping in array.`);
           actualContents = [rawContents];
         } else if (rawContents && typeof rawContents === 'object' && Object.keys(rawContents).length === 0) {
           // Handle case where an empty object is returned (e.g., representing an empty directory).
-          log.debug(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: getDirectoryContents for ${currentPath} returned an empty object, treating as empty directory.`);
+          log.debug(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an empty object, treating as empty directory.`);
           actualContents = [];
         } else if (rawContents && typeof rawContents === 'object' && rawContents !== null) {
-          // Attempt to extract array from common wrapper object properties (retaining part of original logic as fallback).
+          // Attempt to extract array from common wrapper object properties.
           let extractedFromArrayWrapper = false;
           if (Array.isArray(rawContents.data)) { actualContents = rawContents.data; extractedFromArrayWrapper = true; }
           else if (Array.isArray(rawContents.items)) { actualContents = rawContents.items; extractedFromArrayWrapper = true; }
           else if (Array.isArray(rawContents.files)) { actualContents = rawContents.files; extractedFromArrayWrapper = true; }
           
           if (extractedFromArrayWrapper) {
-            log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: getDirectoryContents for ${currentPath} returned an object, but an array was successfully extracted from one of its properties (data, items, or files).`);
+            log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an object, but an array was successfully extracted from one of its properties (data, items, or files).`);
           } else {
-            log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: getDirectoryContents for ${currentPath} returned an object that is not a single item and from which an array could not be extracted. Received:`, rawContents, ". Treating as empty.");
+            log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an object that is not a single item and from which an array could not be extracted. Received:`, rawContents, ". Treating as empty.");
             actualContents = []; // Treat as empty if no array could be extracted
           }
         } else {
           // Handle other unexpected non-array types.
-          log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: getDirectoryContents for ${currentPath} returned unexpected non-array type. Received: ${typeof rawContents}. Value:`, rawContents, ". Treating as empty.");
+          log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned unexpected non-array type. Received: ${typeof rawContents}. Value:`, rawContents, ". Treating as empty.");
           actualContents = [];
         }
       } catch (error) {
-        log.error(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
+        log.error(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
         if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-          log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
+          log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
         }
-        // If an error occurs during getDirectoryContents or processing its result,
-        // actualContents might not be an array or might be in an indeterminate state.
-        // The 'continue' statement will skip the loop, so the state of actualContents
-        // for the current iteration's loop is not critical.
-        // If we were not to 'continue', we would need to ensure actualContents = [] here.
-        continue;
+        continue; // Skip to next in queue
       }
 
-      for (const item of actualContents) { // Changed itemsInDir to actualContents
+      for (const item of actualContents) {
         if (item.basename === '.' || item.basename === '..') continue;
 
-        if (item.type === 'file') {
-          let relativeFilePath = item.filename; // item.filename is the full resolved path
-          if (item.filename.startsWith(sourceRoot)) {
-            relativeFilePath = item.filename.substring(sourceRoot.length);
-            // Normalize: if sourceRoot is '/foo/' and item.filename is '/foo/bar.txt', relativeFilePath becomes 'bar.txt'
-            // if sourceRoot is '/foo' and item.filename is '/foo/bar.txt', relativeFilePath becomes '/bar.txt'
-            // We want relative paths to not start with '/', e.g., 'bar.txt' or 'subdir/bar.txt'
-            if (relativeFilePath.startsWith('/')) {
-              relativeFilePath = relativeFilePath.substring(1);
-            }
-          } else {
-            log.warn(`[WebDavDataSource][${sourceId}] _populateAllItemsCache: File ${item.filename} does not start with source root ${sourceRoot}. Using basename as relativePath fallback.`);
-            relativeFilePath = item.basename; // Fallback, might not be unique or correct for subdirs
-          }
-          
-          this._allItemsCache.push({
-            // item itself contains: filename, basename, type, size, lastmod, etag
-            ...item,
-            relativePath: relativeFilePath // Add our calculated relativePath
-          });
-        } else if (item.type === 'directory') {
+        // Call the item handler for the item.
+        // The handler itself will decide what to do based on item.type or other conditions.
+        await itemHandlerAsync(item, currentPath, sourceId, sourceRoot);
+
+        if (item.type === 'directory' && processSubdirectories) {
+          // item.filename should be the fully resolved path
           if (item.filename && !visited.has(item.filename)) {
             queue.push(item.filename);
           }
         }
       }
     }
+  }
+
+  /**
+   * Recursively populates this._allItemsCache (Array) with relative file paths.
+   * Uses the _traverseDirectoryItems helper for the traversal logic.
+   * @param {string} basePathToScan The fully resolved path on the server to start listing from.
+   */
+  async _populateAllItemsCache(basePathToScan) {
+    const sourceId = this.config.id;
+    log.info(`[WebDavDataSource][${sourceId}] Starting to populate _allItemsCache (Array of file objects) from: ${basePathToScan}`);
+    this._allItemsCache = []; // Ensure starting with an empty array
+    const sourceRoot = this._resolvePath('/'); // Get the resolved root of the WebDAV source
+
+    const itemHandler = async (item, _currentWebdavPath, currentSourceId, currentSourceRoot) => {
+      // _currentWebdavPath is available if needed, but not used directly here for relativePath calculation
+      if (item.type === 'file') {
+        let relativeFilePath = item.filename; // item.filename is the full resolved path
+        if (item.filename.startsWith(currentSourceRoot)) {
+          relativeFilePath = item.filename.substring(currentSourceRoot.length);
+          // Normalize: if currentSourceRoot is '/foo/' and item.filename is '/foo/bar.txt', relativeFilePath becomes 'bar.txt'
+          // if currentSourceRoot is '/foo' and item.filename is '/foo/bar.txt', relativeFilePath becomes '/bar.txt'
+          // We want relative paths to not start with '/', e.g., 'bar.txt' or 'subdir/bar.txt'
+          if (relativeFilePath.startsWith('/')) {
+            relativeFilePath = relativeFilePath.substring(1);
+          }
+        } else {
+          log.warn(`[WebDavDataSource][${currentSourceId}] _populateAllItemsCache/itemHandler: File ${item.filename} does not start with source root ${currentSourceRoot}. Using basename as relativePath fallback.`);
+          relativeFilePath = item.basename; // Fallback, might not be unique or correct for subdirs
+        }
+        
+        this._allItemsCache.push({
+          // item itself contains: filename, basename, type, size, lastmod, etag
+          ...item,
+          relativePath: relativeFilePath // Add our calculated relativePath
+        });
+      }
+      // Directory queuing is handled by _traverseDirectoryItems itself.
+    };
+
+    await this._traverseDirectoryItems(basePathToScan, itemHandler, true, sourceId, sourceRoot);
     log.info(`[WebDavDataSource][${sourceId}] _populateAllItemsCache complete. Found ${this._allItemsCache.length} file objects.`);
   }
  
   /**
-   * Non-recursively lists all files starting from a given base path using a queue.
-   * This method NO LONGER populates the old Map-based _allItemsCache.
-   * It returns a flat array of all file stat objects found for the given scope.
+   * Lists all files starting from a given base path using a queue, optionally scanning subdirectories.
+   * Uses the _traverseDirectoryItems helper for the traversal logic.
+   * This method returns a flat array of all file stat objects found.
    * @param {string} basePathToScan The fully resolved path on the server to start listing from.
    * @param {boolean} scanSubdirectories If true, will scan subdirectories.
    * @returns {Promise<Array<object>>} A promise resolving to a flat array of all file stat objects found.
@@ -209,54 +229,16 @@ class WebDavDataSource extends DataSource {
     const sourceId = this.config.id;
     log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: Path: ${basePathToScan}, ScanSubdirs: ${scanSubdirectories}`);
     const allFilesFound = [];
-    const queue = [basePathToScan];
-    const visited = new Set(); // To avoid processing the same directory multiple times if symlinks or weird structures exist
- 
-    while (queue.length > 0) {
-      const currentPath = queue.shift();
-      if (visited.has(currentPath)) {
-        continue;
+  
+    const itemHandler = async (item, _currentWebdavPath, _currentSourceId, _currentSourceRoot) => {
+      if (item.type === 'file') {
+        allFilesFound.push(item);
       }
-      visited.add(currentPath);
- 
-      let itemsInDir = [];
-      try {
-        itemsInDir = await this.client.getDirectoryContents(currentPath, { deep: false, details: true });
- 
-        if (!Array.isArray(itemsInDir)) {
-          log.warn(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: getDirectoryContents for ${currentPath} did not return an array. Received: ${typeof itemsInDir}.`);
-          // Attempt to recover if it's a common wrapper object
-          if (typeof itemsInDir === 'object' && itemsInDir !== null) {
-            if (Array.isArray(itemsInDir.data)) { itemsInDir = itemsInDir.data; }
-            else if (Array.isArray(itemsInDir.items)) { itemsInDir = itemsInDir.items; }
-            else if (Array.isArray(itemsInDir.files)) { itemsInDir = itemsInDir.files; }
-            else { throw new Error('Received object, but could not find expected array property.'); }
-          } else { throw new Error(`Received unexpected non-array, non-object type: ${typeof itemsInDir}.`); }
-          if (!Array.isArray(itemsInDir)) { throw new Error('Failed to extract array from object.');}
-        }
-        // REMOVED: this._allItemsCache.set(currentPath, itemsInDir); // No longer populates the old Map cache
- 
-      } catch (error) {
-        log.error(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
-        if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-          log.warn(`[WebDavDataSource][${sourceId}] Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
-        }
-        continue; // Skip to next in queue
-      }
-
-      for (const item of itemsInDir) {
-        if (item.basename === '.' || item.basename === '..') continue;
-
-        if (item.type === 'file') {
-          allFilesFound.push(item);
-        } else if (item.type === 'directory' && scanSubdirectories) {
-          // item.filename should be the fully resolved path
-          if (item.filename && !visited.has(item.filename)) {
-            queue.push(item.filename);
-          }
-        }
-      }
-    }
+      // Directory queuing is handled by _traverseDirectoryItems itself if scanSubdirectories is true.
+    };
+  
+    // The third argument to _traverseDirectoryItems is processSubdirectories
+    await this._traverseDirectoryItems(basePathToScan, itemHandler, scanSubdirectories, sourceId, null);
     log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles from ${basePathToScan} complete. Found ${allFilesFound.length} file objects.`);
     return allFilesFound;
   }
