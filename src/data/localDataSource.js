@@ -1,4 +1,4 @@
-const { parseLocalModels, parseModelDetailFromJsonContent, parseSingleModelFile, findImageForModel } = require('./modelParser');
+const { parseSingleModelFile } = require('./modelParser');
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
@@ -148,8 +148,6 @@ class LocalDataSource extends DataSource {
       try {
         const files = await fs.promises.readdir(currentDir, { withFileTypes: true });
         
-        // This is where the original parseLocalModels was called.
-        // Now, we need to integrate the L2 cache logic for .json files within this process.
         const modelFiles = files.filter(f => f.isFile() && currentSupportedExts.some(ext => f.name.toLowerCase().endsWith(ext.toLowerCase())));
 
         for (const modelFile of modelFiles) {
@@ -217,26 +215,6 @@ class LocalDataSource extends DataSource {
                 }
             }
             
-            // Construct ModelObject using modelJsonInfo (if available) and modelFile details
-            // This part needs to replicate what parseSingleModelFile or parseLocalModels would do.
-            // For simplicity, we'll call a light version of parseSingleModelFile or adapt its logic.
-            // The original parseLocalModels calls parseSingleModelFile.
-            // We need to pass the potentially pre-fetched modelJsonInfo to avoid re-reading.
-            
-            // Simplified model object creation for listModels. Details are fetched in readModelDetail.
-            // parseSingleModelFile is quite heavy for just listing.
-            // We need a lighter way to create the basic ModelObject for the list.
-            // The original parseLocalModels directly calls parseSingleModelFile for each model.
-            // Let's adapt parseSingleModelFile or use a helper.
-            // For now, we'll call parseSingleModelFile, which internally handles its own JSON reading if not passed.
-            // This is not ideal as per 7.1.5.a, which implies using the fetched JSON.
-            // Let's refine this: parseSingleModelFile needs to accept pre-parsed JSON.
-            // Assuming parseSingleModelFile can be adapted or we use a different constructor.
-            // For now, let's use the existing parseSingleModelFile and it will re-read JSON if needed,
-            // but the L2 cache for MODEL_JSON_INFO will be populated.
-            // A better approach would be:
-            // const modelObj = new ModelObject(sourceId, modelFilePath, modelJsonInfo, modelFileStats);
-            // For now, using existing parser structure:
             const modelObj = await parseSingleModelFile(modelFilePath, currentSupportedExts, currentSourceConfig, true, modelJsonInfo, jsonFileStats);
             if (modelObj) {
                 allModels.push(modelObj);
