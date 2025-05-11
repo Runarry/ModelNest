@@ -59,7 +59,8 @@ class ModelInfoCacheService {
                 }
 
 
-                this.l1MaxItems = await this.configService.getSetting('cache.l1.maxItems') || DEFAULT_L1_MAX_ITEMS;
+                const l1MaxItemsValue = await this.configService.getSetting('cache.l1.maxItems');
+                this.l1MaxItems = (l1MaxItemsValue !== undefined && l1MaxItemsValue !== null) ? l1MaxItemsValue : DEFAULT_L1_MAX_ITEMS;
                 const l1DefaultTtlConfig = await this.configService.getSetting('cache.l1.ttlSeconds.default');
                 this.l1TtlMs = (l1DefaultTtlConfig || DEFAULT_L1_TTL_SECONDS) * 1000;
                 log.info(`Default L1 TTL set to: ${this.l1TtlMs}ms (from config: ${l1DefaultTtlConfig}s)`);
@@ -521,7 +522,8 @@ class ModelInfoCacheService {
         }
         
         // LRU Cleanup for model_json_info_cache
-        const l2MaxItemsModelInfo = (await this.configService.getSetting('cache.l2.maxItems.modelInfo')) || 5000;
+        const l2ModelInfoMaxItemsValue = await this.configService.getSetting('cache.l2.maxItems.modelInfo');
+        const l2MaxItemsModelInfo = (l2ModelInfoMaxItemsValue !== undefined && l2ModelInfoMaxItemsValue !== null) ? l2ModelInfoMaxItemsValue : 5000;
         
         if (l2MaxItemsModelInfo > 0) { // Only apply LRU if maxItems is positive
             try {
