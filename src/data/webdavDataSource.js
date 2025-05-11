@@ -405,9 +405,7 @@ class WebDavDataSource extends DataSource {
     log.info(`[WebDavDataSource][${sourceId}] ListModels request. RelativeDir: '${directory}', ResolvedRequestDir: '${resolvedRequestDir}', ResolvedSourceRoot: '${resolvedRootOfSource}', ShowSubDir: ${showSubdirectory}`);
 
     let allItemsFlatList = [];
-    // Determine if the request is effectively for the root of the data source
-    // This means `directory` is null, empty, or '/' AND subDirectory is also empty or '/'
-    // OR `resolvedRequestDir` is the same as `resolvedRootOfSource`.
+
     const isEffectivelyRootRequest = resolvedRequestDir === resolvedRootOfSource;
 
     log.debug(`[WebDavDataSource][${sourceId}] isEffectivelyRootRequest: ${isEffectivelyRootRequest}. Cache size: ${this._allItemsCache.size}. Last refresh path: ${this._lastRefreshedFromRootPath}`);
