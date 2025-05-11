@@ -63,11 +63,11 @@ class ModelInfoCacheService {
                 this.l1MaxItems = (l1MaxItemsValue !== undefined && l1MaxItemsValue !== null) ? l1MaxItemsValue : DEFAULT_L1_MAX_ITEMS;
                 const l1DefaultTtlConfig = await this.configService.getSetting('cache.l1.ttlSeconds.default');
                 this.l1TtlMs = (l1DefaultTtlConfig || DEFAULT_L1_TTL_SECONDS) * 1000;
-                log.info(`Default L1 TTL set to: ${this.l1TtlMs}ms (from config: ${l1DefaultTtlConfig}s)`);
+                this.logger.info(`Default L1 TTL set to: ${this.l1TtlMs}ms (from config: ${l1DefaultTtlConfig}s)`);
 
                 const l2ModelJsonInfoTtlConfig = await this.configService.getSetting('cache.l2.ttlSeconds.modelJsonInfo');
                 this.l2TtlMs = (l2ModelJsonInfoTtlConfig || DEFAULT_L2_TTL_SECONDS) * 1000;
-                log.info(`Default L2 TTL for modelJsonInfo set to: ${this.l2TtlMs}ms (from config: ${l2ModelJsonInfoTtlConfig}s)`);
+                this.logger.info(`Default L2 TTL for modelJsonInfo set to: ${this.l2TtlMs}ms (from config: ${l2ModelJsonInfoTtlConfig}s)`);
                 
                 // Determine DB Path
                 const configuredDbPath = await this.configService.getSetting('cache.l2.dbPath');
@@ -437,7 +437,7 @@ class ModelInfoCacheService {
             if (error.code) { // SQLite errors often have a code
                  this.logger.error(`L2: SQLite error code: ${error.code}`);
             }
-            this.logger.error('L2: Full error object during setModelJsonInfoToL2:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
+            this.logger.error('L2: Full error object during setModelJsonInfoToL2:', error);
         }
     }
 
@@ -759,12 +759,12 @@ class ModelInfoCacheService {
                 const result = stmt.get();
                 tableStats[tableName] = { items: result.count };
             } catch (tableError) {
-                this.logger.error(`Error getting item count for table ${tableName}: ${tableError.message}`);
+                this.logger.error(`Error getting item count for table ${tableName}: ${tableError.message}`, tableError);
                 tableStats[tableName] = { items: 0, error: tableError.message };
             }
             this.logger.info(`L2 DB stats: Total size ${totalSize} bytes. Table counts: ${JSON.stringify(tableStats)}`);
         } catch (error) {
-            this.logger.error(`Error getting L2 DB file stats from ${this.dbPath}: ${error.message}`);
+            this.logger.error(`Error getting L2 DB file stats from ${this.dbPath}: ${error.message}`, error);
         }
         return {
             tables: tableStats,
@@ -797,7 +797,7 @@ class ModelInfoCacheService {
         if (this.db) {
             this.db.close((err) => {
                 if (err) {
-                    this.logger.error('Error closing the SQLite database', err.message);
+                    this.logger.error('Error closing the SQLite database', err.message, err);
                 } else {
                     this.logger.info('SQLite database connection closed.');
                 }

@@ -31,7 +31,7 @@ async function calcFileHash(filePath) {
     return hash.digest('hex');
   } catch (error) {
     // 捕获流读取错误
-    console.error('Error calculating file hash:', error);
+    log.error('[Util:CivitaiCrawler] Error calculating file hash:', error);
     throw error; // 重新抛出错误，以便调用者处理
   }
 }
