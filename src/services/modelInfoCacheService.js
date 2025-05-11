@@ -795,13 +795,13 @@ class ModelInfoCacheService {
     // Call this when the application is shutting down
     close() {
         if (this.db) {
-            this.db.close((err) => {
-                if (err) {
-                    this.logger.error('Error closing the SQLite database', err.message, err);
-                } else {
-                    this.logger.info('SQLite database connection closed.');
-                }
-            });
+            try {
+                this.db.close();
+
+                this.logger.info('SQLite database connection closed.');
+            } catch (err) {
+                this.logger.error('Error closing the SQLite database', err.message);
+            }
             this.db = null;
         }
     }
