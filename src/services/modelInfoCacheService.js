@@ -387,17 +387,17 @@ class ModelInfoCacheService {
                 (cache_key, source_id, normalized_json_path, bson_data, source_json_mtime_ms, source_json_size, cached_timestamp_ms, ttl_seconds, last_accessed_timestamp_ms)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
             `);
-            stmt.run(
-                cacheKey,
-                source_id,
-                normalized_json_path,
-                bsonData,
-                sourceJsonStats.mtimeMs,
-                sourceJsonStats.size,
-                cached_timestamp_ms,
-                effectiveTtlSeconds,
-                last_accessed_timestamp_ms
-            );
+            // stmt.run(
+            //     cacheKey,
+            //     source_id,
+            //     normalized_json_path,
+            //     bsonData,
+            //     sourceJsonStats.mtimeMs,
+            //     sourceJsonStats.size,
+            //     cached_timestamp_ms,
+            //     effectiveTtlSeconds,
+            //     last_accessed_timestamp_ms
+            // );
 
             // Capture the info object from the run command
             const runInfo = stmt.run(
