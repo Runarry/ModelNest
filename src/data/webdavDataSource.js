@@ -210,22 +210,6 @@ class WebDavDataSource extends DataSource {
     this.logger.info(`_populateAllItemsCache complete. Found ${this._allItemsCache.length} file objects.`);
   }
  
-  async _recursiveListAllFiles(basePathToScan, scanSubdirectories = true) {
-    const sourceId = this.config.id;
-    this.logger.debug(`_recursiveListAllFiles: Path: ${basePathToScan}, ScanSubdirs: ${scanSubdirectories}`);
-    const allFilesFound = [];
-  
-    const itemHandler = async (item, _currentWebdavPath, _currentSourceId, _currentSourceRoot) => {
-      if (item.type === 'file') {
-        allFilesFound.push(item);
-      }
-    };
-  
-    await this._traverseDirectoryItems(basePathToScan, itemHandler, scanSubdirectories, sourceId, null);
-    this.logger.debug(`_recursiveListAllFiles from ${basePathToScan} complete. Found ${allFilesFound.length} file objects.`);
-    return allFilesFound;
-  }
-
   async _batchFetchJsonContents(jsonFilePaths) {
     const startTime = Date.now();
     await this.ensureInitialized();
