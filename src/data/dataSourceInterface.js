@@ -172,7 +172,7 @@ async function writeModelJson(sourceConfig, model, dataToWrite, modelInfoCacheSe
  * @returns {Promise<Array<object>>} A promise that resolves with an array of model objects.
  * @throws {Error} If the data source type is unknown or listing fails.
  */
-async function listModels(sourceConfig, directory = null, supportedExts = [], showSubdirectory = false, modelInfoCacheService) { // 添加 showSubdirectory 和 modelInfoCacheService
+async function listModels(sourceConfig, directory = null, supportedExts = [], showSubdirectory = true, modelInfoCacheService) { // 添加 showSubdirectory 和 modelInfoCacheService
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] listModels called with invalid sourceConfig:', sourceConfig);

@@ -98,7 +98,7 @@ class ModelService {
     }
   }
 
-  async listModels(sourceId, directory, filters = {}, supportedExtensions = null, showSubdirectory = false) {
+  async listModels(sourceId, directory, filters = {}, supportedExtensions = null, showSubdirectory = true) {
     const startTime = Date.now();
     log.info(`[ModelService] listModels called. sourceId: ${sourceId}, directory: ${directory}, filters: ${JSON.stringify(filters)}, showSubDir: ${showSubdirectory}`);
 

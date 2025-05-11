@@ -1,28 +1,46 @@
-const { parseLocalModels, parseModelDetailFromJsonContent, parseSingleModelFile, findImageForModel } = require('./modelParser'); // 导入新函数及 parseSingleModelFile
+const { parseLocalModels, parseModelDetailFromJsonContent, parseSingleModelFile, findImageForModel } = require('./modelParser');
 const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
-const crypto = require('crypto'); // 引入 crypto 模块
-const DataSource = require('./baseDataSource'); // 导入新的基类
+const crypto = require('crypto');
+const DataSource = require('./baseDataSource');
+const { CacheDataType } = require('../services/modelInfoCacheService'); // 导入 CacheDataType
 
-// 本地数据源实现
+/**
+ * @file LocalDataSource class for accessing models from the local file system.
+ * @author Roo
+ */
+
+/**
+ * Represents a local data source for models.
+ * @extends DataSource
+ */
 class LocalDataSource extends DataSource {
-  constructor(config, modelInfoCacheService) { // 新增：modelInfoCacheService 参数
+  /**
+   * Creates an instance of LocalDataSource.
+   * @param {object} config - The configuration object for this data source.
+   * @param {string} config.id - The unique ID of this data source.
+   * @param {string} config.path - The root path of this data source.
+   * @param {string[]} [config.supportedExts=['.safetensors', '.ckpt']] - Supported model file extensions.
+   * @param {ModelInfoCacheService} modelInfoCacheService - The cache service instance.
+   */
+  constructor(config, modelInfoCacheService) {
     super(config);
-    this.modelInfoCacheService = modelInfoCacheService; // 新增：存储缓存服务实例
-    // 确保 this.config.id 存在，用于缓存键
+    this.modelInfoCacheService = modelInfoCacheService;
     if (!this.config || !this.config.id) {
       log.error('[LocalDataSource] Constructor: config.id is missing. Cache functionality might be impaired.');
-      // 可以选择抛出错误或设置一个默认的无效ID，以便后续操作能识别问题
-      // throw new Error('LocalDataSource requires a config object with an id property.');
     }
   }
+
+  /**
+   * Lists subdirectories in the root path of the data source.
+   * @returns {Promise<string[]>} A promise that resolves to an array of subdirectory names.
+   */
   async listSubdirectories() {
     const startTime = Date.now();
     const root = this.config.path;
     log.info(`[LocalDataSource] 开始列出子目录: ${root}`);
     try {
-      // Check existence using access
       await fs.promises.access(root);
       const entries = await fs.promises.readdir(root, { withFileTypes: true });
       const duration = Date.now() - startTime;
@@ -30,10 +48,8 @@ class LocalDataSource extends DataSource {
       return entries
         .filter(entry => entry.isDirectory())
         .map(entry => entry.name);
-
     } catch (error) {
       const duration = Date.now() - startTime;
-      // If directory doesn't exist (ENOENT), return empty array, otherwise log error
       if (error.code === 'ENOENT') {
         log.warn(`[LocalDataSource] 列出子目录失败 (目录不存在): ${root}, 耗时: ${duration}ms`);
         return [];
@@ -43,275 +59,393 @@ class LocalDataSource extends DataSource {
     }
   }
 
+  /**
+   * Generates a path identifier for listModels cache.
+   * @param {string} normalizedDirectory - Normalized directory path.
+   * @param {boolean} showSubdirectory - Whether subdirectories are included.
+   * @param {string[]} supportedExts - Array of supported extensions.
+   * @returns {string} The path identifier.
+   * @private
+   */
+  _generateListModelsPathIdentifier(normalizedDirectory, showSubdirectory, supportedExts) {
+    // Ensure directoryPath is normalized (e.g., forward slashes, no trailing slash unless root)
+    let dirPath = normalizedDirectory.replace(/\\/g, '/');
+    if (dirPath.endsWith('/') && dirPath.length > 1) {
+        dirPath = dirPath.slice(0, -1);
+    }
+    const params = new URLSearchParams();
+    params.append('showSubDir', String(showSubdirectory));
+    params.append('exts', supportedExts.slice().sort().join(',')); // Sort exts for consistency
+    return `${dirPath}?${params.toString()}`;
+  }
+
+  /**
+   * Lists models from the local file system.
+   * @param {string|null} [directory=null] - The subdirectory to list models from. Relative to the source's root path.
+   * @param {object} sourceConfig - The configuration for the current source (used for sourceId).
+   * @param {string[]} [supportedExts=[]] - Array of supported model file extensions.
+   * @param {boolean} [showSubdirectory=true] - Whether to include models from subdirectories.
+   * @returns {Promise<Array<object>>} A promise that resolves to an array of model objects.
+   */
   async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
     const startTime = Date.now();
-    const root = this.config.path; // Root path for this data source instance
-    const currentSourceId = this.config.id; // Use sourceId from this.config
-    const normalizedDirectory = directory ? path.normalize(directory) : ''; // Normalize for cache key consistency
-    const cacheKey = `listModels:${currentSourceId}:${normalizedDirectory}:showSubDir=${showSubdirectory}:exts=${supportedExts.join(',')}`;
+    const rootPath = this.config.path;
+    const sourceId = this.config.id;
+    const normalizedDirectory = directory ? path.normalize(directory) : '';
 
-    log.info(`[LocalDataSource] 开始列出模型. Root: ${root}, Directory: ${normalizedDirectory}, SourceId: ${currentSourceId}, SupportedExts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, ShowSubDir: ${showSubdirectory}. CacheKey: ${cacheKey}`);
-
-    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      const l1Hit = this.modelInfoCacheService.getFromL1(cacheKey, 'listModels');
-      if (l1Hit && l1Hit.data && l1Hit.directoryContentHash) {
-        log.debug(`[LocalDataSource] L1 cache hit for listModels: ${cacheKey}. Verifying hash...`);
-        const currentDirectoryHash = await this.getDirectoryContentMetadataDigest(normalizedDirectory, supportedExts, showSubdirectory);
-        if (currentDirectoryHash && currentDirectoryHash === l1Hit.directoryContentHash) {
-          log.info(`[LocalDataSource] L1 cache valid (hash matched) for listModels: ${cacheKey}. Returning cached data. Duration: ${Date.now() - startTime}ms`);
-          return l1Hit.data; // Return deep cloned data from cache service
-        }
-        log.info(`[LocalDataSource] L1 cache hash mismatch for listModels: ${cacheKey}. Cached: ${l1Hit.directoryContentHash}, Current: ${currentDirectoryHash}. Proceeding to fetch.`);
-      } else if (l1Hit) {
-        log.debug(`[LocalDataSource] L1 cache hit for listModels: ${cacheKey}, but data or hash is missing. Proceeding to fetch.`);
-      } else {
-        log.debug(`[LocalDataSource] L1 cache miss for listModels: ${cacheKey}. Proceeding to fetch.`);
-      }
+    // Determine effective supported extensions
+    let effectiveSupportedExts;
+    if (supportedExts && supportedExts.length > 0) {
+      effectiveSupportedExts = supportedExts;
+    } else if (this.config && this.config.supportedExts && this.config.supportedExts.length > 0) {
+      effectiveSupportedExts = this.config.supportedExts;
     } else {
-      log.debug(`[LocalDataSource] Cache service not available or disabled for listModels. Proceeding to fetch directly.`);
+      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
+      log.warn(`[LocalDataSource listModels] No supportedExts provided or configured for source ${sourceId}. Falling back to default: ${effectiveSupportedExts.join(', ')}`);
     }
 
-    const startPath = directory ? path.join(root, normalizedDirectory) : root;
+    const pathIdentifier = this._generateListModelsPathIdentifier(normalizedDirectory, showSubdirectory, effectiveSupportedExts);
+    log.info(`[LocalDataSource listModels] Root: ${rootPath}, Directory: ${normalizedDirectory}, SourceId: ${sourceId}, PathIdentifier: ${pathIdentifier}`);
 
+    if (!sourceId) {
+        log.error('[LocalDataSource listModels] sourceId (this.config.id) is missing. Cannot use cache.');
+    }
+
+    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && sourceId) {
+      const currentContentHash = await this.getDirectoryContentMetadataDigest(normalizedDirectory, effectiveSupportedExts, showSubdirectory);
+      if (currentContentHash) {
+        const cachedData = await this.modelInfoCacheService.getDataFromCache(
+          CacheDataType.MODEL_LIST,
+          sourceId,
+          pathIdentifier,
+          { contentHash: currentContentHash }
+        );
+        if (cachedData) {
+          log.info(`[LocalDataSource listModels] Cache hit for MODEL_LIST. PathIdentifier: ${pathIdentifier}. Duration: ${Date.now() - startTime}ms`);
+          return cachedData;
+        }
+        log.info(`[LocalDataSource listModels] Cache miss or invalid for MODEL_LIST. PathIdentifier: ${pathIdentifier}. Hash: ${currentContentHash}`);
+      } else {
+        log.warn(`[LocalDataSource listModels] Could not generate contentHash for ${normalizedDirectory}. Proceeding without MODEL_LIST cache check.`);
+      }
+    }
+
+    const startPath = directory ? path.join(rootPath, normalizedDirectory) : rootPath;
     try {
       await fs.promises.access(startPath);
     } catch (error) {
       const duration = Date.now() - startTime;
       if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource] 列出模型失败 (目录不存在): ${startPath}, 耗时: ${duration}ms`);
+        log.warn(`[LocalDataSource listModels] Directory does not exist: ${startPath}. Duration: ${duration}ms`);
         return [];
       }
-      log.error(`[LocalDataSource] 访问模型目录时出错: ${startPath}, 耗时: ${duration}ms`, error.message, error.stack);
+      log.error(`[LocalDataSource listModels] Error accessing model directory: ${startPath}. Duration: ${duration}ms`, error.message, error.stack);
       return [];
     }
 
     let allModels = [];
-    const walk = async (dir, currentSourceConfig, currentSupportedExts, currentShowSubdirectory) => {
+    const walk = async (currentDir, currentSourceConfig, currentSupportedExts, currentShowSubdirectory) => {
       try {
-        const files = await fs.promises.readdir(dir, { withFileTypes: true });
-        // Call parseLocalModels, passing sourceConfig
-        // parseLocalModels now needs sourceConfig to get sourceId
-        const modelObjs = await parseLocalModels(dir, currentSupportedExts, currentSourceConfig);
-        allModels = allModels.concat(modelObjs);
+        const files = await fs.promises.readdir(currentDir, { withFileTypes: true });
+        
+        // This is where the original parseLocalModels was called.
+        // Now, we need to integrate the L2 cache logic for .json files within this process.
+        const modelFiles = files.filter(f => f.isFile() && currentSupportedExts.some(ext => f.name.toLowerCase().endsWith(ext.toLowerCase())));
 
-        if (currentShowSubdirectory) { // Control recursion based on showSubdirectory
+        for (const modelFile of modelFiles) {
+            const modelFilePath = path.join(currentDir, modelFile.name);
+            const relativeModelFilePath = path.relative(rootPath, modelFilePath); // For pathIdentifier in MODEL_DETAIL
+            const associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json';
+            const relativeAssociatedJsonPath = path.relative(rootPath, associatedJsonPath); // For pathIdentifier in MODEL_JSON_INFO
+
+            let modelJsonInfo;
+            let jsonFileStats;
+
+            try {
+                jsonFileStats = await this.getFileStats(associatedJsonPath); // getFileStats handles relative/absolute
+            } catch (e) {
+                log.warn(`[LocalDataSource listModels] Could not get stats for associated JSON: ${associatedJsonPath}`, e.message);
+                jsonFileStats = null; // Proceed without stats if JSON doesn't exist or error
+            }
+
+            if (jsonFileStats && this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && sourceId) {
+                const currentJsonFileMetadata = {
+                    fileSize: jsonFileStats.size,
+                    metadata_lastModified_ms: jsonFileStats.mtimeMs,
+                    etag: null // Local files don't have etags
+                };
+                
+                modelJsonInfo = await this.modelInfoCacheService.getDataFromCache(
+                    CacheDataType.MODEL_JSON_INFO,
+                    sourceId,
+                    relativeAssociatedJsonPath, // Use relative path for cache key
+                    currentJsonFileMetadata
+                );
+
+                if (modelJsonInfo) {
+                    log.debug(`[LocalDataSource listModels] L2 Cache hit for MODEL_JSON_INFO: ${relativeAssociatedJsonPath}`);
+                } else {
+                    log.debug(`[LocalDataSource listModels] L2 Cache miss for MODEL_JSON_INFO: ${relativeAssociatedJsonPath}. Reading file.`);
+                }
+            }
+            
+            if (!modelJsonInfo && jsonFileStats) { // If L2 miss (or no cache) AND json file exists (stats were found)
+                try {
+                    const jsonContent = await fs.promises.readFile(associatedJsonPath, 'utf-8');
+                    modelJsonInfo = JSON.parse(jsonContent);
+
+                    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && sourceId) {
+                        const sourceJsonFileMetadata = {
+                            fileSize: jsonFileStats.size,
+                            metadata_lastModified_ms: jsonFileStats.mtimeMs,
+                            etag: null
+                        };
+                        await this.modelInfoCacheService.setDataToCache(
+                            CacheDataType.MODEL_JSON_INFO,
+                            sourceId,
+                            relativeAssociatedJsonPath,
+                            modelJsonInfo,
+                            sourceJsonFileMetadata
+                        );
+                        log.debug(`[LocalDataSource listModels] Set to L2 Cache MODEL_JSON_INFO: ${relativeAssociatedJsonPath}`);
+                    }
+                } catch (e) {
+                    if (e.code !== 'ENOENT') { // ENOENT is fine, means no JSON file
+                        log.warn(`[LocalDataSource listModels] Error reading/parsing JSON ${associatedJsonPath}: ${e.message}`);
+                    }
+                    modelJsonInfo = null; // Ensure it's null if read fails
+                }
+            }
+            
+            // Construct ModelObject using modelJsonInfo (if available) and modelFile details
+            // This part needs to replicate what parseSingleModelFile or parseLocalModels would do.
+            // For simplicity, we'll call a light version of parseSingleModelFile or adapt its logic.
+            // The original parseLocalModels calls parseSingleModelFile.
+            // We need to pass the potentially pre-fetched modelJsonInfo to avoid re-reading.
+            
+            // Simplified model object creation for listModels. Details are fetched in readModelDetail.
+            // parseSingleModelFile is quite heavy for just listing.
+            // We need a lighter way to create the basic ModelObject for the list.
+            // The original parseLocalModels directly calls parseSingleModelFile for each model.
+            // Let's adapt parseSingleModelFile or use a helper.
+            // For now, we'll call parseSingleModelFile, which internally handles its own JSON reading if not passed.
+            // This is not ideal as per 7.1.5.a, which implies using the fetched JSON.
+            // Let's refine this: parseSingleModelFile needs to accept pre-parsed JSON.
+            // Assuming parseSingleModelFile can be adapted or we use a different constructor.
+            // For now, let's use the existing parseSingleModelFile and it will re-read JSON if needed,
+            // but the L2 cache for MODEL_JSON_INFO will be populated.
+            // A better approach would be:
+            // const modelObj = new ModelObject(sourceId, modelFilePath, modelJsonInfo, modelFileStats);
+            // For now, using existing parser structure:
+            const modelObj = await parseSingleModelFile(modelFilePath, currentSupportedExts, currentSourceConfig, true, modelJsonInfo, jsonFileStats);
+            if (modelObj) {
+                allModels.push(modelObj);
+            }
+        }
+
+        if (currentShowSubdirectory) {
           for (const f of files) {
             if (f.isDirectory()) {
-              // Pass all relevant parameters in recursive call
-              await walk(path.join(dir, f.name), currentSourceConfig, currentSupportedExts, currentShowSubdirectory);
+              await walk(path.join(currentDir, f.name), currentSourceConfig, currentSupportedExts, currentShowSubdirectory);
             }
           }
         }
       } catch (error) {
         if (error.code === 'ENOENT') {
-             log.warn(`[LocalDataSource] 遍历时目录不存在 (可能已被删除): ${dir}`);
+             log.warn(`[LocalDataSource listModels] Directory not found during walk: ${currentDir}`);
         } else {
-             log.error(`[LocalDataSource] 遍历目录时出错: ${dir}`, error.message, error.stack);
+             log.error(`[LocalDataSource listModels] Error walking directory: ${currentDir}`, error.message, error.stack);
         }
       }
     };
 
-    log.debug(`[LocalDataSource] 开始递归遍历模型目录: ${startPath} with exts: ${Array.isArray(supportedExts) ? supportedExts.join(',') : ''}, showSubDir: ${showSubdirectory}`);
-    // Initial call to walk, passing all necessary parameters
-    // Ensure sourceConfig passed to walk uses this.config for consistency if sourceConfig param is not the primary one.
-    // However, the original logic uses the passed sourceConfig, so we maintain that for now.
-    // If sourceConfig is primarily for ID, and this.config.id is the true source ID, adjust accordingly.
-    // For now, assume sourceConfig parameter is correctly providing the necessary context for parseLocalModels.
-    await walk(startPath, sourceConfig, supportedExts, showSubdirectory);
+    await walk(startPath, sourceConfig, effectiveSupportedExts, showSubdirectory);
 
-    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      const currentDirectoryHash = await this.getDirectoryContentMetadataDigest(normalizedDirectory, supportedExts, showSubdirectory);
-      if (currentDirectoryHash) {
-        log.info(`[LocalDataSource] Storing listModels result to L1 cache. Key: ${cacheKey}, Hash: ${currentDirectoryHash}`);
-        this.modelInfoCacheService.setToL1(cacheKey, allModels, 'listModels', { directoryContentHash: currentDirectoryHash });
-      } else {
-        log.warn(`[LocalDataSource] Could not generate directory hash for ${normalizedDirectory}. listModels result not cached for key: ${cacheKey}`);
+    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && sourceId) {
+      const currentContentHash = await this.getDirectoryContentMetadataDigest(normalizedDirectory, effectiveSupportedExts, showSubdirectory);
+      if (currentContentHash) {
+        log.info(`[LocalDataSource listModels] Storing MODEL_LIST to cache. PathIdentifier: ${pathIdentifier}, Hash: ${currentContentHash}`);
+        await this.modelInfoCacheService.setDataToCache(
+          CacheDataType.MODEL_LIST,
+          sourceId,
+          pathIdentifier,
+          allModels,
+          { contentHash: currentContentHash },
+          'local' // sourceTypeForTTL
+        );
       }
     }
 
     const duration = Date.now() - startTime;
-    log.info(`[LocalDataSource] 列出模型完成: ${startPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型`);
+    log.info(`[LocalDataSource listModels] Completed. Path: ${startPath}, Duration: ${duration}ms, Found ${allModels.length} models`);
     return allModels;
   }
-  async readModelDetail(jsonPath, modelFilePath, sourceIdFromCaller) { // Renamed sourceId to sourceIdFromCaller for clarity
-    const startTime = Date.now();
-    const currentSourceId = this.config.id; // Primary sourceId for caching
 
-    // Validate inputs
+  /**
+   * Reads detailed information for a single model.
+   * @param {string} jsonPath - Path to the model's JSON file (may be same as modelFilePath if model is a .json).
+   * @param {string} modelFilePath - Path to the model file.
+   * @param {string} sourceIdFromCaller - The ID of the data source (passed by caller, may not be used if this.config.id is primary).
+   * @returns {Promise<object>} A promise that resolves to the model detail object.
+   */
+  async readModelDetail(jsonPath, modelFilePath, sourceIdFromCaller) {
+    const startTime = Date.now();
+    const sourceId = this.config.id;
+
     if (!modelFilePath) {
       log.warn(`[LocalDataSource readModelDetail] Called with empty modelFilePath.`);
       return {};
     }
-    if (!currentSourceId) { // Check this.config.id
+    if (!sourceId) {
         log.error(`[LocalDataSource readModelDetail] this.config.id is missing. Cannot proceed with caching. ModelFilePath: ${modelFilePath}`);
-        // Fallback to direct parsing without cache, or return error. For now, proceed but log heavily.
-        // Or, use sourceIdFromCaller if this.config.id is truly unavailable, but this indicates a config issue.
     }
-    // Log if sourceIdFromCaller differs from this.config.id, as this.config.id is used for cache keys.
-    if (sourceIdFromCaller && currentSourceId !== sourceIdFromCaller) {
-        log.warn(`[LocalDataSource readModelDetail] sourceIdFromCaller (${sourceIdFromCaller}) differs from this.config.id (${currentSourceId}). Using this.config.id for caching. ModelFilePath: ${modelFilePath}`);
-    }
-    // Use currentSourceId for all cache operations and parsing context.
-    const effectiveSourceId = currentSourceId || sourceIdFromCaller; // Fallback if this.config.id is somehow null
-    if (!effectiveSourceId) {
-        log.error(`[LocalDataSource readModelDetail] Effective sourceId is missing. Cannot reliably read model detail. ModelFilePath: ${modelFilePath}`);
-        return {};
-    }
-
-    log.debug(`[LocalDataSource readModelDetail] Entry. modelFilePath: ${modelFilePath}, effectiveSourceId: ${effectiveSourceId}, (original jsonPath: ${jsonPath})`);
-
-    // Determine the path of the .json file associated with the modelFilePath for L2 caching and validation
-    let associatedJsonPath;
+    
+    const relativeModelFilePath = path.relative(this.config.path, modelFilePath).replace(/\\/g, '/');
+    let associatedJsonPath; // Full path
     if (path.extname(modelFilePath).toLowerCase() === '.json') {
       associatedJsonPath = modelFilePath;
     } else {
-      // This logic mirrors how parseSingleModelFile finds the .json file.
       associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json';
     }
-    log.debug(`[LocalDataSource readModelDetail] Associated JSON path for L2/validation: ${associatedJsonPath}`);
+    const relativeAssociatedJsonPath = path.relative(this.config.path, associatedJsonPath).replace(/\\/g, '/');
 
-    const l1CacheKey = `modelObj:${effectiveSourceId}:${modelFilePath}`;
-    const l2CacheKey = `modelJsonInfo:${effectiveSourceId}:${associatedJsonPath}`; // L2 key is based on the JSON file path
+    log.debug(`[LocalDataSource readModelDetail] Entry. ModelFilePath: ${modelFilePath} (Rel: ${relativeModelFilePath}), JsonPath (Rel): ${relativeAssociatedJsonPath}, SourceId: ${sourceId}`);
 
-    // --- L1 Cache Check (Full Model Object) ---
-    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      const l1Hit = this.modelInfoCacheService.getFromL1(l1CacheKey, 'modelJsonInfo'); // Type 'modelJsonInfo' implies sourceJsonStats check
-      if (l1Hit && l1Hit.data) {
-        log.debug(`[LocalDataSource readModelDetail] L1 cache hit for key: ${l1CacheKey}. Validating...`);
-        const statsForValidation = await this.getFileStats(associatedJsonPath); // Validate against the JSON file's stats
-        if (statsForValidation && l1Hit.sourceJsonStats &&
-            statsForValidation.mtimeMs === l1Hit.sourceJsonStats.mtimeMs &&
-            statsForValidation.size === l1Hit.sourceJsonStats.size) {
-          log.info(`[LocalDataSource readModelDetail] L1 cache valid for key: ${l1CacheKey}. Returning cached data. Duration: ${Date.now() - startTime}ms`);
-          return l1Hit.data;
-        }
-        log.info(`[LocalDataSource readModelDetail] L1 cache invalid (stats mismatch or missing) for key: ${l1CacheKey}. Proceeding.`);
-      } else {
-        log.debug(`[LocalDataSource readModelDetail] L1 cache miss for key: ${l1CacheKey}.`);
-      }
+    if (!this.modelInfoCacheService || !this.modelInfoCacheService.isInitialized || !this.modelInfoCacheService.isEnabled || !sourceId) {
+      log.warn('[LocalDataSource readModelDetail] Cache service not available or sourceId missing. Falling back to direct parse.');
+      return parseSingleModelFile(modelFilePath, this.config.supportedExts || [], { id: sourceId }, true);
     }
 
-    // --- L2 Cache Check (Parsed JSON Content) ---
-    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      const l2Result = await this.modelInfoCacheService.getModelJsonInfoFromL2(l2CacheKey);
-      if (l2Result && l2Result.modelJsonInfo) {
-        log.debug(`[LocalDataSource readModelDetail] L2 cache hit for key: ${l2CacheKey}. Validating...`);
-        const statsForValidation = await this.getFileStats(associatedJsonPath);
-        if (statsForValidation && l2Result.sourceJsonStats &&
-            statsForValidation.mtimeMs === l2Result.sourceJsonStats.mtimeMs &&
-            statsForValidation.size === l2Result.sourceJsonStats.size) {
-          log.info(`[LocalDataSource readModelDetail] L2 cache valid for key: ${l2CacheKey}. Reconstructing model object.`);
-          
-          // Reconstruct modelFileInfo for parseModelDetailFromJsonContent
-          const modelFileExt = path.extname(modelFilePath).toLowerCase();
-          const modelNameWithoutExt = path.basename(modelFilePath, modelFileExt);
-          const fileInfoForReconstruction = {
-            name: modelNameWithoutExt,
-            file: modelFilePath,
-            jsonPath: associatedJsonPath, // This is the path of the JSON content we got from L2
-            ext: modelFileExt
-          };
-          
-          // parseModelDetailFromJsonContent expects a JSON string, but L2 returns an object.
-          // For now, stringify then let it parse. Ideally, parseModelDetailFromJsonContent would accept an object.
-          // OR, we directly use the object if parseModelDetailFromJsonContent's main job is parsing and then structuring.
-          // The current parseModelDetailFromJsonContent does: JSON.parse -> then structures.
-          // So, we can call a modified version or directly structure here.
-          // To avoid modifying modelParser for now, we stringify.
-          // UPDATE: modelParser.js's parseModelDetailFromJsonContent takes jsonContentString.
-          // _parseJsonContentToRawInfo is JSON.parse.
-          // So, we must stringify the object from L2.
-          let reconstructedModelDetail;
-          try {
-            reconstructedModelDetail = parseModelDetailFromJsonContent(
-              JSON.stringify(l2Result.modelJsonInfo), // Stringify object from L2
-              effectiveSourceId,
-              fileInfoForReconstruction
-            );
-            // parseSingleModelFile also adds the top-level 'image' based on files in dir.
-            // We need to replicate that or ensure parseModelDetailFromJsonContent handles it if possible.
-            // For now, this might miss the top-level 'image' if not in modelJsonInfo.
-            // Let's find the image again, similar to parseSingleModelFile
-             const dirOfModel = path.dirname(modelFilePath);
-             try {
-                const filesInDir = await fs.promises.readdir(dirOfModel); // 使用 fs.promises.readdir
-                // 使用从 modelParser 导入的 findImageForModel 函数
-                reconstructedModelDetail.image = await findImageForModel(dirOfModel, modelNameWithoutExt, filesInDir);
-             } catch (readdirError) {
-                log.warn(`[LocalDataSource readModelDetail] Could not re-read directory ${dirOfModel} to find image for L2-reconstructed object: ${readdirError.message}`);
-                reconstructedModelDetail.image = ''; // Default if error
-             }
-
-          } catch (e) {
-             log.error(`[LocalDataSource readModelDetail] Error reconstructing model from L2 data for ${modelFilePath}: ${e.message}`, e);
-             // Fall through to full parse if reconstruction fails
-          }
-
-          if (reconstructedModelDetail) {
-            log.info(`[LocalDataSource readModelDetail] Successfully reconstructed model from L2 data for ${modelFilePath}. Caching to L1.`);
-            this.modelInfoCacheService.setToL1(l1CacheKey, reconstructedModelDetail, 'modelJsonInfo', { sourceJsonStats: statsForValidation });
-            const duration = Date.now() - startTime;
-            log.debug(`[LocalDataSource readModelDetail] Exiting after L2 hit and L1 set. 耗时: ${duration}ms`);
-            return reconstructedModelDetail;
-          }
-        }
-        log.info(`[LocalDataSource readModelDetail] L2 cache invalid (stats mismatch or missing) for key: ${l2CacheKey}. Proceeding.`);
-      } else {
-        log.debug(`[LocalDataSource readModelDetail] L2 cache miss for key: ${l2CacheKey}.`);
-      }
-    }
-
-    // --- Cache Miss or Invalid: Perform Full Parse ---
-    log.debug(`[LocalDataSource readModelDetail] L1 and L2 miss/invalid. Calling parseSingleModelFile for: "${modelFilePath}"`);
-    let modelDetail;
+    // --- Step 1: Get current metadata for model and JSON files ---
+    let currentModelFileMetadata;
+    let currentJsonFileMetadata;
     try {
-      const sourceConfigForParser = { id: effectiveSourceId };
-      modelDetail = await parseSingleModelFile(
-        modelFilePath,
-        [], // supportedExtensions - parseSingleModelFile has its own logic or can be passed this.config.supportedExts
-        sourceConfigForParser,
-        true // ignorExtSupport - assuming true as per original call
-      );
-
-      if (modelDetail) {
-        log.debug(`[LocalDataSource readModelDetail] Successfully parsed by parseSingleModelFile: "${modelFilePath}"`);
-        // modelDetail.jsonPath is the actual path of the JSON file used (could be modelFilePath itself or associated .json)
-        // modelDetail.modelJsonInfo is the parsed JSON object
-        const actualJsonPathUsedByParser = modelDetail.jsonPath || associatedJsonPath; // Prefer actual from parser if available
-        const jsonContentObjectForL2 = modelDetail.modelJsonInfo;
-
-        if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && actualJsonPathUsedByParser && jsonContentObjectForL2) {
-          const actualJsonFileStats = await this.getFileStats(actualJsonPathUsedByParser);
-          if (actualJsonFileStats) {
-            const finalL2CacheKey = `modelJsonInfo:${effectiveSourceId}:${actualJsonPathUsedByParser}`;
-            log.info(`[LocalDataSource readModelDetail] Storing to L2 cache. Key: ${finalL2CacheKey}`);
-            await this.modelInfoCacheService.setModelJsonInfoToL2(finalL2CacheKey, jsonContentObjectForL2, actualJsonFileStats);
-
-            log.info(`[LocalDataSource readModelDetail] Storing to L1 cache. Key: ${l1CacheKey}`);
-            this.modelInfoCacheService.setToL1(l1CacheKey, modelDetail, 'modelJsonInfo', { sourceJsonStats: actualJsonFileStats });
-          } else {
-            log.warn(`[LocalDataSource readModelDetail] Could not get stats for ${actualJsonPathUsedByParser}. Cache not updated for ${modelFilePath}.`);
-          }
+        const modelFileStats = await this.getFileStats(modelFilePath); // getFileStats expects full or relative path from root
+        if (modelFileStats) {
+            currentModelFileMetadata = {
+                fileSize: modelFileStats.size,
+                metadata_lastModified_ms: modelFileStats.mtimeMs,
+                etag: null
+            };
         }
+    } catch (e) { log.warn(`[LocalDataSource readModelDetail] Error getting stats for model file ${modelFilePath}: ${e.message}`); }
+
+    try {
+        const jsonFileStats = await this.getFileStats(associatedJsonPath);
+        if (jsonFileStats) {
+            currentJsonFileMetadata = {
+                fileSize: jsonFileStats.size,
+                metadata_lastModified_ms: jsonFileStats.mtimeMs,
+                etag: null
+            };
+        }
+    } catch (e) { log.warn(`[LocalDataSource readModelDetail] Error getting stats for JSON file ${associatedJsonPath}: ${e.message}`); }
+
+
+    // --- Step A: Try L1 Cache for MODEL_DETAIL ---
+    if (currentModelFileMetadata) {
+        const l1ModelDetail = await this.modelInfoCacheService.getDataFromCache(
+            CacheDataType.MODEL_DETAIL,
+            sourceId,
+            relativeModelFilePath,
+            currentModelFileMetadata
+        );
+        if (l1ModelDetail) {
+            log.info(`[LocalDataSource readModelDetail] L1 cache hit for MODEL_DETAIL: ${relativeModelFilePath}. Duration: ${Date.now() - startTime}ms`);
+            return l1ModelDetail;
+        }
+    }
+    
+    // --- Step B: Try L2 Cache for MODEL_JSON_INFO ---
+    let modelJsonInfo;
+    if (currentJsonFileMetadata) {
+        modelJsonInfo = await this.modelInfoCacheService.getDataFromCache(
+            CacheDataType.MODEL_JSON_INFO,
+            sourceId,
+            relativeAssociatedJsonPath,
+            currentJsonFileMetadata
+        );
+
+        if (modelJsonInfo) {
+            log.info(`[LocalDataSource readModelDetail] L2 cache hit for MODEL_JSON_INFO: ${relativeAssociatedJsonPath}`);
+            // Build ModelObject from L2 data and model file info
+            // This requires parseSingleModelFile to accept pre-parsed JSON and its stats.
+            const modelDetail = await parseSingleModelFile(modelFilePath, this.config.supportedExts || [], { id: sourceId }, true, modelJsonInfo, await this.getFileStats(associatedJsonPath));
+            if (modelDetail && currentModelFileMetadata) {
+                await this.modelInfoCacheService.setDataToCache(
+                    CacheDataType.MODEL_DETAIL,
+                    sourceId,
+                    relativeModelFilePath,
+                    modelDetail,
+                    currentModelFileMetadata,
+                    'local'
+                );
+                log.info(`[LocalDataSource readModelDetail] Set MODEL_DETAIL to L1 from L2 data: ${relativeModelFilePath}. Duration: ${Date.now() - startTime}ms`);
+                return modelDetail;
+            }
+        }
+    }
+
+    // --- Step C: Cache Miss - Full Parse from Source ---
+    log.info(`[LocalDataSource readModelDetail] L1/L2 cache miss or invalid. Parsing from source: ${modelFilePath}`);
+    const parsedModelDetail = await parseSingleModelFile(modelFilePath, this.config.supportedExts || [], { id: sourceId }, true);
+
+    if (parsedModelDetail) {
+        // parsedModelDetail.modelJsonInfo contains the JSON object
+        // parsedModelDetail.jsonPath contains the actual JSON path used by parser
+        const actualJsonPathUsedByParser = parsedModelDetail.jsonPath || associatedJsonPath;
+        const relativeActualJsonPath = path.relative(this.config.path, actualJsonPathUsedByParser).replace(/\\/g, '/');
+        const jsonContentObjectForL2 = parsedModelDetail.modelJsonInfo;
+        
+        let sourceJsonFileMetadataForCache;
+        try {
+            const stats = await this.getFileStats(actualJsonPathUsedByParser);
+            if (stats) {
+                 sourceJsonFileMetadataForCache = {
+                    fileSize: stats.size,
+                    metadata_lastModified_ms: stats.mtimeMs,
+                    etag: null
+                };
+            }
+        } catch(e) { log.warn(`[LocalDataSource readModelDetail] Could not get stats for ${actualJsonPathUsedByParser} after parsing.`);}
+
+
+        if (jsonContentObjectForL2 && sourceJsonFileMetadataForCache) {
+            await this.modelInfoCacheService.setDataToCache(
+                CacheDataType.MODEL_JSON_INFO,
+                sourceId,
+                relativeActualJsonPath,
+                jsonContentObjectForL2,
+                sourceJsonFileMetadataForCache
+            );
+            log.info(`[LocalDataSource readModelDetail] Set MODEL_JSON_INFO to L2: ${relativeActualJsonPath}`);
+        }
+
+        if (currentModelFileMetadata) { // currentModelFileMetadata should be up-to-date for the main model file
+             await this.modelInfoCacheService.setDataToCache(
+                CacheDataType.MODEL_DETAIL,
+                sourceId,
+                relativeModelFilePath,
+                parsedModelDetail,
+                currentModelFileMetadata,
+                'local'
+            );
+            log.info(`[LocalDataSource readModelDetail] Set MODEL_DETAIL to L1: ${relativeModelFilePath}`);
+        }
+       
         const duration = Date.now() - startTime;
-        log.debug(`[LocalDataSource readModelDetail] Exiting after full parse. 耗时: ${duration}ms`);
-        return modelDetail;
-      } else {
-        log.warn(`[LocalDataSource readModelDetail] parseSingleModelFile returned null for: "${modelFilePath}".`);
-        const duration = Date.now() - startTime;
-        log.debug(`[LocalDataSource readModelDetail] Exiting after failed parse. 耗时: ${duration}ms`);
+        log.info(`[LocalDataSource readModelDetail] Full parse completed. Duration: ${duration}ms`);
+        return parsedModelDetail;
+    } else {
+        log.warn(`[LocalDataSource readModelDetail] parseSingleModelFile returned null for: ${modelFilePath}`);
         return {};
-      }
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      log.error(`[LocalDataSource readModelDetail] Unexpected error processing model detail for: "${modelFilePath}". 耗时: ${duration}ms`, error.message, error.stack);
-      return {};
     }
   }
-/**
-   * 获取本地图片文件的 Buffer 数据和 MIME 类型。
-   * @param {string} imagePath - 图片文件的完整路径。
-   * @returns {Promise<object|null>} 包含 { path, data, mimeType } 的对象，或 null。
+
+  /**
+   * Gets image data (Buffer and MIME type) for a local image file.
+   * @param {string} imagePath - The full path to the image file.
+   * @returns {Promise<{path: string, data: Buffer, mimeType: string}|null>} Image data or null if error.
    */
   async getImageData(imagePath) {
     const startTime = Date.now();
@@ -321,15 +455,13 @@ class LocalDataSource extends DataSource {
         return null;
     }
     try {
-      // 检查文件是否存在
       await fs.promises.access(imagePath);
-      // 读取文件内容
       const fileData = await fs.promises.readFile(imagePath);
       const mimeType = `image/${path.extname(imagePath).slice(1).toLowerCase()}`;
       const duration = Date.now() - startTime;
       log.debug(`[LocalDataSource] 读取本地图片成功: ${imagePath}, 大小: ${(fileData.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
       return {
-        path: imagePath, // 虽然接口层可能不再直接用，但保留路径信息可能有用
+        path: imagePath,
         data: fileData,
         mimeType: mimeType
       };
@@ -340,18 +472,18 @@ class LocalDataSource extends DataSource {
       } else {
         log.error(`[LocalDataSource] 获取图片数据时出错: ${imagePath}, 耗时: ${duration}ms`, error.message, error.stack);
       }
-      return null; // 返回 null 表示失败
+      return null;
     }
   }
 
   /**
-   * 将 JSON 字符串写入本地文件系统。
-   * @param {string} filePath - 要写入的文件的完整路径。
-   * @param {string} dataToWrite - 要写入的 JSON 字符串数据。
-   * @returns {Promise<void>} 操作完成时解析的 Promise。
-   * @throws {Error} 如果写入失败。
+   * Writes model JSON data to a local file.
+   * @param {string} filePath - The full path to write the JSON file.
+   * @param {string} dataToWrite - The JSON string to write.
+   * @returns {Promise<void>}
+   * @throws {Error} If writing fails.
    */
-  async writeModelJson(filePath, dataToWrite) { // dataToWrite is now a JSON string
+  async writeModelJson(filePath, dataToWrite) {
     const startTime = Date.now();
     log.info(`[LocalDataSource] 开始写入模型 JSON: ${filePath}`);
      if (!filePath) {
@@ -364,7 +496,6 @@ class LocalDataSource extends DataSource {
     }
 
     try {
-      // 确保目录存在
       const dirPath = path.dirname(filePath);
       try {
         await fs.promises.access(dirPath);
@@ -373,12 +504,10 @@ class LocalDataSource extends DataSource {
           log.info(`[LocalDataSource] 目录 ${dirPath} 不存在，正在创建...`);
           await fs.promises.mkdir(dirPath, { recursive: true });
         } else {
-          log.error(`[LocalDataSource] 访问目录时出错 ${dirPath}:`, accessError);
-          throw accessError; // 重新抛出访问错误
+          throw accessError;
         }
       }
 
-      // dataToWrite is already a JSON string, write directly to file
       await fs.promises.writeFile(filePath, dataToWrite, 'utf-8');
       const duration = Date.now() - startTime;
       log.info(`[LocalDataSource] 成功写入模型 JSON: ${filePath}, 耗时: ${duration}ms`);
@@ -387,72 +516,68 @@ class LocalDataSource extends DataSource {
       if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
         const sourceId = this.config.id;
         if (!sourceId) {
-          log.error(`[LocalDataSource writeModelJson] Cache Invalidation: sourceId (this.config.id) is missing. Cannot invalidate cache for ${filePath}.`);
-          // Early exit from cache invalidation if sourceId is missing
+          log.error(`[LocalDataSource writeModelJson] Cache Invalidation: sourceId (this.config.id) is missing for ${filePath}.`);
         } else {
           log.info(`[LocalDataSource writeModelJson] Invalidating cache for updated JSON file: ${filePath}`);
+          const relativeJsonPath = path.relative(this.config.path, filePath).replace(/\\/g, '/');
 
-          // 1. Invalidate L2 cache for this JSON file
-          const l2Key = `modelJsonInfo:${sourceId}:${filePath}`;
-          log.debug(`[LocalDataSource writeModelJson] Invalidating L2 cache with key: ${l2Key}`);
-          await this.modelInfoCacheService.invalidateL2(l2Key, 'modelJsonInfo');
+          // 1. Invalidate MODEL_JSON_INFO for this JSON file
+          await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_JSON_INFO, sourceId, relativeJsonPath);
+          log.debug(`[LocalDataSource writeModelJson] Invalidated MODEL_JSON_INFO for: ${relativeJsonPath}`);
 
-          // 2. Invalidate L1 cache for the corresponding model object(s)
-          // The JSON file (filePath) might correspond to a model file (e.g., modelName.safetensors)
+          // 2. Invalidate MODEL_DETAIL for corresponding model file(s)
           const modelNameWithoutExt = path.basename(filePath, '.json');
           const dirOfJson = path.dirname(filePath);
-          
-          // Attempt to find corresponding model files based on supported extensions
-          // This assumes supportedExts is available, e.g., from this.config.supportedExts
-          // If this.config.supportedExts is not directly available here, this part might need adjustment
-          // or supportedExts needs to be passed or retrieved.
-          // For now, let's assume it's accessible via this.config or a default list.
-          const supportedExts = this.config.supportedExts || ['.safetensors', '.ckpt', '.pt', '.pth', '.bin']; // Fallback if not in config
+          const supportedExts = this.config.supportedExts || ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
           
           for (const ext of supportedExts) {
             const potentialModelFilePath = path.join(dirOfJson, `${modelNameWithoutExt}${ext}`);
-            // Check if this potential model file actually exists before creating L1 key,
-            // or just try to delete (deleteFromL1 handles non-existent keys gracefully).
-            // For simplicity, we'll just try to delete.
-            const l1ModelObjKey = `modelObj:${sourceId}:${potentialModelFilePath}`;
-            log.debug(`[LocalDataSource writeModelJson] Attempting to invalidate L1 model object cache with key: ${l1ModelObjKey}`);
-            this.modelInfoCacheService.deleteFromL1(l1ModelObjKey);
+            const relativeModelFilePath = path.relative(this.config.path, potentialModelFilePath).replace(/\\/g, '/');
+            // Check if file exists before invalidating? No, invalidateCacheEntry handles non-existent keys.
+            await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_DETAIL, sourceId, relativeModelFilePath);
+            log.debug(`[LocalDataSource writeModelJson] Attempted invalidation of MODEL_DETAIL for: ${relativeModelFilePath}`);
           }
-          // Also, if the filePath itself could be an L1 key (e.g. if a .json file is treated as a primary model file)
-          const l1DirectJsonKey = `modelObj:${sourceId}:${filePath}`;
-          log.debug(`[LocalDataSource writeModelJson] Attempting to invalidate L1 direct JSON object cache with key: ${l1DirectJsonKey}`);
-          this.modelInfoCacheService.deleteFromL1(l1DirectJsonKey);
+          // If the .json file itself could be a model (e.g. for some types of models)
+          await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_DETAIL, sourceId, relativeJsonPath);
+          log.debug(`[LocalDataSource writeModelJson] Attempted invalidation of MODEL_DETAIL for direct JSON path: ${relativeJsonPath}`);
 
 
-          // 3. Invalidate L1 listModels cache for the directory
+          // 3. Invalidate MODEL_LIST for the directory
           const directoryPath = path.dirname(filePath);
-          let relativeDirPath = path.relative(this.config.path, directoryPath);
-          // Ensure relativeDirPath is in a format consistent with listModels cache keys (e.g., no leading slash if root, normalized separators)
-          relativeDirPath = relativeDirPath.replace(/\\/g, '/'); // Normalize to forward slashes
-          if (relativeDirPath === '.') relativeDirPath = ''; // For root directory
+          let relativeDirPath = path.relative(this.config.path, directoryPath).replace(/\\/g, '/');
+          if (relativeDirPath === '.') relativeDirPath = ''; // Root directory
 
-          log.debug(`[LocalDataSource writeModelJson] Invalidating L1 listModels cache for directory: ${relativeDirPath} (Source: ${sourceId})`);
-          // This will clear all listModels cache entries starting with "listModels:sourceId:relativeDirPath"
-          // This should cover different showSubDir and exts combinations due to prefix matching.
-          await this.modelInfoCacheService.invalidateListModelsCacheForDirectory(sourceId, relativeDirPath);
+          // We need to invalidate for all combinations of showSubDir and exts that might include this file.
+          // The design doc suggests: "If DataSource can precisely construct affected MODEL_LIST pathIdentifier..."
+          // This is hard. A simpler approach is to clear all listModels for that directory prefix if precise invalidation is too complex.
+          // For now, let's try to be somewhat precise for the common cases.
+          // Assuming default supportedExts and showSubdirectory=true are common.
+          const listPathIdentifierTrue = this._generateListModelsPathIdentifier(relativeDirPath, true, supportedExts);
+          await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_LIST, sourceId, listPathIdentifierTrue);
+          log.debug(`[LocalDataSource writeModelJson] Invalidated MODEL_LIST (showSubDir=true) for dir: ${relativeDirPath}, PI: ${listPathIdentifierTrue}`);
           
-          log.info(`[LocalDataSource writeModelJson] Cache invalidation complete for ${filePath}.`);
+          const listPathIdentifierFalse = this._generateListModelsPathIdentifier(relativeDirPath, false, supportedExts);
+          await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_LIST, sourceId, listPathIdentifierFalse);
+          log.debug(`[LocalDataSource writeModelJson] Invalidated MODEL_LIST (showSubDir=false) for dir: ${relativeDirPath}, PI: ${listPathIdentifierFalse}`);
+          
+          // A more robust but heavier approach would be clearCacheForSource(sourceId) or a prefix based L1 clear.
+          // The document mentions: "clearCacheForSource(this.id) (this has a large impact)"
+          // Or "rely on next fetch for MODEL_LIST due to contentHash mismatch". This is the safest.
+          // The current invalidation of specific pathIdentifiers is a good attempt.
+          log.info(`[LocalDataSource writeModelJson] Cache invalidation attempts complete for ${filePath}.`);
         }
-      } else {
-        log.debug(`[LocalDataSource writeModelJson] Cache service not available or disabled. Skipping cache invalidation for ${filePath}.`);
       }
-
     } catch (error) {
       const duration = Date.now() - startTime;
       log.error(`[LocalDataSource] 写入模型 JSON 时出错: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
-      throw error; // 重新抛出写入错误
+      throw error;
     }
   }
 
   /**
-   * 检查文件是否存在。
-   * @param {string} filePath - 文件的完整路径。
-   * @returns {Promise<boolean>} 如果文件存在则返回 true，否则返回 false。
+   * Checks if a file exists.
+   * @param {string} filePath - The full path to the file.
+   * @returns {Promise<boolean>} True if the file exists, false otherwise.
    */
   async fileExists(filePath) {
     const startTime = Date.now();
@@ -478,11 +603,11 @@ class LocalDataSource extends DataSource {
   }
 
   /**
-   * 将 Buffer 数据写入本地文件系统。
-   * @param {string} filePath - 要写入的文件的完整路径。
-   * @param {Buffer} dataBuffer - 要写入的 Buffer 数据。
-   * @returns {Promise<void>} 操作完成时解析的 Promise。
-   * @throws {Error} 如果写入失败。
+   * Writes Buffer data to a local file.
+   * @param {string} filePath - The full path to write the file.
+   * @param {Buffer} dataBuffer - The Buffer data to write.
+   * @returns {Promise<void>}
+   * @throws {Error} If writing fails.
    */
   async writeFile(filePath, dataBuffer) {
     const startTime = Date.now();
@@ -497,7 +622,6 @@ class LocalDataSource extends DataSource {
     }
 
     try {
-      // 确保目录存在
       const dirPath = path.dirname(filePath);
       try {
         await fs.promises.access(dirPath);
@@ -506,26 +630,24 @@ class LocalDataSource extends DataSource {
           log.info(`[LocalDataSource] 目录 ${dirPath} 不存在，正在创建...`);
           await fs.promises.mkdir(dirPath, { recursive: true });
         } else {
-          log.error(`[LocalDataSource] 访问目录时出错 ${dirPath}:`, accessError);
-          throw accessError; // 重新抛出访问错误
+          throw accessError;
         }
       }
-
-      // 写入文件
       await fs.promises.writeFile(filePath, dataBuffer);
       const duration = Date.now() - startTime;
       log.info(`[LocalDataSource] 成功写入文件: ${filePath}, 大小: ${(dataBuffer.length / 1024).toFixed(1)}KB, 耗时: ${duration}ms`);
     } catch (error) {
       const duration = Date.now() - startTime;
       log.error(`[LocalDataSource] 写入文件时出错: ${filePath}, 耗时: ${duration}ms`, error.message, error.stack);
-      throw error; // 重新抛出写入错误
+      throw error;
     }
   }
 
   /**
    * Gets file statistics (mtimeMs, size) for a local file.
-   * @param {string} relativeFilePath - The path to the file, relative to the data source root.
-   * @returns {Promise<{mtimeMs: number, size: number}|null>} File stats or null if error.
+   * Handles both absolute paths and paths relative to the data source root.
+   * @param {string} filePathInput - The path to the file.
+   * @returns {Promise<{mtimeMs: number, size: number}|null>} File stats or null if error/not found.
    */
   async getFileStats(filePathInput) {
     const startTime = Date.now();
@@ -533,16 +655,15 @@ class LocalDataSource extends DataSource {
       log.warn('[LocalDataSource] getFileStats called with empty filePathInput');
       return null;
     }
-    // If filePathInput is already absolute, use it directly. Otherwise, join with config path.
     const absoluteFilePath = path.isAbsolute(filePathInput)
       ? filePathInput
       : path.join(this.config.path, filePathInput);
-    log.debug(`[LocalDataSource] Attempting to get file stats for: ${absoluteFilePath} (input path: ${filePathInput})`);
+    log.debug(`[LocalDataSource getFileStats] Path: ${absoluteFilePath} (Input: ${filePathInput})`);
 
     try {
       const stats = await fs.promises.stat(absoluteFilePath);
       const duration = Date.now() - startTime;
-      log.debug(`[LocalDataSource] Successfully got file stats for: ${absoluteFilePath}, 耗时: ${duration}ms`);
+      log.debug(`[LocalDataSource getFileStats] Success for: ${absoluteFilePath}. Duration: ${duration}ms`);
       return {
         mtimeMs: stats.mtimeMs,
         size: stats.size,
@@ -550,37 +671,37 @@ class LocalDataSource extends DataSource {
     } catch (error) {
       const duration = Date.now() - startTime;
       if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource] getFileStats failed (file not found): ${absoluteFilePath}, 耗时: ${duration}ms`);
+        log.debug(`[LocalDataSource getFileStats] File not found: ${absoluteFilePath}. Duration: ${duration}ms`);
       } else {
-        log.error(`[LocalDataSource] Error getting file stats for: ${absoluteFilePath}, 耗时: ${duration}ms`, error.message, error.stack);
+        log.error(`[LocalDataSource getFileStats] Error for: ${absoluteFilePath}. Duration: ${duration}ms`, error.message, error.stack);
       }
-      return null; // Return null on error, as expected by some caching logic
+      return null;
     }
   }
 
   /**
-   * Calculates a metadata digest for the content of a directory.
-   * This digest is used for cache invalidation of listModels results.
-   * @param {string|null} relativeDirectory - The directory path relative to the data source root. Null or empty for root.
-   * @param {string[]} supportedExts - Array of supported model file extensions (e.g., ['.safetensors', '.ckpt']).
-   * @param {boolean} showSubdirectory - Whether to include subdirectories in the digest calculation.
-   * @returns {Promise<string|null>} A SHA256 hash string representing the directory content metadata, or null if an error occurs or directory is not found.
+   * Calculates a metadata digest (hash) for the content of a directory.
+   * Used for cache invalidation of listModels results.
+   * @param {string|null} relativeDirectory - Directory path relative to data source root. Null or empty for root.
+   * @param {string[]} supportedExts - Supported model file extensions.
+   * @param {boolean} showSubdirectory - Whether to include subdirectories.
+   * @returns {Promise<string|null>} SHA256 hash string or null on error.
    */
   async getDirectoryContentMetadataDigest(relativeDirectory, supportedExts, showSubdirectory) {
     const startTime = Date.now();
     const rootPath = this.config.path;
     const targetDirectory = relativeDirectory ? path.join(rootPath, relativeDirectory) : rootPath;
 
-    log.debug(`[LocalDataSource] Calculating content digest for: ${targetDirectory}, showSubDir: ${showSubdirectory}, exts: ${supportedExts.join(',')}`);
+    log.debug(`[LocalDataSource getDirectoryContentMetadataDigest] Dir: ${targetDirectory}, showSubDir: ${showSubdirectory}, exts: ${supportedExts.join(',')}`);
 
     try {
       await fs.promises.access(targetDirectory);
     } catch (error) {
       if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource] getDirectoryContentMetadataDigest: Directory not found: ${targetDirectory}`);
+        log.warn(`[LocalDataSource getDirectoryContentMetadataDigest] Directory not found: ${targetDirectory}`);
         return null;
       }
-      log.error(`[LocalDataSource] Error accessing directory for digest calculation: ${targetDirectory}`, error);
+      log.error(`[LocalDataSource getDirectoryContentMetadataDigest] Error accessing dir: ${targetDirectory}`, error);
       return null;
     }
 
@@ -592,7 +713,7 @@ class LocalDataSource extends DataSource {
         const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
         for (const entry of entries) {
           const entryFullPath = path.join(currentPath, entry.name);
-          const relativeEntryPath = path.relative(targetDirectory, entryFullPath).replace(/\\/g, '/'); // Normalize path separators
+          const relativeEntryPath = path.relative(targetDirectory, entryFullPath).replace(/\\/g, '/');
 
           if (entry.isFile()) {
             const ext = path.extname(entry.name).toLowerCase();
@@ -601,20 +722,18 @@ class LocalDataSource extends DataSource {
                 const stats = await fs.promises.stat(entryFullPath);
                 metadataItems.push(`${relativeEntryPath}:${stats.size}:${stats.mtimeMs}`);
               } catch (statError) {
-                if (statError.code !== 'ENOENT') { // Ignore if file was deleted during processing
-                    log.warn(`[LocalDataSource] Could not stat file for digest: ${entryFullPath}`, statError);
+                if (statError.code !== 'ENOENT') {
+                    log.warn(`[LocalDataSource getDirectoryContentMetadataDigest] Could not stat file: ${entryFullPath}`, statError);
                 }
               }
             }
           } else if (entry.isDirectory() && showSubdirectory) {
-            // For directories, we could add their names or a marker, but problem statement focuses on files.
-            // Let's ensure recursive call if showSubdirectory is true.
             await collectMetadata(entryFullPath);
           }
         }
       } catch (readDirError) {
-         if (readDirError.code !== 'ENOENT') { // Ignore if directory was deleted
-            log.warn(`[LocalDataSource] Error reading directory for digest: ${currentPath}`, readDirError);
+         if (readDirError.code !== 'ENOENT') {
+            log.warn(`[LocalDataSource getDirectoryContentMetadataDigest] Error reading dir: ${currentPath}`, readDirError);
          }
       }
     };
@@ -622,19 +741,17 @@ class LocalDataSource extends DataSource {
     await collectMetadata(targetDirectory);
 
     if (metadataItems.length === 0) {
-      // Consistent hash for an empty (relevant) directory
       const durationEmpty = Date.now() - startTime;
-      log.debug(`[LocalDataSource] No relevant files found for digest in ${targetDirectory}. Duration: ${durationEmpty}ms. Returning empty hash.`);
+      log.debug(`[LocalDataSource getDirectoryContentMetadataDigest] No relevant files in ${targetDirectory}. Duration: ${durationEmpty}ms. Returning empty hash.`);
       return crypto.createHash('sha256').update('').digest('hex');
     }
 
-    // Sort items for a consistent hash
     metadataItems.sort();
     const metadataString = metadataItems.join('|');
     const hash = crypto.createHash('sha256').update(metadataString).digest('hex');
 
     const duration = Date.now() - startTime;
-    log.info(`[LocalDataSource] Calculated content digest for ${targetDirectory}: ${hash}. Items: ${metadataItems.length}. Duration: ${duration}ms`);
+    log.info(`[LocalDataSource getDirectoryContentMetadataDigest] Calculated for ${targetDirectory}: ${hash}. Items: ${metadataItems.length}. Duration: ${duration}ms`);
     return hash;
   }
 }

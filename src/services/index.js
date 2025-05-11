@@ -4,7 +4,7 @@ const ModelService = require('./modelService');
 const ImageService = require('./imageService');
 const UpdateService = require('./updateService');
 const ModelCrawlerService = require('./modelCrawlerService'); // Import the new service
-const ModelInfoCacheService = require('./modelInfoCacheService'); // Import the new cache service
+const { ModelInfoCacheService } = require('./modelInfoCacheService'); // Import the new cache service
 
 /**
  * Initializes all application services and handles dependency injection.

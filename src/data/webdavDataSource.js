@@ -1,8 +1,27 @@
 const DataSource = require('./baseDataSource'); // 导入新的基类
+// 从 modelInfoCacheService 导入 CacheDataType
+const { CacheDataType } = require('../services/modelInfoCacheService');
 const { parseModelDetailFromJsonContent, createWebDavModelObject } = require('./modelParser'); // 导入 createWebDavModelObject
 const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
 const crypto = require('crypto'); // 引入 crypto 模块
+
+/**
+ * Parses a WebDAV lastmod timestamp string into milliseconds.
+ * @param {string | undefined | null} lastmodStr - The lastmod string from WebDAV.
+ * @returns {number | null} Timestamp in milliseconds, or null if input is invalid.
+ * @private
+ */
+function _parseWebDavTimestamp(lastmodStr) {
+  if (!lastmodStr) return null;
+  const date = new Date(lastmodStr);
+  if (isNaN(date.getTime())) {
+    log.warn(`[WebDavDataSourceUtils] Invalid date string for lastmod: ${lastmodStr}`);
+    return null;
+  }
+  return date.getTime();
+}
+
 
 class WebDavDataSource extends DataSource {
   constructor(config, modelInfoCacheService) { // Renamed to modelInfoCacheService for consistency
@@ -15,7 +34,7 @@ class WebDavDataSource extends DataSource {
     this._lastRefreshedFromRootPath = null; // 跟踪上次从根路径刷新的时间或标识
     this.initialized = this.initClient(config);
     this.modelInfoCacheService = modelInfoCacheService; // Store cache service instance
-    // this._l1Cache = new Map(); // L1 cache will be managed by modelInfoCacheService if available
+    this.logger = log.scope(`DataSource:WebDAV:${this.config.id}`); // Logger specific to this instance
   }
 
 
@@ -34,78 +53,52 @@ class WebDavDataSource extends DataSource {
     await this.initialized;
   }
 
-  /**
-   * Resolves a relative path against the configured subDirectory.
-   * @param {string} relativePath - The path relative to the subDirectory (e.g., '/', '/models', '/models/image.png').
-   * @returns {string} The fully resolved path for the WebDAV client (e.g., '/dav/root/models/image.png').
-   */
   _resolvePath(relativePath) {
-    // Ensure relativePath starts with '/' if not empty or already starting with '/'
     const normalizedRelative = relativePath && relativePath !== '/' && !relativePath.startsWith('/')
       ? `/${relativePath}`
-      : relativePath || '/'; // Default to '/' if empty or null
+      : relativePath || '/'; 
 
-    // If no subDirectory is configured, return the normalized relative path directly
     if (!this.subDirectory) {
       return normalizedRelative;
     }
 
-    // Handle root path relative to subDirectory
     if (normalizedRelative === '/') {
-      // Return subDirectory path, ensuring it ends with a slash if it's not just '/'
       return this.subDirectory === '/' ? '/' : `${this.subDirectory}/`;
     }
 
-    // Join subDirectory and the relative path (which already starts with '/')
     const fullPath = `${this.subDirectory}${normalizedRelative}`;
-
-    // Basic normalization: remove double slashes, but be careful not to remove the leading one if subDirectory was empty
     const cleanedPath = fullPath.replace(/\/{2,}/g, '/');
-
-    // log.debug(`[WebDavDataSource][${this.config.id}] _resolvePath: '${relativePath}' -> '${cleanedPath}' (subDir: '${this.subDirectory}')`); // Kept commented out as per original
     return cleanedPath;
   }
 
   async listSubdirectories() {
     const startTime = Date.now();
     await this.ensureInitialized();
-    // List subdirectories relative to the resolved root path
     const resolvedBasePath = this._resolvePath('/');
-    log.info(`[WebDavDataSource][${this.config.id}] 开始列出子目录: ${resolvedBasePath}`);
+    this.logger.info(`开始列出子目录: ${resolvedBasePath}`);
     try {
-      const items = await this.client.getDirectoryContents(resolvedBasePath, { deep: false }); // Get only top-level items
+      const items = await this.client.getDirectoryContents(resolvedBasePath, { deep: false }); 
       const subdirs = items
         .filter(item =>
           item.type === 'directory' &&
-          item.basename !== '.' && // Explicitly exclude . and ..
+          item.basename !== '.' && 
           item.basename !== '..'
         )
-        .map(item => item.basename); // Return just the directory name
+        .map(item => item.basename); 
       const duration = Date.now() - startTime;
-      log.info(`[WebDavDataSource][${this.config.id}] 列出子目录完成: ${resolvedBasePath}, 耗时: ${duration}ms, 找到 ${subdirs.length} 个子目录`);
+      this.logger.info(`列出子目录完成: ${resolvedBasePath}, 耗时: ${duration}ms, 找到 ${subdirs.length} 个子目录`);
       return subdirs;
     } catch (error) {
       const duration = Date.now() - startTime;
-      log.error(`[WebDavDataSource][${this.config.id}] 列出子目录时出错: ${resolvedBasePath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
-      // Handle cases like 404 Not Found gracefully
+      this.logger.error(`列出子目录时出错: ${resolvedBasePath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
       if (error.response && error.response.status === 404) {
-        log.warn(`[WebDavDataSource][${this.config.id}] 列出子目录失败 (目录不存在): ${resolvedBasePath}, 耗时: ${duration}ms`);
-        return []; // Directory doesn't exist, return empty list
+        this.logger.warn(`列出子目录失败 (目录不存在): ${resolvedBasePath}, 耗时: ${duration}ms`);
+        return []; 
       }
-      throw error; // Re-throw other errors
+      throw error; 
     }
   }
 
-  /**
-   * Helper method to recursively traverse directory items using a queue.
-   * @param {string} basePathToScan The fully resolved path on the server to start listing from.
-   * @param {Function} itemHandlerAsync Async callback function to process each item: (item, currentWebdavPath, sourceId, sourceRoot) => Promise<void>.
-   * @param {boolean} processSubdirectories If true, will scan subdirectories.
-   * @param {string} sourceId The ID of the data source for logging.
-   * @param {string} [sourceRoot] The resolved root path of the WebDAV source, optional.
-   * @returns {Promise<void>}
-   * @private
-   */
   async _traverseDirectoryItems(basePathToScan, itemHandlerAsync, processSubdirectories = true, sourceId, sourceRoot = null) {
     const queue = [basePathToScan];
     const visited = new Set();
@@ -119,55 +112,43 @@ class WebDavDataSource extends DataSource {
 
       let actualContents = [];
       try {
-        // itemsInDir is now rawContents. The result of getDirectoryContents will be stored in rawContents.
         const rawContents = await this.client.getDirectoryContents(currentPath, { deep: false, details: true });
-        // actualContents 会在下面根据 rawContents 重新赋值
-
         if (Array.isArray(rawContents)) {
           actualContents = rawContents;
         } else if (rawContents && typeof rawContents === 'object' && rawContents.filename) {
-          // Handle case where a single file/directory object is returned.
-          log.debug(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned a single item object, wrapping in array.`);
+          this.logger.debug(`_traverseDirectoryItems: getDirectoryContents for ${currentPath} returned a single item object, wrapping in array.`);
           actualContents = [rawContents];
         } else if (rawContents && typeof rawContents === 'object' && Object.keys(rawContents).length === 0) {
-          // Handle case where an empty object is returned (e.g., representing an empty directory).
-          log.debug(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an empty object, treating as empty directory.`);
+          this.logger.debug(`_traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an empty object, treating as empty directory.`);
           actualContents = [];
         } else if (rawContents && typeof rawContents === 'object' && rawContents !== null) {
-          // Attempt to extract array from common wrapper object properties.
           let extractedFromArrayWrapper = false;
           if (Array.isArray(rawContents.data)) { actualContents = rawContents.data; extractedFromArrayWrapper = true; }
           else if (Array.isArray(rawContents.items)) { actualContents = rawContents.items; extractedFromArrayWrapper = true; }
           else if (Array.isArray(rawContents.files)) { actualContents = rawContents.files; extractedFromArrayWrapper = true; }
           
           if (extractedFromArrayWrapper) {
-            log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an object, but an array was successfully extracted from one of its properties (data, items, or files).`);
+            this.logger.warn(`_traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an object, but an array was successfully extracted from one of its properties (data, items, or files).`);
           } else {
-            log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an object that is not a single item and from which an array could not be extracted. Received:`, rawContents, ". Treating as empty.");
-            actualContents = []; // Treat as empty if no array could be extracted
+            this.logger.warn(`_traverseDirectoryItems: getDirectoryContents for ${currentPath} returned an object that is not a single item and from which an array could not be extracted. Received:`, rawContents, ". Treating as empty.");
+            actualContents = []; 
           }
         } else {
-          // Handle other unexpected non-array types.
-          log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: getDirectoryContents for ${currentPath} returned unexpected non-array type. Received: ${typeof rawContents}. Value:`, rawContents, ". Treating as empty.");
+          this.logger.warn(`_traverseDirectoryItems: getDirectoryContents for ${currentPath} returned unexpected non-array type. Received: ${typeof rawContents}. Value:`, rawContents, ". Treating as empty.");
           actualContents = [];
         }
       } catch (error) {
-        log.error(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
+        this.logger.error(`_traverseDirectoryItems: Error fetching directory contents for ${currentPath}:`, error.message, error.stack, error.response?.status);
         if (error.response && (error.response.status === 404 || error.response.status === 403)) {
-          log.warn(`[WebDavDataSource][${sourceId}] _traverseDirectoryItems: Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
+          this.logger.warn(`_traverseDirectoryItems: Skipping inaccessible directory: ${currentPath} (Status: ${error.response.status})`);
         }
-        continue; // Skip to next in queue
+        continue; 
       }
 
       for (const item of actualContents) {
         if (item.basename === '.' || item.basename === '..') continue;
-
-        // Call the item handler for the item.
-        // The handler itself will decide what to do based on item.type or other conditions.
         await itemHandlerAsync(item, currentPath, sourceId, sourceRoot);
-
         if (item.type === 'directory' && processSubdirectories) {
-          // item.filename should be the fully resolved path
           if (item.filename && !visited.has(item.filename)) {
             queue.push(item.filename);
           }
@@ -176,78 +157,75 @@ class WebDavDataSource extends DataSource {
     }
   }
 
-  /**
-   * Recursively populates this._allItemsCache (Array) with relative file paths.
-   * Uses the _traverseDirectoryItems helper for the traversal logic.
-   * @param {string} basePathToScan The fully resolved path on the server to start listing from.
-   */
   async _populateAllItemsCache(basePathToScan) {
     const sourceId = this.config.id;
-    log.info(`[WebDavDataSource][${sourceId}] Starting to populate _allItemsCache (Array of file objects) from: ${basePathToScan}`);
-    this._allItemsCache = []; // Ensure starting with an empty array
-    const sourceRoot = this._resolvePath('/'); // Get the resolved root of the WebDAV source
+    this.logger.info(`Starting to populate _allItemsCache (Array of file objects) from: ${basePathToScan}`);
+    this._allItemsCache = []; 
+    const sourceRoot = this._resolvePath('/'); 
 
     const itemHandler = async (item, _currentWebdavPath, currentSourceId, currentSourceRoot) => {
-      // _currentWebdavPath is available if needed, but not used directly here for relativePath calculation
       if (item.type === 'file') {
-        let relativeFilePath = item.filename; // item.filename is the full resolved path
-        if (item.filename.startsWith(currentSourceRoot)) {
-          relativeFilePath = item.filename.substring(currentSourceRoot.length);
-          // Normalize: if currentSourceRoot is '/foo/' and item.filename is '/foo/bar.txt', relativeFilePath becomes 'bar.txt'
-          // if currentSourceRoot is '/foo' and item.filename is '/foo/bar.txt', relativeFilePath becomes '/bar.txt'
-          // We want relative paths to not start with '/', e.g., 'bar.txt' or 'subdir/bar.txt'
-          if (relativeFilePath.startsWith('/')) {
-            relativeFilePath = relativeFilePath.substring(1);
+        let relativeFilePath;
+        // currentSourceRoot is like /webdav/ or / (always ends with / if not empty)
+        // item.filename is like /webdav/lora/model.json or /lora/model.json
+        
+        if (item.filename === currentSourceRoot.slice(0, -1) && currentSourceRoot !== '/') { // e.g. item.filename is /webdav, currentSourceRoot is /webdav/
+             relativeFilePath = '/';
+        } else if (item.filename.startsWith(currentSourceRoot)) {
+          // tempPath will be like 'lora/model.json' or '' (if item.filename is currentSourceRoot itself, e.g. /webdav/)
+          let tempPath = item.filename.substring(currentSourceRoot.length);
+          
+          if (tempPath === '') { // Item is the root directory itself (represented as a file, unlikely but handle)
+            relativeFilePath = '/';
+          } else if (tempPath.startsWith('/')) {
+            // This implies currentSourceRoot might not have had a trailing slash (which _resolvePath should prevent)
+            // or item.filename had double slashes. Normalize by ensuring single leading slash.
+            relativeFilePath = tempPath.replace(/^\/+/, '/');
+          } else {
+            relativeFilePath = `/${tempPath}`; // Prepend slash
           }
         } else {
-          log.warn(`[WebDavDataSource][${currentSourceId}] _populateAllItemsCache/itemHandler: File ${item.filename} does not start with source root ${currentSourceRoot}. Using basename as relativePath fallback.`);
-          relativeFilePath = item.basename; // Fallback, might not be unique or correct for subdirs
+          // This case should ideally not happen if basePathToScan is currentSourceRoot and traversal is correct.
+          // If it does, it means item.filename is outside the expected sourceRoot.
+          // We'll form a path relative to the *actual* root of the WebDAV server.
+          this.logger.warn(`_populateAllItemsCache/itemHandler: File ${item.filename} does not start with source root ${currentSourceRoot}. Using full path from WebDAV root as relativePath.`);
+          if (item.filename.startsWith('/')) {
+            relativeFilePath = item.filename;
+          } else {
+            relativeFilePath = `/${item.filename}`;
+          }
         }
-        
+        // Final normalization to ensure single leading slash, and not an empty string if it was somehow derived
+        if (relativeFilePath === '') relativeFilePath = '/'; // Should be caught by specific checks, but as a safeguard
+        else relativeFilePath = relativeFilePath.replace(/^\/+/, '/'); // Ensure single leading slash
+
         this._allItemsCache.push({
-          // item itself contains: filename, basename, type, size, lastmod, etag
           ...item,
-          relativePath: relativeFilePath // Add our calculated relativePath
+          relativePath: relativeFilePath
         });
       }
-      // Directory queuing is handled by _traverseDirectoryItems itself.
     };
 
     await this._traverseDirectoryItems(basePathToScan, itemHandler, true, sourceId, sourceRoot);
-    log.info(`[WebDavDataSource][${sourceId}] _populateAllItemsCache complete. Found ${this._allItemsCache.length} file objects.`);
+    this.logger.info(`_populateAllItemsCache complete. Found ${this._allItemsCache.length} file objects.`);
   }
  
-  /**
-   * Lists all files starting from a given base path using a queue, optionally scanning subdirectories.
-   * Uses the _traverseDirectoryItems helper for the traversal logic.
-   * This method returns a flat array of all file stat objects found.
-   * @param {string} basePathToScan The fully resolved path on the server to start listing from.
-   * @param {boolean} scanSubdirectories If true, will scan subdirectories.
-   * @returns {Promise<Array<object>>} A promise resolving to a flat array of all file stat objects found.
-   */
   async _recursiveListAllFiles(basePathToScan, scanSubdirectories = true) {
     const sourceId = this.config.id;
-    log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles: Path: ${basePathToScan}, ScanSubdirs: ${scanSubdirectories}`);
+    this.logger.debug(`_recursiveListAllFiles: Path: ${basePathToScan}, ScanSubdirs: ${scanSubdirectories}`);
     const allFilesFound = [];
   
     const itemHandler = async (item, _currentWebdavPath, _currentSourceId, _currentSourceRoot) => {
       if (item.type === 'file') {
         allFilesFound.push(item);
       }
-      // Directory queuing is handled by _traverseDirectoryItems itself if scanSubdirectories is true.
     };
   
-    // The third argument to _traverseDirectoryItems is processSubdirectories
     await this._traverseDirectoryItems(basePathToScan, itemHandler, scanSubdirectories, sourceId, null);
-    log.debug(`[WebDavDataSource][${sourceId}] _recursiveListAllFiles from ${basePathToScan} complete. Found ${allFilesFound.length} file objects.`);
+    this.logger.debug(`_recursiveListAllFiles from ${basePathToScan} complete. Found ${allFilesFound.length} file objects.`);
     return allFilesFound;
   }
 
-  /**
-   * Batch fetches content for multiple JSON files.
-   * @param {string[]} jsonFilePaths - An array of fully resolved paths to JSON files.
-   * @returns {Promise<Map<string, string|null>>} A map where keys are file paths and values are file contents (string) or null if fetching failed.
-   */
   async _batchFetchJsonContents(jsonFilePaths) {
     const startTime = Date.now();
     await this.ensureInitialized();
@@ -255,11 +233,10 @@ class WebDavDataSource extends DataSource {
     const resultsMap = new Map();
 
     if (!jsonFilePaths || jsonFilePaths.length === 0) {
-      // log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: No JSON file paths provided.`); // Removed: Can be inferred from subsequent logs if needed
       return resultsMap;
     }
 
-    log.info(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Starting batch fetch for ${jsonFilePaths.length} JSON files.`);
+    this.logger.info(`_batchFetchJsonContents: Starting batch fetch for ${jsonFilePaths.length} JSON files.`);
 
     const fetchPromises = jsonFilePaths.map(filePath =>
       this.client.getFileContents(filePath, { format: 'text' })
@@ -272,155 +249,166 @@ class WebDavDataSource extends DataSource {
     settledResults.forEach(result => {
       if (result.status === 'fulfilled' && result.value.status === 'fulfilled') {
         resultsMap.set(result.value.path, result.value.value);
-        // log.debug(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Successfully fetched ${result.value.path}`); // Removed: Too verbose, one per file
       } else if (result.status === 'fulfilled' && result.value.status === 'rejected') {
-        // This case handles errors caught within the individual fetchPromises' .catch
-        resultsMap.set(result.value.path, null); // Mark as failed to fetch
-        log.error(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Failed to fetch ${result.value.path}:`, result.value.reason.message, result.value.reason.response?.status);
+        resultsMap.set(result.value.path, null); 
+        this.logger.error(`_batchFetchJsonContents: Failed to fetch ${result.value.path}:`, result.value.reason.message, result.value.reason.response?.status);
       } else if (result.status === 'rejected') {
-        // This case handles errors if Promise.allSettled itself has an issue with a promise (less common here)
-        // We need to know which path failed if possible, but result.reason might not contain it directly.
-        // For now, we assume the inner catch handles path association.
-        log.error(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: A promise in batch fetch was rejected unexpectedly:`, result.reason);
+        this.logger.error(`_batchFetchJsonContents: A promise in batch fetch was rejected unexpectedly:`, result.reason);
       }
     });
 
     const duration = Date.now() - startTime;
-    log.info(`[WebDavDataSource][${sourceId}] _batchFetchJsonContents: Finished batch fetch. ${resultsMap.size} results (some might be null for failures). Duration: ${duration}ms`);
+    this.logger.info(`_batchFetchJsonContents: Finished batch fetch. ${resultsMap.size} results (some might be null for failures). Duration: ${duration}ms`);
     return resultsMap;
   }
 
-  async _buildModelEntry(modelFile, passedSourceId, passedResolvedBasePath, preFetchedJsonContentsMap = new Map()) {
+  /**
+   * Builds a single model entry, potentially using L2 cache for JSON info.
+   * @param {object} modelFile - The model file object from _allItemsCache.
+   * @param {string} currentSourceId - The ID of the current data source.
+   * @param {string} currentResolvedBasePath - The resolved root path of the WebDAV source.
+   * @param {Map<string, string|null>} [preFetchedJsonContentsMap=new Map()] - Optional map of pre-fetched JSON contents.
+   * @returns {Promise<object|null>} The built model object or null if an error occurs.
+   * @private
+   */
+  async _buildModelEntry(modelFile, currentSourceId, currentResolvedBasePath, preFetchedJsonContentsMap = new Map()) {
     const startTime = Date.now();
-    await this.ensureInitialized(); // Ensure client is ready
+    await this.ensureInitialized(); 
 
-    // Validate modelFile (which is now an object from _allItemsCache)
     if (!modelFile || !modelFile.filename || typeof modelFile.filename !== 'string' || !modelFile.relativePath || typeof modelFile.relativePath !== 'string') {
-      log.error(`[WebDavDataSource][_buildModelEntry] Invalid modelFile provided (missing filename or relativePath). modelFile: ${JSON.stringify(modelFile)}`);
+      this.logger.error(`_buildModelEntry Invalid modelFile provided (missing filename or relativePath). modelFile: ${JSON.stringify(modelFile)}`);
       return null;
     }
 
-    let currentSourceId = passedSourceId || this.config.id;
-    // currentAllItemsInDir is no longer used as a parameter for fetching, it's derived from _allItemsCache
-    let currentResolvedBasePath = passedResolvedBasePath || this._resolvePath('/');
-
-
-    // modelFile.filename is the fully resolved path on the server
-    // modelFile.relativePath is relative to the source's root
-
-    // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 开始处理模型文件 ${modelFile.filename} (relative: ${modelFile.relativePath})`);
-
-    const modelFileDirRelative = path.posix.dirname(modelFile.relativePath);
-    // Ensure modelFileDirRelative is not '.' if modelFile.relativePath is a root file like 'file.txt'
-    // path.posix.dirname('file.txt') is '.', path.posix.dirname('/file.txt') is '/'
-    // Our relativePath does not start with '/', so dirname will be '.' for root files.
-    const searchDirRelative = modelFileDirRelative === '.' ? '' : modelFileDirRelative;
-
-
+    // modelFile.relativePath is now like /lora/model.safetensors or /model.safetensors
+    const modelFileDirRelative = path.posix.dirname(modelFile.relativePath); // e.g., /lora or /
     const modelFileBaseOriginal = path.posix.basename(modelFile.relativePath, path.posix.extname(modelFile.relativePath));
     
     let associatedJsonFile = null;
     let associatedImageFile = null;
-    let previewImageFile = null; // For .preview.png
+    let previewImageFile = null;
 
     const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
 
     for (const cachedItem of this._allItemsCache) {
-      // Compare directories based on relative paths
-      const cachedItemDirRelative = path.posix.dirname(cachedItem.relativePath);
-      const normalizedCachedItemDir = cachedItemDirRelative === '.' ? '' : cachedItemDirRelative;
+      // cachedItem.relativePath is now like /lora/model.json or /lora/preview.png
+      const cachedItemDirRelative = path.posix.dirname(cachedItem.relativePath); // e.g. /lora or /
 
-      if (normalizedCachedItemDir === searchDirRelative) {
+      if (cachedItemDirRelative === modelFileDirRelative) { // Compare directories directly
         const itemBase = path.posix.basename(cachedItem.relativePath, path.posix.extname(cachedItem.relativePath));
         const itemExt = path.posix.extname(cachedItem.relativePath).toLowerCase();
 
         if (itemBase === modelFileBaseOriginal) {
           if (imageExtensions.includes(itemExt)) {
-            if (!associatedImageFile) associatedImageFile = cachedItem; // Take the first one found
+            if (!associatedImageFile) associatedImageFile = cachedItem;
           } else if (itemExt === '.json') {
             if (!associatedJsonFile) associatedJsonFile = cachedItem;
           }
         } else if (itemBase === `${modelFileBaseOriginal}.preview` && imageExtensions.includes(itemExt)) {
-           if (!previewImageFile) previewImageFile = cachedItem; // Found a .preview.ext image
+           if (!previewImageFile) previewImageFile = cachedItem;
         }
       }
     }
 
-    const imageFileToUse = previewImageFile || associatedImageFile; // Prioritize .preview.ext
+    const imageFileToUse = previewImageFile || associatedImageFile; 
     const jsonFileToUse = associatedJsonFile;
 
-    // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: For ${modelFile.relativePath} - Found JSON: ${jsonFileToUse?.relativePath}, Image: ${imageFileToUse?.relativePath}`);
-    
     let modelJsonInfo = {};
     if (jsonFileToUse) {
-      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Attempting to read JSON file ${jsonFileToUse.filename} (relative: ${jsonFileToUse.relativePath})`);
-      try {
-        let jsonContent;
-        // jsonFileToUse.filename is the resolved path
-        if (preFetchedJsonContentsMap.has(jsonFileToUse.filename)) {
-          jsonContent = preFetchedJsonContentsMap.get(jsonFileToUse.filename);
-          if (jsonContent === null) { // Explicitly null means prefetch failed
-            log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Pre-fetch for JSON ${jsonFileToUse.filename} failed. Will attempt individual fetch.`);
-            // Fall through to individual fetch
-          } else {
-            // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Using pre-fetched JSON content for ${jsonFileToUse.filename}`);
+      const associatedJsonPath = jsonFileToUse.relativePath; // This is the pathIdentifier for MODEL_JSON_INFO
+      const currentJsonFileMetadata = {
+        fileSize: jsonFileToUse.size,
+        metadata_lastModified_ms: _parseWebDavTimestamp(jsonFileToUse.lastmod),
+        etag: jsonFileToUse.etag || null,
+      };
+
+      // Try to get from L2 cache
+      let cachedJsonInfo;
+      if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
+        cachedJsonInfo = await this.modelInfoCacheService.getDataFromCache(
+          CacheDataType.MODEL_JSON_INFO,
+          currentSourceId,
+          associatedJsonPath,
+          currentJsonFileMetadata
+        );
+      }
+
+      if (cachedJsonInfo) {
+        this.logger.debug(`_buildModelEntry: L2 cache hit for MODEL_JSON_INFO: ${associatedJsonPath}`);
+        modelJsonInfo = cachedJsonInfo;
+      } else {
+        this.logger.debug(`_buildModelEntry: L2 cache miss/invalid for MODEL_JSON_INFO: ${associatedJsonPath}. Fetching from source.`);
+        try {
+          let jsonContent;
+          if (preFetchedJsonContentsMap.has(jsonFileToUse.filename)) {
+            jsonContent = preFetchedJsonContentsMap.get(jsonFileToUse.filename);
+            if (jsonContent === null) { 
+              this.logger.warn(`_buildModelEntry: Pre-fetch for JSON ${jsonFileToUse.filename} failed. Will attempt individual fetch.`);
+            }
           }
-        }
 
-        // If not pre-fetched or pre-fetch failed (jsonContent is null or undefined)
-        if (jsonContent === undefined || jsonContent === null) {
-          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: ${jsonContent === null ? 'Pre-fetch failed, ' : ''}attempting individual read for JSON file ${jsonFileToUse.filename}`);
-          jsonContent = await this.client.getFileContents(jsonFileToUse.filename, { format: 'text' });
-          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Successfully read JSON individually: ${jsonFileToUse.filename}`);
+          if (jsonContent === undefined || jsonContent === null) {
+            jsonContent = await this.client.getFileContents(jsonFileToUse.filename, { format: 'text' });
+          }
+          
+          if (typeof jsonContent === 'string') {
+            modelJsonInfo = JSON.parse(jsonContent);
+            // Store to L2 cache
+            if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
+              // Re-fetch metadata just in case it changed between listing and reading, though unlikely for batch.
+              // For simplicity, we use the metadata we already have.
+              const sourceJsonFileMetadata = {
+                fileSize: jsonFileToUse.size, // Assuming size didn't change
+                metadata_lastModified_ms: _parseWebDavTimestamp(jsonFileToUse.lastmod), // Use fresh parse
+                etag: jsonFileToUse.etag || null,
+              };
+              await this.modelInfoCacheService.setDataToCache(
+                CacheDataType.MODEL_JSON_INFO,
+                currentSourceId,
+                associatedJsonPath,
+                modelJsonInfo, // Store the parsed object
+                sourceJsonFileMetadata,
+                'webdav' // sourceTypeForTTL
+              );
+              this.logger.debug(`_buildModelEntry: Stored MODEL_JSON_INFO to L2 for ${associatedJsonPath}`);
+            }
+          } else {
+             this.logger.warn(`_buildModelEntry: JSON content for ${jsonFileToUse.filename} was not a string after fetch attempts. Content:`, jsonContent);
+          }
+        } catch (error) {
+          this.logger.error(`_buildModelEntry: Error reading or parsing JSON file ${jsonFileToUse.filename}:`, error.message, error.stack, error.response?.status);
         }
-        
-        if (typeof jsonContent === 'string') {
-          modelJsonInfo = JSON.parse(jsonContent);
-          // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Successfully parsed JSON for ${jsonFileToUse.filename}`);
-        } else {
-           log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: JSON content for ${jsonFileToUse.filename} was not a string after fetch attempts. Content:`, jsonContent);
-        }
-
-      } catch (error) {
-        log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Error reading or parsing JSON file ${jsonFileToUse.filename}:`, error.message, error.stack, error.response?.status);
-        // modelJsonInfo remains {}
       }
     } else {
-      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Model ${modelFile.filename} has no associated JSON file.`);
+      this.logger.debug(`_buildModelEntry: Model ${modelFile.filename} has no associated JSON file.`);
     }
 
     try {
       const modelObj = createWebDavModelObject(
-        modelFile, // This is the full modelFile object from _allItemsCache
-        imageFileToUse, // This is also a full object from _allItemsCache, or null
-        jsonFileToUse,  // This is also a full object from _allItemsCache, or null
+        modelFile, 
+        imageFileToUse, 
+        jsonFileToUse,  
         modelJsonInfo,
         currentSourceId,
-        currentResolvedBasePath // This is the resolved root of the source
+        currentResolvedBasePath 
       );
       const duration = Date.now() - startTime;
-      // log.debug(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: Model object created for ${modelFile.filename}, Duration: ${duration}ms`);
+      this.logger.debug(`_buildModelEntry: Model object created for ${modelFile.filename}, Duration: ${duration}ms`);
       return modelObj;
     } catch (error) {
-      log.error(`[WebDavDataSource][${currentSourceId}] _buildModelEntry: 调用 createWebDavModelObject 时出错 for ${modelFile.filename}:`, error.message, error.stack);
+      this.logger.error(`_buildModelEntry: 调用 createWebDavModelObject 时出错 for ${modelFile.filename}:`, error.message, error.stack);
       return null;
     }
   }
 
-  /**
-   * Ensures _allItemsCache is populated if needed.
-   * @param {string} resolvedRootOfSource - The resolved root path of the WebDAV source.
-   */
   async _populateAllItemsCacheIfNeeded(resolvedRootOfSource) {
     const sourceId = this.config.id;
-    // If cache is empty, or last refresh was for a different root path, or if it's a root request (which often implies a desire for fresh data)
-    // For WebDAV, _allItemsCache is crucial, so ensure it's populated based on the source's root.
     if (this._allItemsCache.length === 0 || this._lastRefreshedFromRootPath !== resolvedRootOfSource) {
-      log.info(`[WebDavDataSource][${sourceId}] _populateAllItemsCacheIfNeeded: Refreshing _allItemsCache from root: ${resolvedRootOfSource}. Reason: cacheEmpty=${this._allItemsCache.length === 0}, lastRefreshMismatch=${this._lastRefreshedFromRootPath !== resolvedRootOfSource}`);
-      await this._populateAllItemsCache(resolvedRootOfSource); // Populates with file objects
+      this.logger.info(`_populateAllItemsCacheIfNeeded: Refreshing _allItemsCache from root: ${resolvedRootOfSource}. Reason: cacheEmpty=${this._allItemsCache.length === 0}, lastRefreshMismatch=${this._lastRefreshedFromRootPath !== resolvedRootOfSource}`);
+      await this._populateAllItemsCache(resolvedRootOfSource); 
       this._lastRefreshedFromRootPath = resolvedRootOfSource;
     } else {
-      log.debug(`[WebDavDataSource][${sourceId}] _populateAllItemsCacheIfNeeded: Using existing _allItemsCache with ${this._allItemsCache.length} items, last refreshed from ${this._lastRefreshedFromRootPath}.`);
+      this.logger.debug(`_populateAllItemsCacheIfNeeded: Using existing _allItemsCache with ${this._allItemsCache.length} items, last refreshed from ${this._lastRefreshedFromRootPath}.`);
     }
   }
 
@@ -429,93 +417,123 @@ class WebDavDataSource extends DataSource {
     await this.ensureInitialized();
     const currentSourceId = sourceConfig ? sourceConfig.id : this.config.id;
 
-    // Normalize directory for cache key consistency (e.g., null or empty string for root)
-    const normalizedDirectory = directory ? path.posix.normalize(directory) : '';
-    const cacheKey = `listModels:${currentSourceId}:${normalizedDirectory}:showSubDir=${showSubdirectory}:exts=${supportedExts.join(',')}`;
-
-    log.info(`[WebDavDataSource][${currentSourceId}] ListModels request. Directory: '${normalizedDirectory}', ShowSubDir: ${showSubdirectory}. CacheKey: ${cacheKey}`);
-
-    const resolvedRootOfSource = this._resolvePath('/'); // The absolute root of this WebDAV source configuration
-
-    // --- L1 Cache Check (via modelInfoCacheService) ---
-    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      const l1Hit = this.modelInfoCacheService.getFromL1(cacheKey, 'listModels');
-      if (l1Hit && l1Hit.data && l1Hit.cacheDigest) {
-        log.debug(`[WebDavDataSource][${currentSourceId}] L1 cache hit for listModels: ${cacheKey}. Verifying digest...`);
-        // Ensure _allItemsCache is up-to-date before generating current digest for validation
-        await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource);
-        const currentDigest = this._getCacheDigest();
-        if (currentDigest && currentDigest === l1Hit.cacheDigest) {
-          log.info(`[WebDavDataSource][${currentSourceId}] L1 cache valid (digest matched) for listModels: ${cacheKey}. Returning cached data. Duration: ${Date.now() - startTime}ms`);
-          return l1Hit.data; // Return deep cloned data from cache service
+    // Ensure pathIdDirectoryPart always starts with / or is /
+    let pathIdDirectoryPart;
+    if (!directory || directory.trim() === '' || directory.trim() === '.' || directory.trim() === '/') {
+        pathIdDirectoryPart = '/';
+    } else {
+        let normDir = path.posix.normalize(directory.trim());
+        if (normDir === '.' || normDir === '') { // Should be caught by above, but defensive
+            pathIdDirectoryPart = '/';
+        } else if (!normDir.startsWith('/')) {
+            pathIdDirectoryPart = `/${normDir}`;
+        } else {
+            pathIdDirectoryPart = normDir;
         }
-        log.info(`[WebDavDataSource][${currentSourceId}] L1 cache digest mismatch for listModels: ${cacheKey}. Cached: ${l1Hit.cacheDigest}, Current: ${currentDigest}. Proceeding to fetch.`);
-      } else if (l1Hit) {
-        log.debug(`[WebDavDataSource][${currentSourceId}] L1 cache hit for listModels: ${cacheKey}, but data or digest is missing. Proceeding to fetch.`);
+    }
+    // Remove trailing slash if not root
+    if (pathIdDirectoryPart !== '/' && pathIdDirectoryPart.endsWith('/')) {
+        pathIdDirectoryPart = pathIdDirectoryPart.slice(0, -1);
+    }
+
+    // Construct pathIdentifier for MODEL_LIST cache
+    const params = new URLSearchParams();
+    params.append('showSubDir', String(showSubdirectory));
+    params.append('exts', supportedExts.join(','));
+    params.sort(); // Ensure consistent order
+    const pathIdentifier = `${pathIdDirectoryPart}?${params.toString()}`;
+    
+    this.logger.info(`ListModels request. Directory: '${directory || '/'}', Normalized PathIdDir: '${pathIdDirectoryPart}', ShowSubDir: ${showSubdirectory}. PathIdentifier: ${pathIdentifier}`);
+
+    const resolvedRootOfSource = this._resolvePath('/'); 
+
+    // --- L1 Cache Check (MODEL_LIST) ---
+    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
+      await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource); // Needed for currentDigest
+      const currentDigest = this._getCacheDigest();
+      const currentModelListMetadata = { contentHash: currentDigest };
+
+      if (currentDigest) {
+        const cachedModelList = await this.modelInfoCacheService.getDataFromCache(
+          CacheDataType.MODEL_LIST,
+          currentSourceId,
+          pathIdentifier,
+          currentModelListMetadata
+        );
+
+        if (cachedModelList) {
+          this.logger.info(`L1 cache hit and valid for MODEL_LIST: ${pathIdentifier}. Returning cached data. Duration: ${Date.now() - startTime}ms`);
+          return cachedModelList;
+        }
+        this.logger.info(`L1 cache miss or invalid for MODEL_LIST: ${pathIdentifier}. Proceeding to fetch.`);
       } else {
-        log.debug(`[WebDavDataSource][${currentSourceId}] L1 cache miss for listModels: ${cacheKey}. Proceeding to fetch.`);
+        this.logger.warn(`Could not generate cache digest. Proceeding to fetch MODEL_LIST without L1 check for: ${pathIdentifier}`);
       }
     } else {
-      log.debug(`[WebDavDataSource][${currentSourceId}] Cache service not available or disabled for listModels. Proceeding to fetch directly.`);
+      this.logger.debug(`Cache service not available or disabled for listModels. Proceeding to fetch directly.`);
     }
 
     // --- Cache Miss or Invalid: Proceed with original logic ---
-    const relativeRequestDir = directory ? (directory.startsWith('/') ? directory : `/${directory}`) : '/';
-    const resolvedRequestDir = this._resolvePath(relativeRequestDir);
+    // Use the already normalized pathIdDirectoryPart for resolving the request directory
+    const resolvedRequestDir = this._resolvePath(pathIdDirectoryPart);
 
     if (directory === null && showSubdirectory === false) {
-      log.info(`[WebDavDataSource][${currentSourceId}] '全部' 视图 (directory is null and showSubdirectory is false), 自动将 showSubdirectory 设置为 true 以递归显示所有模型。`);
+      this.logger.info(`'全部' 视图 (directory is null and showSubdirectory is false), 自动将 showSubdirectory 设置为 true 以递归显示所有模型。`);
       showSubdirectory = true;
     }
-    // Log has been moved up
-
-    // Ensure _allItemsCache is populated. This might have been done during L1 check.
-    await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource);
+    
+    await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource); // Ensure it's populated if not already
     
     let allItemsFlatList = [];
-    // Calculate the relative path of the requested directory for filtering _allItemsCache
-    let relativeRequestDirForFiltering = resolvedRequestDir;
-    if (resolvedRequestDir.startsWith(resolvedRootOfSource)) {
-        relativeRequestDirForFiltering = resolvedRequestDir.substring(resolvedRootOfSource.length);
-        if (relativeRequestDirForFiltering.startsWith('/')) {
-            relativeRequestDirForFiltering = relativeRequestDirForFiltering.substring(1);
-        }
-    }
-    // if relativeRequestDirForFiltering is empty string, it means resolvedRequestDir is same as resolvedRootOfSource
+    // pathIdDirectoryPart is already the "relative to source root, with leading slash" path we need for filtering.
+    // e.g. /lora or /
+    const relativeRequestDirForFiltering = pathIdDirectoryPart;
+    this.logger.debug(`listModels: Filtering with relativeRequestDirForFiltering: '${relativeRequestDirForFiltering}'`);
+
 
     allItemsFlatList = this._allItemsCache.filter(cachedItem => {
+      // cachedItem.relativePath is now like /lora/model.json or /model.json
+      // relativeRequestDirForFiltering is now like /lora or /
       if (showSubdirectory) {
-        return relativeRequestDirForFiltering === '' || cachedItem.relativePath.startsWith(relativeRequestDirForFiltering);
-      } else {
-        const itemDirRelative = path.posix.dirname(cachedItem.relativePath);
-        const normalizedItemDir = itemDirRelative === '.' ? '' : itemDirRelative;
-        return normalizedItemDir === relativeRequestDirForFiltering;
+        if (relativeRequestDirForFiltering === '/') { // Requesting root, show all items
+          return true;
+        }
+        // Check if item is in the directory or a subdirectory of it
+        // e.g., dir=/lora, item=/lora/file.txt (match) or item=/lora/sub/file.txt (match)
+        // Need to ensure /lora matches /lora/file.txt but not /lorax/file.txt
+        // So, item path must start with "dir/" OR be exactly "dir" (for a file at that path, though dir is usually for dirs)
+        return cachedItem.relativePath.startsWith(`${relativeRequestDirForFiltering}/`) || cachedItem.relativePath === relativeRequestDirForFiltering;
+      } else { // Not showing subdirectories, only items directly in the directory
+        const itemDirRelative = path.posix.dirname(cachedItem.relativePath); // e.g. /lora or / for root items
+        // if cachedItem.relativePath is /file.txt, itemDirRelative is /
+        // if cachedItem.relativePath is /lora/file.txt, itemDirRelative is /lora
+        return itemDirRelative === relativeRequestDirForFiltering;
       }
     });
 
-    log.info(`[WebDavDataSource][${currentSourceId}] Filtered _allItemsCache. ${allItemsFlatList.length} items for request path '${resolvedRequestDir}' (relative: '${relativeRequestDirForFiltering}', showSubDir: ${showSubdirectory})`);
+    this.logger.info(`Filtered _allItemsCache. ${allItemsFlatList.length} items for request path '${resolvedRequestDir}' (relative: '${relativeRequestDirForFiltering}', showSubDir: ${showSubdirectory})`);
 
     const modelFileItems = allItemsFlatList.filter(item =>
       item.type === 'file' && supportedExts.some(ext => item.filename.endsWith(ext))
     );
 
-    log.info(`[WebDavDataSource][${currentSourceId}] From ${allItemsFlatList.length} items, filtered to ${modelFileItems.length} potential model files.`);
+    this.logger.info(`From ${allItemsFlatList.length} items, filtered to ${modelFileItems.length} potential model files.`);
 
     const potentialJsonFileFullPaths = new Set();
     if (Array.isArray(modelFileItems)) {
       modelFileItems.forEach(modelFile => {
-        const modelFileDirRelative = path.posix.dirname(modelFile.relativePath);
-        const searchDirRelative = modelFileDirRelative === '.' ? '' : modelFileDirRelative;
-        const modelFileBase = path.posix.basename(modelFile.relativePath, path.posix.extname(modelFile.relativePath));
+        // modelFile.relativePath is like /lora/model.safetensors
+        const modelFileDirRelative = path.posix.dirname(modelFile.relativePath); // /lora
+        const modelFileBase = path.posix.basename(modelFile.relativePath, path.posix.extname(modelFile.relativePath)); // model
         
         for (const cachedItem of this._allItemsCache) {
-          const cachedItemDirRelative = path.posix.dirname(cachedItem.relativePath);
-          const normalizedCachedItemDir = cachedItemDirRelative === '.' ? '' : cachedItemDirRelative;
-          if (normalizedCachedItemDir === searchDirRelative) {
+          // cachedItem.relativePath is like /lora/model.json
+          const cachedItemDirRelative = path.posix.dirname(cachedItem.relativePath); // /lora
+          if (cachedItemDirRelative === modelFileDirRelative) { // Direct comparison
             const itemBase = path.posix.basename(cachedItem.relativePath, path.posix.extname(cachedItem.relativePath));
             const itemExt = path.posix.extname(cachedItem.relativePath).toLowerCase();
             if (itemBase === modelFileBase && itemExt === '.json') {
-              potentialJsonFileFullPaths.add(cachedItem.filename);
+              potentialJsonFileFullPaths.add(cachedItem.filename); // Add full path for pre-fetch
               break;
             }
           }
@@ -526,144 +544,264 @@ class WebDavDataSource extends DataSource {
     const uniqueJsonFilePaths = Array.from(potentialJsonFileFullPaths);
     let preFetchedJsonContentsMap = new Map();
     if (uniqueJsonFilePaths.length > 0) {
-      log.info(`[WebDavDataSource][${currentSourceId}] Found ${uniqueJsonFilePaths.length} unique JSON files to pre-fetch.`);
+      this.logger.info(`Found ${uniqueJsonFilePaths.length} unique JSON files to pre-fetch.`);
       preFetchedJsonContentsMap = await this._batchFetchJsonContents(uniqueJsonFilePaths);
-      log.info(`[WebDavDataSource][${currentSourceId}] Batch pre-fetch complete for ${uniqueJsonFilePaths.length} JSON files. Got ${preFetchedJsonContentsMap.size} results.`);
+      this.logger.info(`Batch pre-fetch complete for ${uniqueJsonFilePaths.length} JSON files. Got ${preFetchedJsonContentsMap.size} results.`);
     } else {
-      log.info(`[WebDavDataSource][${currentSourceId}] No JSON files found to pre-fetch.`);
+      this.logger.info(`No JSON files found to pre-fetch.`);
     }
 
-    const allModels = [];
+    const modelListResult = [];
     const modelBuildPromises = [];
 
     for (const modelFile of modelFileItems) {
+      // _buildModelEntry now handles L2 caching for MODEL_JSON_INFO internally
       modelBuildPromises.push(
         this._buildModelEntry(modelFile, currentSourceId, resolvedRootOfSource, preFetchedJsonContentsMap)
       );
     }
     
-    log.info(`[WebDavDataSource][${currentSourceId}] 开始并行构建 ${modelBuildPromises.length} 个模型条目.`);
+    this.logger.info(`开始并行构建 ${modelBuildPromises.length} 个模型条目.`);
     const settledModelEntries = await Promise.allSettled(modelBuildPromises);
 
     settledModelEntries.forEach(result => {
       if (result.status === 'fulfilled' && result.value) {
-        allModels.push(result.value);
+        modelListResult.push(result.value);
       } else if (result.status === 'fulfilled' && !result.value) {
-        log.warn(`[WebDavDataSource][${currentSourceId}] _buildModelEntry 返回 null，跳过一个模型条目.`);
+        this.logger.warn(`_buildModelEntry 返回 null，跳过一个模型条目.`);
       } else if (result.status === 'rejected') {
-        log.error(`[WebDavDataSource][${currentSourceId}] 构建模型条目时发生未捕获的错误:`, result.reason);
+        this.logger.error(`构建模型条目时发生未捕获的错误:`, result.reason);
       }
     });
 
-    // --- Store to L1 Cache (via modelInfoCacheService) ---
+    // --- Store to L1 Cache (MODEL_LIST) ---
     if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      // _allItemsCache should be up-to-date at this point from _populateAllItemsCacheIfNeeded
-      const currentDigest = this._getCacheDigest();
-      if (currentDigest) {
-        log.info(`[WebDavDataSource][${currentSourceId}] Storing listModels result to L1 cache. Key: ${cacheKey}, Digest: ${currentDigest}`);
-        this.modelInfoCacheService.setToL1(cacheKey, allModels, 'listModels', { cacheDigest: currentDigest });
+      const currentDigestForStorage = this._getCacheDigest(); // Re-get digest, _allItemsCache should be stable
+      if (currentDigestForStorage) {
+        const modelListMetadataForCache = { contentHash: currentDigestForStorage };
+        this.logger.info(`Storing MODEL_LIST result to L1 cache. PathIdentifier: ${pathIdentifier}, Digest: ${currentDigestForStorage}`);
+        await this.modelInfoCacheService.setDataToCache(
+          CacheDataType.MODEL_LIST,
+          currentSourceId,
+          pathIdentifier,
+          modelListResult, // Store the final list
+          modelListMetadataForCache,
+          'webdav' // sourceTypeForTTL
+        );
       } else {
-        log.warn(`[WebDavDataSource][${currentSourceId}] Could not generate cache digest. listModels result not cached for key: ${cacheKey}`);
+        this.logger.warn(`Could not generate cache digest. MODEL_LIST result not cached for PathIdentifier: ${pathIdentifier}`);
       }
     }
 
     const duration = Date.now() - startTime;
-    log.info(`[WebDavDataSource][${currentSourceId}] 列出模型完成: ${resolvedRequestDir}, 耗时: ${duration}ms, 成功构建 ${allModels.length} 个模型 (总共尝试 ${modelFileItems.length} 个)`);
-    return allModels;
+    this.logger.info(`列出模型完成: ${resolvedRequestDir}, 耗时: ${duration}ms, 成功构建 ${modelListResult.length} 个模型 (总共尝试 ${modelFileItems.length} 个)`);
+    return modelListResult;
   }
 
   async _statIfExists(relativePath) {
     if (!relativePath || typeof relativePath !== 'string' || relativePath.trim() === '') {
-      log.warn(`[WebDavDataSource][${this.config.id}] _statIfExists: Invalid relativePath provided: '${relativePath}'`); // Changed to warn
+      this.logger.warn(`_statIfExists: Invalid relativePath provided: '${relativePath}'`); 
       return null;
     }
     const resolvedPath = this._resolvePath(relativePath);
     try {
       const statResult = await this.client.stat(resolvedPath);
-      // log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: Successfully statted ${resolvedPath} (relative: ${relativePath})`); // Removed: Too verbose
       return statResult;
     } catch (error) {
       if (error.response && error.response.status === 404) {
-        // log.debug(`[WebDavDataSource][${this.config.id}] _statIfExists: File not found at ${resolvedPath} (relative: ${relativePath})`); // Removed: Not an error, expected outcome for this function
+        // Normal case, file not found
       } else {
-        log.warn(`[WebDavDataSource][${this.config.id}] _statIfExists: Error stating file ${resolvedPath} (relative: ${relativePath})`, error.message, error.response?.status);
+        this.logger.warn(`_statIfExists: Error stating file ${resolvedPath} (relative: ${relativePath})`, error.message, error.response?.status);
       }
       return null;
     }
   }
 
-  async readModelDetail(identifier, modelFileName, passedSourceId) { // modelFileName is not strictly needed if identifier is the primary key
+  async readModelDetail(identifier, modelFileName, passedSourceId) {
     const startTime = Date.now();
     await this.ensureInitialized();
     const currentSourceId = passedSourceId || this.config.id;
+    const modelFileRelativePath = modelFileName; // Assuming modelFileName is the relative path
 
-    log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Entry. Identifier: '${identifier}', modelFileName (relative path): '${modelFileName}'`);
+    this.logger.info(`readModelDetail Entry. Identifier: '${identifier}', ModelFileRelativePath: '${modelFileRelativePath}'`);
 
-    // Ensure _allItemsCache is populated. If listModels hasn't been called, this might be an issue.
-    // A robust solution might involve checking cache status and populating if necessary.
-    // For now, assume cache is populated from prior listModels or initialization.
-    if (this._allItemsCache.length === 0 && this._lastRefreshedFromRootPath === null) {
-        log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] _allItemsCache is empty. Attempting to populate.`);
-        // This implies readModelDetail might need to know the source's root to populate.
-        // This could be complex if called standalone. For now, rely on prior population.
-        // A simple fix: if cache is empty, try to populate from root.
-        const resolvedRootOfSource = this._resolvePath('/');
-        await this._populateAllItemsCache(resolvedRootOfSource);
-        this._lastRefreshedFromRootPath = resolvedRootOfSource;
-        if (this._allItemsCache.length === 0) {
-             log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Critical: _allItemsCache still empty after attempted population. Cannot find model file '${modelFileName}'.`);
-             return {};
+    if (!modelFileRelativePath) {
+        this.logger.error(`readModelDetail: modelFileRelativePath is required.`);
+        return {}; // Or throw error
+    }
+    
+    // Ensure _allItemsCache is populated to find the modelFileObject and its associated JSON file object
+    const resolvedRootOfSource = this._resolvePath('/');
+    await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource);
+
+    const modelFileObject = this._allItemsCache.find(item => item.relativePath === modelFileRelativePath);
+
+    if (!modelFileObject) {
+        this.logger.error(`readModelDetail: Model file '${modelFileRelativePath}' not found in _allItemsCache.`);
+        return {};
+    }
+
+    // --- Metadata for cache validation ---
+    const currentModelFileMetadata = {
+        fileSize: modelFileObject.size,
+        metadata_lastModified_ms: _parseWebDavTimestamp(modelFileObject.lastmod),
+        etag: modelFileObject.etag || null,
+    };
+
+    // --- L1 Cache Check (MODEL_DETAIL) ---
+    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
+        const cachedModelDetail = await this.modelInfoCacheService.getDataFromCache(
+            CacheDataType.MODEL_DETAIL,
+            currentSourceId,
+            modelFileRelativePath, // pathIdentifier for MODEL_DETAIL
+            currentModelFileMetadata
+        );
+        if (cachedModelDetail) {
+            this.logger.info(`L1 cache hit for MODEL_DETAIL: ${modelFileRelativePath}. Duration: ${Date.now() - startTime}ms`);
+            return cachedModelDetail;
+        }
+        this.logger.debug(`L1 cache miss/invalid for MODEL_DETAIL: ${modelFileRelativePath}.`);
+    }
+
+    // --- L2 Cache Check (MODEL_JSON_INFO) to build MODEL_DETAIL ---
+    // Find associated JSON file from _allItemsCache
+    const modelFileDir = path.posix.dirname(modelFileObject.relativePath);
+    const modelFileBase = path.posix.basename(modelFileObject.relativePath, path.posix.extname(modelFileObject.relativePath));
+    const associatedJsonFileObject = this._allItemsCache.find(item => 
+        item.type === 'file' &&
+        path.posix.dirname(item.relativePath) === modelFileDir &&
+        path.posix.basename(item.relativePath, path.posix.extname(item.relativePath)) === modelFileBase &&
+        path.posix.extname(item.relativePath).toLowerCase() === '.json'
+    );
+
+    let modelJsonInfo;
+    let associatedJsonPath = null;
+
+    if (associatedJsonFileObject) {
+        associatedJsonPath = associatedJsonFileObject.relativePath;
+        const currentJsonFileMetadata = {
+            fileSize: associatedJsonFileObject.size,
+            metadata_lastModified_ms: _parseWebDavTimestamp(associatedJsonFileObject.lastmod),
+            etag: associatedJsonFileObject.etag || null,
+        };
+
+        if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
+            modelJsonInfo = await this.modelInfoCacheService.getDataFromCache(
+                CacheDataType.MODEL_JSON_INFO,
+                currentSourceId,
+                associatedJsonPath,
+                currentJsonFileMetadata
+            );
+            if (modelJsonInfo) {
+                this.logger.debug(`L2 cache hit for MODEL_JSON_INFO: ${associatedJsonPath} (used for building MODEL_DETAIL).`);
+            } else {
+                 this.logger.debug(`L2 cache miss/invalid for MODEL_JSON_INFO: ${associatedJsonPath}. Will fetch from source if needed.`);
+            }
         }
     }
     
-    let normalizedModelFileName = modelFileName;
-    if (normalizedModelFileName && normalizedModelFileName.startsWith('/')) {
-      normalizedModelFileName = normalizedModelFileName.substring(1);
+    // --- Fetch from Source if necessary ---
+    let builtModelObject;
+    if (modelJsonInfo) { // L2 hit for JSON_INFO
+        // Build ModelObject using L2 data
+        // createWebDavModelObject needs the full file objects for model, image, json
+        // We have modelFileObject. We need to find imageFileToUse.
+        // jsonFileToUse is associatedJsonFileObject.
+        // modelJsonInfo is the parsed content.
+        const imageFileToUse = this._findAssociatedImageFile(modelFileObject, modelFileBase, modelFileDir);
+
+        builtModelObject = createWebDavModelObject(
+            modelFileObject,
+            imageFileToUse,
+            associatedJsonFileObject, // This is the object, not just path
+            modelJsonInfo, // This is the content from L2
+            currentSourceId,
+            resolvedRootOfSource
+        );
+        this.logger.debug(`Built MODEL_DETAIL from L2 MODEL_JSON_INFO for: ${modelFileRelativePath}`);
+
+        // Store newly built ModelObject to L1
+        if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && builtModelObject) {
+            await this.modelInfoCacheService.setDataToCache(
+                CacheDataType.MODEL_DETAIL,
+                currentSourceId,
+                modelFileRelativePath,
+                builtModelObject,
+                currentModelFileMetadata, // Metadata of the main model file
+                'webdav'
+            );
+            this.logger.info(`Stored newly built MODEL_DETAIL (from L2 JSON) to L1 for: ${modelFileRelativePath}`);
+        }
+    } else { // L1 MODEL_DETAIL miss, L2 MODEL_JSON_INFO miss/invalid or no JSON file
+        this.logger.debug(`Fetching MODEL_DETAIL from source for: ${modelFileRelativePath} (L1/L2 miss for components).`);
+        // Use _buildModelEntry which handles fetching JSON from source and storing to L2 if missed.
+        // _buildModelEntry itself will call createWebDavModelObject.
+        // Pass an empty map for preFetchedJsonContentsMap as we are reading a single detail.
+        builtModelObject = await this._buildModelEntry(modelFileObject, currentSourceId, resolvedRootOfSource, new Map());
+
+        if (builtModelObject && this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
+            // _buildModelEntry would have already stored MODEL_JSON_INFO to L2 if it fetched it.
+            // Now store the final MODEL_DETAIL to L1.
+            await this.modelInfoCacheService.setDataToCache(
+                CacheDataType.MODEL_DETAIL,
+                currentSourceId,
+                modelFileRelativePath,
+                builtModelObject,
+                currentModelFileMetadata, // Metadata of the main model file
+                'webdav'
+            );
+            this.logger.info(`Stored fetched MODEL_DETAIL to L1 for: ${modelFileRelativePath}`);
+        }
     }
-    const modelFileObject = this._allItemsCache.find(item => item.relativePath === normalizedModelFileName);
-
-    if (!modelFileObject) {
-      log.error(`[WebDavDataSource readModelDetail][${currentSourceId}] Critical: Model file '${modelFileName}' not found in _allItemsCache (identifier: '${identifier}').`);
-      return {};
-    }
-
-    // log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Found modelFileObject in cache:`, modelFileObject);
-
-    // _buildModelEntry expects the modelFile object, sourceId, resolvedBasePath (root of source), and optional preFetchedJson.
-    // We don't have preFetchedJsonContentsMap here, so _buildModelEntry will fetch JSON individually if needed.
-    const resolvedRootOfSource = this._resolvePath('/'); // Needed by _buildModelEntry for context
-    const modelDetail = await this._buildModelEntry(modelFileObject, currentSourceId, resolvedRootOfSource, new Map());
 
     const duration = Date.now() - startTime;
-    if (modelDetail && modelDetail.name) {
-      log.info(`[WebDavDataSource readModelDetail][${currentSourceId}] Successfully processed model detail for: '${modelDetail.fileName || identifier}'. Duration: ${duration}ms.`);
-      // log.debug(`[WebDavDataSource readModelDetail][${currentSourceId}] Result detail:`, JSON.stringify(modelDetail, null, 2));
-      return modelDetail;
+    if (builtModelObject && builtModelObject.name) {
+      this.logger.info(`Successfully processed model detail for: '${builtModelObject.fileName || identifier}'. Duration: ${duration}ms.`);
+      return builtModelObject;
     } else {
-      log.warn(`[WebDavDataSource readModelDetail][${currentSourceId}] Failed to get sufficient model detail for identifier: '${identifier}' (modelFile: ${modelFileName}) using _buildModelEntry. Duration: ${duration}ms. Returning empty object.`);
+      this.logger.warn(`Failed to get sufficient model detail for identifier: '${identifier}' (modelFile: ${modelFileRelativePath}). Duration: ${duration}ms. Returning empty object.`);
       return {};
     }
   }
+
+  /** Helper to find associated image file, used in readModelDetail */
+  _findAssociatedImageFile(modelFileObject, modelFileBase, modelFileDir) {
+    const imageExtensions = ['.png', '.jpg', '.jpeg', '.webp', '.gif'];
+    let associatedImageFile = null;
+    let previewImageFile = null;
+
+    for (const cachedItem of this._allItemsCache) {
+        const cachedItemDirRelative = path.posix.dirname(cachedItem.relativePath);
+        if (cachedItemDirRelative === modelFileDir) {
+            const itemBase = path.posix.basename(cachedItem.relativePath, path.posix.extname(cachedItem.relativePath));
+            const itemExt = path.posix.extname(cachedItem.relativePath).toLowerCase();
+
+            if (itemBase === modelFileBase && imageExtensions.includes(itemExt)) {
+                if (!associatedImageFile) associatedImageFile = cachedItem;
+            } else if (itemBase === `${modelFileBase}.preview` && imageExtensions.includes(itemExt)) {
+                if (!previewImageFile) previewImageFile = cachedItem;
+            }
+        }
+    }
+    return previewImageFile || associatedImageFile;
+  }
+
 
   async getImageData(relativePath) {
     const startTime = Date.now();
     await this.ensureInitialized();
     if (!relativePath) {
-      log.warn(`[WebDavDataSource][${this.config.id}] getImageData 调用时 relativePath 为空`);
+      this.logger.warn(`getImageData 调用时 relativePath 为空`);
       return null;
     }
     const resolvedPath = this._resolvePath(relativePath);
-    // log.debug(`[WebDavDataSource][${this.config.id}] 开始获取图片数据: ${resolvedPath} (relative: ${relativePath})`); // Removed: Too verbose
     try {
       const content = await this.client.getFileContents(resolvedPath);
-
-      // log.debug(`[WebDavDataSource][${this.config.id}] 获取图片数据成功: ${resolvedPath}, 大小: ${content.length} bytes`); // Removed: Too verbose
       return {
-        path: relativePath, // Return the original relative path
+        path: relativePath, 
         data: content,
-        // Determine mimeType from relativePath extension
         mimeType: (() => {
-          let mime = 'application/octet-stream'; // Default mime type
+          let mime = 'application/octet-stream'; 
           const ext = path.posix.extname(relativePath).slice(1).toLowerCase();
           if (ext) {
             const knownImageTypes = ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'];
@@ -672,128 +810,131 @@ class WebDavDataSource extends DataSource {
               if (ext === 'svg') mime = 'image/svg+xml';
             }
           }
-          // log.debug(`[WebDavDataSource][${this.config.id}] Determined mimeType for ${relativePath}: ${mime}`); // Removed: Too verbose
           return mime;
-        })() // Use determined mimeType
+        })() 
       };
     } catch (e) {
       const duration = Date.now() - startTime;
-      log.error(`[WebDavDataSource][${this.config.id}] 获取图片数据时出错: ${resolvedPath}, 耗时: ${duration}ms`, e.message, e.stack, e.response?.status);
+      this.logger.error(`获取图片数据时出错: ${resolvedPath}, 耗时: ${duration}ms`, e.message, e.stack, e.response?.status);
       if (e.response && e.response.status === 404) {
-        log.warn(`[WebDavDataSource][${this.config.id}] 获取图片数据失败 (文件不存在): ${resolvedPath}, 耗时: ${duration}ms`);
+        this.logger.warn(`获取图片数据失败 (文件不存在): ${resolvedPath}, 耗时: ${duration}ms`);
       }
       return null;
     }
   }
-  async writeModelJson(relativePath, dataToWrite) { // dataToWrite is now a JSON string
+
+  async writeModelJson(relativePath, dataToWrite) { 
     const startTime = Date.now();
     await this.ensureInitialized();
     const sourceId = this.config.id;
+    const jsonFilePath = relativePath; // pathIdentifier for MODEL_JSON_INFO
 
-    if (!relativePath) {
-      log.error(`[WebDavDataSource][${sourceId}] writeModelJson called with empty relativePath.`);
+    if (!jsonFilePath) {
+      this.logger.error(`writeModelJson called with empty relativePath.`);
       throw new Error('Relative path cannot be empty for WebDAV write.');
     }
     if (typeof dataToWrite !== 'string') {
-      log.error(`[WebDavDataSource][${sourceId}] writeModelJson called with dataToWrite not a string.`);
+      this.logger.error(`writeModelJson called with dataToWrite not a string.`);
       throw new Error('Data to write must be a string for WebDAV model JSON.');
     }
 
-    const resolvedPath = this._resolvePath(relativePath);
-    log.info(`[WebDavDataSource][${sourceId}] Attempting to write model JSON to WebDAV: ${resolvedPath} (relative: ${relativePath})`);
+    const resolvedPath = this._resolvePath(jsonFilePath);
+    this.logger.info(`Attempting to write model JSON to WebDAV: ${resolvedPath} (relative: ${jsonFilePath})`);
 
     try {
       const resolvedDirPath = path.posix.dirname(resolvedPath);
       try {
         await this.client.stat(resolvedDirPath);
-        // log.debug(`[WebDavDataSource][${sourceId}] Parent directory ${resolvedDirPath} exists.`); // Removed: Too verbose
       } catch (statError) {
         if (statError.response && statError.response.status === 404) {
-          log.info(`[WebDavDataSource][${sourceId}] Parent directory ${resolvedDirPath} does not exist, attempting to create...`);
+          this.logger.info(`Parent directory ${resolvedDirPath} does not exist, attempting to create...`);
           await this.client.createDirectory(resolvedDirPath, { recursive: true });
-          log.info(`[WebDavDataSource][${sourceId}] Successfully created directory ${resolvedDirPath}`);
+          this.logger.info(`Successfully created directory ${resolvedDirPath}`);
         } else {
-          log.error(`[WebDavDataSource][${sourceId}] Error checking directory ${resolvedDirPath}:`, statError.message, statError.stack, statError.response?.status);
+          this.logger.error(`Error checking directory ${resolvedDirPath}:`, statError.message, statError.stack, statError.response?.status);
           throw statError;
         }
       }
 
-      // dataToWrite is already a JSON string
       await this.client.putFileContents(resolvedPath, dataToWrite, { overwrite: true });
       const duration = Date.now() - startTime;
-      log.info(`[WebDavDataSource][${this.config.id}] Successfully wrote model JSON to WebDAV: ${resolvedPath}, 耗时: ${duration}ms`);
+      this.logger.info(`Successfully wrote model JSON to WebDAV: ${resolvedPath}, 耗时: ${duration}ms`);
 
-      // --- Cache Invalidation Logic ---
-      log.info(`[WebDavDataSource][${sourceId}] Invalidating cache due to JSON write: ${relativePath}`);
-      // 1. Clear internal _allItemsCache to force refresh on next listModels
-      this._allItemsCache = [];
-      this._lastRefreshedFromRootPath = null;
-      log.debug(`[WebDavDataSource][${sourceId}] Cleared _allItemsCache due to JSON write.`);
-
-      // 2. Invalidate L1/L2 listModels cache for this source
+      // --- Cache Invalidation Logic (as per doc 7.3) ---
       if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-        try {
-          // Invalidate all listModels caches for this source.
-          // The most straightforward way is to use invalidateListModelsCacheForDirectory with an empty relative path,
-          // assuming the service handles this as clearing all for the source or at least the root.
-          await this.modelInfoCacheService.invalidateListModelsCacheForDirectory(sourceId, '');
-          log.info(`[WebDavDataSource][${sourceId}] Requested invalidation of all listModels caches for source due to JSON write.`);
-        } catch (cacheError) {
-          log.error(`[WebDavDataSource][${sourceId}] Error invalidating listModels cache after JSON write:`, cacheError);
+        this.logger.info(`Invalidating caches due to JSON write: ${jsonFilePath}`);
+
+        // 1. Invalidate MODEL_JSON_INFO for this file
+        await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_JSON_INFO, sourceId, jsonFilePath);
+
+        // 2. Invalidate MODEL_DETAIL for the associated model
+        //    Need to determine modelFilePath from jsonFilePath
+        const modelFileBaseName = path.posix.basename(jsonFilePath, '.json');
+        const dirName = path.posix.dirname(jsonFilePath);
+        
+        // Find the corresponding model file in _allItemsCache to get its exact name and extension
+        // This assumes _allItemsCache is reasonably up-to-date or repopulated if necessary.
+        // For simplicity, we'll try to find a match. A more robust way might involve listing the dir.
+        await this._populateAllItemsCacheIfNeeded(this._resolvePath('/')); // Ensure cache is fresh
+        
+        const potentialModelFile = this._allItemsCache.find(item => 
+            item.type === 'file' &&
+            path.posix.dirname(item.relativePath) === dirName && // dirName is already like /lora or /
+            path.posix.basename(item.relativePath, path.posix.extname(item.relativePath)) === modelFileBaseName &&
+            !item.relativePath.endsWith('.json') // Not the json file itself
+        );
+
+        if (potentialModelFile) {
+            const modelFilePath = potentialModelFile.relativePath;
+            await this.modelInfoCacheService.invalidateCacheEntry(CacheDataType.MODEL_DETAIL, sourceId, modelFilePath);
+        } else {
+            this.logger.warn(`Could not determine associated model file for JSON: ${jsonFilePath} to invalidate MODEL_DETAIL. Manual cache clear might be needed for related model details.`);
         }
+
+        this.logger.info(`Relying on contentHash change for MODEL_LIST invalidation for directory of: ${jsonFilePath}`);
       }
-      // If readModelDetail had its own L1/L2 cache for individual models, those would also need invalidation here.
-      // e.g., find the L1 key for the model associated with this JSON and delete it.
+      
+      // Crucially, update _allItemsCache so the next _getCacheDigest() is correct.
+      this._allItemsCache = [];
+      this._lastRefreshedFromRootPath = null; // Force refresh
+      this.logger.debug(`Cleared _allItemsCache to ensure fresh contentHash on next listModels after JSON write.`);
+
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      log.error(`[WebDavDataSource][${this.config.id}] Failed to write model JSON to WebDAV: ${resolvedPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
-      // Re-throw the error for the interface to handle
+      this.logger.error(`Failed to write model JSON to WebDAV: ${resolvedPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
       throw error;
     }
   }
 
-  /**
-   * Gets stat information for a file or directory. Used for validation.
-   * @param {string} relativePath - The path relative to the subDirectory.
-   * @returns {Promise<object>} A promise resolving to the stat object from the webdav client.
-   * @throws Will throw an error if the path doesn't exist or is inaccessible.
-   */
   async stat(relativePath) {
     const startTime = Date.now();
     await this.ensureInitialized();
     if (relativePath === undefined || relativePath === null) {
-      log.error(`[WebDavDataSource][${this.config.id}] stat called with invalid relativePath: ${relativePath}`);
+      this.logger.error(`stat called with invalid relativePath: ${relativePath}`);
       throw new Error('Relative path cannot be null or undefined for stat.');
     }
     const resolvedPath = this._resolvePath(relativePath);
-    // log.debug(`[WebDavDataSource][${this.config.id}] Attempting to stat path: ${resolvedPath} (relative: ${relativePath})`); // Removed: Too verbose
     try {
       const stats = await this.client.stat(resolvedPath);
       const duration = Date.now() - startTime;
-      // log.debug(`[WebDavDataSource][${this.config.id}] Successfully stat path: ${resolvedPath}, 耗时: ${duration}ms`); // Removed: Too verbose
       return stats;
     } catch (error) {
       const duration = Date.now() - startTime;
-      log.error(`[WebDavDataSource][${this.config.id}] Failed to stat path: ${resolvedPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
-      throw error; // Re-throw for validation logic
+      this.logger.error(`Failed to stat path: ${resolvedPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
+      throw error; 
     }
   }
 
-  /**
-   * Calculates a digest for the current state of _allItemsCache.
-   * This is used for validating L1/L2 cache for listModels.
-   * @returns {string|null} A SHA256 hash string or null if cache is empty.
-   */
   _getCacheDigest() {
     const sourceId = this.config.id;
     if (!this._allItemsCache || this._allItemsCache.length === 0) {
-      log.warn(`[WebDavDataSource][${sourceId}] _getCacheDigest: _allItemsCache is empty. Cannot generate digest.`);
-      return null;
+      this.logger.warn(`_getCacheDigest: _allItemsCache is empty. Cannot generate digest.`);
+      // Return a consistent hash for "empty" to allow caching of empty lists
+      return crypto.createHash('sha256').update(`empty:${sourceId}`).digest('hex');
     }
 
     const metadataItems = [];
-    // Sort items by relativePath to ensure consistent hash
     const sortedCache = [...this._allItemsCache].sort((a, b) => {
       if (a.relativePath < b.relativePath) return -1;
       if (a.relativePath > b.relativePath) return 1;
@@ -801,89 +942,49 @@ class WebDavDataSource extends DataSource {
     });
 
     for (const item of sortedCache) {
-      // Use properties that indicate change: relativePath, size, lastmod, etag
-      // Ensure all parts are strings to avoid issues with undefined/null in join
       const path = String(item.relativePath || '');
       const size = String(item.size || '0');
-      const lastmod = String(item.lastmod || '0');
+      const lastmod = String(item.lastmod || '0'); // lastmod string itself
       const etag = String(item.etag || '');
       metadataItems.push(`${path}:${size}:${lastmod}:${etag}`);
     }
 
     if (metadataItems.length === 0) {
-      // This case should ideally not be hit if _allItemsCache has items,
-      // but as a fallback, provide a consistent hash for "empty relevant metadata".
-      log.debug(`[WebDavDataSource][${sourceId}] _getCacheDigest: No metadata items collected from _allItemsCache, returning empty string hash.`);
+      this.logger.debug(`_getCacheDigest: No metadata items collected from _allItemsCache, returning empty string hash.`);
       return crypto.createHash('sha256').update('').digest('hex');
     }
 
     const metadataString = metadataItems.join('|');
     const hash = crypto.createHash('sha256').update(metadataString).digest('hex');
-    log.debug(`[WebDavDataSource][${sourceId}] _getCacheDigest: Generated digest ${hash} from ${metadataItems.length} items in _allItemsCache.`);
+    this.logger.debug(`_getCacheDigest: Generated digest ${hash} from ${metadataItems.length} items in _allItemsCache.`);
     return hash;
   }
 
-  /**
-   * Clears all caches associated with this data source.
-   * This includes the internal _allItemsCache and any L1/L2 entries
-   * managed by modelInfoCacheService for this source.
-   */
   async clearCache() {
     const sourceId = this.config.id;
-    log.info(`[WebDavDataSource][${sourceId}] Clearing all caches for data source.`);
+    this.logger.info(`Clearing all caches for data source.`);
 
-    // 1. Clear internal item cache
     this._allItemsCache = [];
     this._lastRefreshedFromRootPath = null;
-    log.debug(`[WebDavDataSource][${sourceId}] Internal _allItemsCache cleared.`);
+    this.logger.debug(`Internal _allItemsCache cleared.`);
 
-    // 2. Clear L1/L2 caches via modelInfoCacheService
     if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-      log.debug(`[WebDavDataSource][${sourceId}] Attempting to clear L1/L2 caches via modelInfoCacheService.`);
-      // Invalidate listModels cache entries for this source.
-      // Passing an empty string for relativeDirPath should target the root and, by extension, all listModels caches for this source if the service supports prefix invalidation.
-      // Or, the service might have a more direct method like clearAllCacheForSource(sourceId).
-      // For now, using invalidateListModelsCacheForDirectory with an empty path to signify root.
+      this.logger.debug(`Attempting to clear L1/L2 caches via modelInfoCacheService for source: ${sourceId}.`);
       try {
-        // For listModels, we cached based on directory, showSubDir, and exts.
-        // A simple approach is to tell the cache service to remove all 'listModels' type entries for this sourceId.
-        // If modelInfoCacheService has a method like `clearEntriesByPrefixAndType(sourceId, 'listModels', 'listModels:' + sourceId)`, that would be ideal.
-        // Lacking that, `invalidateListModelsCacheForDirectory(sourceId, '')` is the closest existing pattern from LocalDataSource for directory-based listModels.
-        // This might need a more robust implementation in modelInfoCacheService itself.
-        // For now, we'll assume it can handle broad invalidation for a source or we log the need.
-        
-        // Attempt to clear all listModels cache entries for this source.
-        // This relies on modelInfoCacheService to correctly interpret an empty directory path
-        // as a request to clear all listModels for the source, or at least the root.
-        await this.modelInfoCacheService.invalidateListModelsCacheForDirectory(sourceId, ''); // For root
-        // Potentially, one might need to iterate known directories if the above is not recursive/prefix-based.
-        // However, for a generic "clear all", this is a reasonable first step.
-        // Also, other cache types (like individual model details if they were cached, though not implemented here for L1/L2 yet) would need similar clearing.
-        log.info(`[WebDavDataSource][${sourceId}] Requested invalidation of listModels caches via modelInfoCacheService.`);
-
-        // If there were other types of L1/L2 entries specific to WebDavDataSource (e.g., for readModelDetail if it used L1/L2),
-        // they would need to be cleared here too, likely by iterating known keys or using specific service methods.
-        // Since readModelDetail in WebDAV currently reconstructs from _allItemsCache and doesn't use L1/L2 via modelInfoCacheService,
-        // clearing listModels cache (which indirectly affects _allItemsCache population) is the primary concern.
-
+        await this.modelInfoCacheService.clearCacheForSource(sourceId);
+        this.logger.info(`Successfully requested cache clearing for source ${sourceId} via modelInfoCacheService.`);
       } catch (error) {
-        log.error(`[WebDavDataSource][${sourceId}] Error during modelInfoCacheService cache clearing:`, error);
+        this.logger.error(`Error during modelInfoCacheService cache clearing for source ${sourceId}:`, error);
       }
     } else {
-      log.info(`[WebDavDataSource][${sourceId}] modelInfoCacheService not available or disabled, skipping L1/L2 cache clearing.`);
+      this.logger.info(`modelInfoCacheService not available or disabled, skipping L1/L2 cache clearing for source ${sourceId}.`);
     }
-    log.info(`[WebDavDataSource][${sourceId}] Cache clearing process complete.`);
+    this.logger.info(`Cache clearing process complete for source ${sourceId}.`);
   }
 
-  /**
-   * Disconnects the WebDAV client if necessary.
-   * (Note: The 'webdav' library client doesn't explicitly require disconnect)
-   */
   async disconnect() {
-    // If the client library had a disconnect method, call it here.
-    log.info(`[WebDavDataSource][${this.config.id}] Disconnect called (no-op for current library).`);
-    // Example: if (this.client && this.client.disconnect) await this.client.disconnect();
-    this.initialized = Promise.reject(new Error('Client disconnected')); // Mark as uninitialized
+    this.logger.info(`Disconnect called (no-op for current library).`);
+    this.initialized = Promise.reject(new Error('Client disconnected')); 
   }
 }
 

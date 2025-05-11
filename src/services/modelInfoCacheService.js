@@ -1,34 +1,82 @@
 const { app } = require('electron');
 const path = require('path');
-const fs = require('fs-extra'); // Still needed for app.getPath('userData') and potentially ensuring DB directory
+const fs = require('fs-extra');
 const log = require('electron-log');
 const Database = require('better-sqlite3');
 const BSON = require('bson');
-// const ConfigService = require('./configService'); // Will be handled during integration
 
-const DEFAULT_L1_MAX_ITEMS = 200;
-const DEFAULT_L1_TTL_SECONDS = 3600; // 1 hour
-const DEFAULT_L2_TTL_SECONDS = 604800; // 7 days
-// const DEFAULT_L2_MAX_ITEMS = 5000; // For SQLite, this is managed by cleanup logic
-const DEFAULT_DB_DIR_NAME = 'ModelNestCache'; // Directory for the SQLite DB
+const DEFAULT_DB_DIR_NAME = 'ModelNestCache';
 const DEFAULT_DB_FILE_NAME = 'model_cache.sqlite';
+
+/**
+ * @readonly
+ * @enum {string}
+ * @description Defines the types of data that can be cached.
+ * This enum guides the cache service in handling data, including TTL and storage location.
+ */
+const CacheDataType = {
+  /**
+   * Represents an array of ModelObjects returned by listModels.
+   * Storage: L1 Cache.
+   * currentMetadata: { contentHash: string } (Directory content digest)
+   */
+  MODEL_LIST: 'MODEL_LIST',
+
+  /**
+   * Represents a single complete ModelObject returned by readModelDetail.
+   * Storage: L1 Cache.
+   * currentMetadata: { fileSize: number, metadata_lastModified_ms: number, etag: string | null }
+   *   (For its primary info source file, usually the associated .json or model main file)
+   */
+  MODEL_DETAIL: 'MODEL_DETAIL',
+
+  /**
+   * Represents raw JSON content (JavaScript object) parsed from a model's associated .json file.
+   * Storage: L2 Cache (SQLite table model_json_info_cache).
+   * currentMetadata: { fileSize: number, metadata_lastModified_ms: number, etag: string | null }
+   *   (For the original .json file)
+   */
+  MODEL_JSON_INFO: 'MODEL_JSON_INFO',
+};
+
+// Internal TTL Strategies (in seconds)
+const TTL_STRATEGIES = {
+  [CacheDataType.MODEL_LIST]: {
+    // Differentiated by source type, but for simplicity in this service,
+    // we might use a single L1 TTL or pass it from DataSource if needed.
+    // For now, using a generic L1 TTL for MODEL_LIST.
+    // Specific TTLs per source type (local vs webdav) can be managed by DataSource
+    // when calling setDataToCache, or this service can be enhanced.
+    // As per doc: LocalDataSource: 5 mins (300s), WebdavDataSource: 15 mins (900s)
+    // We'll use a placeholder here and expect DataSource to provide specific TTLs if needed,
+    // or apply a general one. For this implementation, we'll define them here.
+    L1_LOCAL: 300, // 5 minutes
+    L1_WEBDAV: 900, // 15 minutes
+  },
+  [CacheDataType.MODEL_DETAIL]: {
+    L1: 3600, // 1 hour
+  },
+  [CacheDataType.MODEL_JSON_INFO]: {
+    L2: 604800, // 7 days
+  },
+};
+
 
 class ModelInfoCacheService {
     constructor(configService) {
-        this.configService = configService;
+        this.configService = configService; // Retained for global enable/disable and DB path
         this.isInitialized = false;
         this.isEnabled = true; // Default, updated from config
 
         this.l1Cache = new Map();
-        this.l1MaxItems = DEFAULT_L1_MAX_ITEMS;
-        this.l1TtlMs = DEFAULT_L1_TTL_SECONDS * 1000;
+        // L1 maxItems can still be configurable if desired, but TTLs are now internal.
+        this.l1MaxItems = 200; // Default, can be loaded from config if needed
 
-        this.l2TtlMs = DEFAULT_L2_TTL_SECONDS * 1000; // Default for L2 entries
-        this.db = null; // SQLite database instance
-        this.dbPath = ''; // Path to the SQLite DB file
+        this.db = null;
+        this.dbPath = '';
 
         this.logger = log.scope('Service:ModelInfoCache');
-        this.logger.info('Service instance created. SQLite and BSON will be used for L2 cache.');
+        this.logger.info('Service instance created. Refactored for unified cache logic.');
     }
 
     async initialize() {
@@ -36,9 +84,8 @@ class ModelInfoCacheService {
             this.logger.warn('Service already initialized.');
             return;
         }
-        this.logger.info('Initializing ModelInfoCacheService with SQLite+BSON backend...');
+        this.logger.info('Initializing ModelInfoCacheService (Refactored)...');
 
-        // Load configurations
         if (this.configService) {
             try {
                 let configEnabled = await this.configService.getSetting('cache.enabled');
@@ -52,24 +99,10 @@ class ModelInfoCacheService {
                     return;
                 }
                 
-                let l1Enabled = await this.configService.getSetting('cache.l1.enabled');
-                if (typeof l1Enabled === 'boolean' && !l1Enabled) {
-                    this.logger.info('L1 cache is disabled via configuration.');
-                    this.l1Cache.clear(); // Clear L1 if it's specifically disabled
-                }
-
-
                 const l1MaxItemsValue = await this.configService.getSetting('cache.l1.maxItems');
-                this.l1MaxItems = (l1MaxItemsValue !== undefined && l1MaxItemsValue !== null) ? l1MaxItemsValue : DEFAULT_L1_MAX_ITEMS;
-                const l1DefaultTtlConfig = await this.configService.getSetting('cache.l1.ttlSeconds.default');
-                this.l1TtlMs = (l1DefaultTtlConfig || DEFAULT_L1_TTL_SECONDS) * 1000;
-                this.logger.info(`Default L1 TTL set to: ${this.l1TtlMs}ms (from config: ${l1DefaultTtlConfig}s)`);
+                this.l1MaxItems = (l1MaxItemsValue !== undefined && l1MaxItemsValue !== null) ? l1MaxItemsValue : 200;
 
-                const l2ModelJsonInfoTtlConfig = await this.configService.getSetting('cache.l2.ttlSeconds.modelJsonInfo');
-                this.l2TtlMs = (l2ModelJsonInfoTtlConfig || DEFAULT_L2_TTL_SECONDS) * 1000;
-                this.logger.info(`Default L2 TTL for modelJsonInfo set to: ${this.l2TtlMs}ms (from config: ${l2ModelJsonInfoTtlConfig}s)`);
-                
-                // Determine DB Path
+
                 const configuredDbPath = await this.configService.getSetting('cache.l2.dbPath');
                 if (configuredDbPath && typeof configuredDbPath === 'string' && configuredDbPath.trim() !== '') {
                     this.dbPath = configuredDbPath;
@@ -81,48 +114,45 @@ class ModelInfoCacheService {
 
             } catch (error) {
                 this.logger.error(`Error loading configuration for ModelInfoCacheService: ${error.message}`, error);
-                this.logger.warn('Falling back to default cache settings due to configuration error.');
+                this.logger.warn('Falling back to default cache settings for DB path and L1 max items.');
                 const userDataPath = app.getPath('userData');
                 this.dbPath = path.join(userDataPath, DEFAULT_DB_DIR_NAME, DEFAULT_DB_FILE_NAME);
-                this.isEnabled = true; // Default to enabled on error
-                this.l1MaxItems = DEFAULT_L1_MAX_ITEMS;
-                this.l1TtlMs = DEFAULT_L1_TTL_SECONDS * 1000;
-                this.l2TtlMs = DEFAULT_L2_TTL_SECONDS * 1000;
+                this.isEnabled = true;
+                this.l1MaxItems = 200;
             }
         } else {
-            this.logger.warn('ConfigService not provided. Using default cache settings.');
+            this.logger.warn('ConfigService not provided. Using default settings for DB path and L1 max items.');
             const userDataPath = app.getPath('userData');
             this.dbPath = path.join(userDataPath, DEFAULT_DB_DIR_NAME, DEFAULT_DB_FILE_NAME);
         }
 
-        if (!this.isEnabled) { // Re-check after potential fallback
+        if (!this.isEnabled) {
             this.isInitialized = true;
             this.logger.info('ModelInfoCacheService initialization skipped as it is disabled.');
             return;
         }
 
-        // Initialize SQLite Database
         try {
             if (!this.dbPath) {
                  throw new Error('SQLite database path is not defined after configuration loading.');
             }
-            await fs.ensureDir(path.dirname(this.dbPath)); // Ensure the directory for the DB file exists
+            await fs.ensureDir(path.dirname(this.dbPath));
             this.logger.info(`Ensured directory for SQLite DB: ${path.dirname(this.dbPath)}`);
 
-            this.db = new Database(this.dbPath, { verbose: this.logger.debug.bind(this.logger) }); // Pass logger for verbose output
+            this.db = new Database(this.dbPath, { verbose: this.logger.debug.bind(this.logger) });
             this.logger.info(`SQLite database connected at: ${this.dbPath}`);
-
-            // Create tables if they don't exist
             this._createTables();
-
         } catch (error) {
             this.logger.error(`Failed to initialize SQLite database at '${this.dbPath}': ${error.message}`, error);
-            this.db = null; // Ensure db is null if connection failed
+            this.db = null;
             this.logger.warn('L2 SQLite cache will be unavailable due to database initialization error.');
         }
 
         this.isInitialized = true;
-        this.logger.info(`Service initialized. Status: ${this.isEnabled ? 'Enabled' : 'Disabled'}. L1 Max Items: ${this.l1MaxItems}. L1 TTL: ${this.l1TtlMs}ms. L2 TTL: ${this.l2TtlMs}ms. DB Path: '${this.dbPath || 'N/A'}'`);
+        this.logger.info(`Service initialized. Status: ${this.isEnabled ? 'Enabled' : 'Disabled'}. L1 Max Items: ${this.l1MaxItems}. DB Path: '${this.dbPath || 'N/A'}'`);
+        
+        // Start periodic L2 cleanup
+        this._scheduleL2Cleanup();
     }
 
     _createTables() {
@@ -131,424 +161,527 @@ class ModelInfoCacheService {
             return;
         }
         try {
+            // Updated table structure as per doc/model_info_cache_refactoring_plan_v1.3.md Section 8
             this.db.exec(`
                 CREATE TABLE IF NOT EXISTS model_json_info_cache (
                     cache_key TEXT PRIMARY KEY,
                     source_id TEXT NOT NULL,
                     normalized_json_path TEXT NOT NULL,
                     bson_data BLOB NOT NULL,
-                    source_json_mtime_ms REAL NOT NULL,
-                    source_json_size INTEGER NOT NULL,
+                    metadata_filesize INTEGER NOT NULL,
+                    metadata_lastModified_ms REAL NOT NULL,
+                    metadata_etag TEXT,
                     cached_timestamp_ms INTEGER NOT NULL,
                     ttl_seconds INTEGER NOT NULL,
-                    last_accessed_timestamp_ms INTEGER NOT NULL
+                    last_accessed_timestamp_ms INTEGER NOT NULL 
                 );
             `);
-            this.logger.info('Table "model_json_info_cache" ensured.');
+            this.logger.info('Table "model_json_info_cache" ensured with new schema.');
 
-            // Create indexes as per design document
             this.db.exec(`CREATE INDEX IF NOT EXISTS idx_mjic_source_id ON model_json_info_cache (source_id);`);
+            // Index for TTL expiration check: (cached_timestamp_ms + ttl_seconds * 1000)
+            // SQLite doesn't directly support indexing expressions like that in CREATE INDEX for older versions.
+            // We can index the components.
+            this.db.exec(`CREATE INDEX IF NOT EXISTS idx_mjic_expires_at ON model_json_info_cache (cached_timestamp_ms, ttl_seconds);`);
             this.db.exec(`CREATE INDEX IF NOT EXISTS idx_mjic_last_accessed ON model_json_info_cache (last_accessed_timestamp_ms);`);
             this.logger.info('Indexes for model_json_info_cache table ensured.');
 
         } catch (error) {
             this.logger.error(`Error creating SQLite tables or indexes: ${error.message}`, error);
-            // This is a critical error, L2 might not work.
         }
     }
-    
-    // --- L1 Memory Cache Methods ---
-    getFromL1(key, type = 'modelJsonInfo') { // Added type for context, though L1 structure is generic
+
+    /**
+     * Generates a unique cache key.
+     * @param {CacheDataType} dataType - The type of data.
+     * @param {string} sourceId - The ID of the data source.
+     * @param {string} pathIdentifier - The path or unique identifier for the data.
+     * @returns {string} The generated cache key.
+     * @private
+     */
+    _generateCacheKey(dataType, sourceId, pathIdentifier) {
+        if (!dataType || !sourceId || typeof pathIdentifier === 'undefined') {
+            this.logger.error('Cannot generate cache key: dataType, sourceId, or pathIdentifier is missing.', { dataType, sourceId, pathIdentifier });
+            throw new Error('Invalid arguments for _generateCacheKey');
+        }
+        // Normalize pathIdentifier for consistency if it's a path
+        // For MODEL_LIST, pathIdentifier might be complex (dir?param=val). Assume it's pre-normalized by caller.
+        const normalizedPathIdentifier = pathIdentifier.replace(/\\/g, '/');
+        return `${dataType}:${sourceId}:${normalizedPathIdentifier}`;
+    }
+
+    /**
+     * Gets the TTL in seconds for a given data type and source characteristics.
+     * @param {CacheDataType} dataType
+     * @param {string} [sourceType] - Optional, e.g., 'local', 'webdav'. Used for MODEL_LIST.
+     * @returns {number} TTL in seconds.
+     * @private
+     */
+    _getTtlSeconds(dataType, sourceType) {
+        switch (dataType) {
+            case CacheDataType.MODEL_LIST:
+                if (sourceType === 'local') return TTL_STRATEGIES[CacheDataType.MODEL_LIST].L1_LOCAL;
+                if (sourceType === 'webdav') return TTL_STRATEGIES[CacheDataType.MODEL_LIST].L1_WEBDAV;
+                return TTL_STRATEGIES[CacheDataType.MODEL_LIST].L1_LOCAL; // Default for MODEL_LIST
+            case CacheDataType.MODEL_DETAIL:
+                return TTL_STRATEGIES[CacheDataType.MODEL_DETAIL].L1;
+            case CacheDataType.MODEL_JSON_INFO:
+                return TTL_STRATEGIES[CacheDataType.MODEL_JSON_INFO].L2;
+            default:
+                this.logger.warn(`Unknown CacheDataType for TTL: ${dataType}. Using default 3600s.`);
+                return 3600;
+        }
+    }
+
+    /**
+     * Checks if an L1 cache entry is valid based on TTL and metadata.
+     * @param {object} l1Entry - The L1 cache entry.
+     * @param {object} currentMetadata - Current metadata of the source data.
+     * @returns {boolean} True if valid, false otherwise.
+     * @private
+     */
+    _isL1EntryValid(l1Entry, currentMetadata) {
+        if (!l1Entry) return false;
+
+        const { timestamp, ttlMs, metadata: cachedMetadata, dataType } = l1Entry;
+
+        // Check TTL
+        if (Date.now() >= timestamp + ttlMs) {
+            this.logger.debug(`L1 entry TTL expired. Key: ${l1Entry.originalKey}`);
+            return false;
+        }
+
+        // Check metadata consistency
+        if (dataType === CacheDataType.MODEL_LIST) {
+            if (!cachedMetadata || !currentMetadata || cachedMetadata.contentHash !== currentMetadata.contentHash) {
+                this.logger.debug(`L1 MODEL_LIST contentHash mismatch. Key: ${l1Entry.originalKey}`, {cached: cachedMetadata, current: currentMetadata });
+                return false;
+            }
+        } else if (dataType === CacheDataType.MODEL_DETAIL || dataType === CacheDataType.MODEL_JSON_INFO) { // MODEL_JSON_INFO in L1 is rare but possible if promoting from L2
+            if (!cachedMetadata || !currentMetadata) {
+                 this.logger.debug(`L1 ${dataType} metadata missing. Key: ${l1Entry.originalKey}`);
+                 return false;
+            }
+            if (cachedMetadata.fileSize !== currentMetadata.fileSize ||
+                cachedMetadata.metadata_lastModified_ms !== currentMetadata.metadata_lastModified_ms ||
+                (currentMetadata.etag !== undefined && cachedMetadata.etag !== currentMetadata.etag)) { // Only compare etag if current one is provided
+                this.logger.debug(`L1 ${dataType} metadata mismatch. Key: ${l1Entry.originalKey}`, {cached: cachedMetadata, current: currentMetadata });
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * Checks if an L2 cache entry (from DB) is valid based on TTL and metadata.
+     * @param {object} dbEntry - The L2 cache entry from database.
+     * @param {object} currentMetadata - Current metadata of the source data.
+     * @returns {boolean} True if valid, false otherwise.
+     * @private
+     */
+    _isL2EntryValid(dbEntry, currentMetadata) {
+        if (!dbEntry) return false;
+
+        const { cached_timestamp_ms, ttl_seconds, metadata_filesize, metadata_lastModified_ms, metadata_etag } = dbEntry;
+
+        // Check TTL
+        if (Date.now() >= cached_timestamp_ms + (ttl_seconds * 1000)) {
+            this.logger.debug(`L2 entry TTL expired. Key: ${dbEntry.cache_key}`);
+            return false;
+        }
+        
+        // Check metadata (specific to MODEL_JSON_INFO)
+        if (!currentMetadata) {
+            this.logger.debug(`L2 currentMetadata missing for validation. Key: ${dbEntry.cache_key}`);
+            return false; // Cannot validate without current metadata
+        }
+        if (metadata_filesize !== currentMetadata.fileSize ||
+            metadata_lastModified_ms !== currentMetadata.metadata_lastModified_ms ||
+            (currentMetadata.etag !== undefined && metadata_etag !== currentMetadata.etag)) { // Only compare etag if current one is provided
+            this.logger.debug(`L2 MODEL_JSON_INFO metadata mismatch. Key: ${dbEntry.cache_key}`, {cached: {fileSize: metadata_filesize, metadata_lastModified_ms, etag: metadata_etag}, current: currentMetadata });
+            return false;
+        }
+        return true;
+    }
+
+
+    /**
+     * Retrieves data from the cache.
+     * @param {CacheDataType} dataType - The type of data to retrieve.
+     * @param {string} sourceId - The ID of the data source.
+     * @param {string} pathIdentifier - The path or unique identifier for the data.
+     * @param {object} currentMetadata - Current metadata of the source data for validation.
+     * @returns {Promise<any|undefined>} Cached data or undefined if not found/invalid.
+     */
+    async getDataFromCache(dataType, sourceId, pathIdentifier, currentMetadata) {
         if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: getFromL1 called but service not initialized or disabled. Key: ${key}, Type: ${type}`);
+            this.logger.debug(`getDataFromCache: Service not initialized or disabled. DataType: ${dataType}`);
             return undefined;
         }
-        const cachedItem = this.l1Cache.get(key);
-        if (cachedItem) {
-            const { data, timestamp, ttlMs, sourceJsonStats, directoryContentHash } = cachedItem;
-            const effectiveTtlMs = ttlMs || this.l1TtlMs; // Use item-specific TTL if present, else default L1 TTL
 
-            if (Date.now() < timestamp + effectiveTtlMs) {
-                this.logger.debug(`L1 cache hit for key: ${key} (type: ${type})`);
-                this.l1Cache.delete(key); // For LRU behavior
-                this.l1Cache.set(key, cachedItem); // Move to end
-                
-                // Return all relevant metadata for the caller (ModelService) to validate
-                return {
-                    data: structuredClone(data), // Deep clone
-                    timestamp,
-                    ttlMs: effectiveTtlMs,
-                    sourceJsonStats, // Will be undefined if not set (e.g., for listModels)
-                    directoryContentHash // Will be undefined if not set (e.g., for modelJsonInfo)
-                };
+        const cacheKey = this._generateCacheKey(dataType, sourceId, pathIdentifier);
+        this.logger.debug(`getDataFromCache: Attempting for key: ${cacheKey}, dataType: ${dataType}`);
+
+        // 1. L1 Lookup
+        const l1Entry = this.l1Cache.get(cacheKey);
+        if (l1Entry) {
+            l1Entry.originalKey = cacheKey; // For logging in _isL1EntryValid
+            l1Entry.dataType = dataType; // For _isL1EntryValid to know context
+            if (this._isL1EntryValid(l1Entry, currentMetadata)) {
+                this.logger.info(`L1 cache hit and valid for key: ${cacheKey}`);
+                // LRU behavior: move to end
+                this.l1Cache.delete(cacheKey);
+                this.l1Cache.set(cacheKey, l1Entry);
+                return structuredClone(l1Entry.data); // Return deep clone
             } else {
-                this.logger.info(`L1 cache expired for key: ${key} (type: ${type})`);
-                this.l1Cache.delete(key);
+                this.logger.info(`L1 cache entry invalid or expired for key: ${cacheKey}. Deleting.`);
+                this.l1Cache.delete(cacheKey);
             }
         } else {
-            this.logger.debug(`L1 cache miss for key: ${key} (type: ${type})`);
+            this.logger.debug(`L1 cache miss for key: ${cacheKey}`);
         }
+
+        // 2. L2 Lookup (only for CacheDataType.MODEL_JSON_INFO)
+        if (dataType === CacheDataType.MODEL_JSON_INFO) {
+            if (!this.db) {
+                this.logger.warn(`L2 lookup skipped for key ${cacheKey}: DB not available.`);
+                return undefined;
+            }
+            try {
+                const stmt = this.db.prepare(`
+                    SELECT * FROM model_json_info_cache WHERE cache_key = ?
+                `);
+                const dbRow = stmt.get(cacheKey);
+
+                if (dbRow) {
+                    if (this._isL2EntryValid(dbRow, currentMetadata)) {
+                        this.logger.info(`L2 cache hit and valid for key: ${cacheKey}`);
+                        try {
+                            const data = BSON.deserialize(dbRow.bson_data);
+                            // Update last_accessed_timestamp_ms
+                            const updateStmt = this.db.prepare(`UPDATE model_json_info_cache SET last_accessed_timestamp_ms = ? WHERE cache_key = ?`);
+                            updateStmt.run(Date.now(), cacheKey);
+                            
+                            // Optionally, promote to L1 (though design doc doesn't explicitly require this step here,
+                            // it's a common pattern. For now, just return from L2).
+                            // If promoting, use setDataToCache with L1 target.
+                            return data; // BSON.deserialize already returns a new object
+                        } catch (bsonError) {
+                            this.logger.error(`L2 BSON deserialize error for key ${cacheKey}: ${bsonError.message}. Deleting entry.`, bsonError);
+                            await this._deleteL2Entry(cacheKey);
+                            return undefined;
+                        }
+                    } else {
+                        this.logger.info(`L2 cache entry invalid or expired for key: ${cacheKey}. Deleting.`);
+                        await this._deleteL2Entry(cacheKey);
+                    }
+                } else {
+                    this.logger.debug(`L2 cache miss for key: ${cacheKey}`);
+                }
+            } catch (error) {
+                this.logger.error(`L2: Error getting data for key ${cacheKey} from SQLite: ${error.message}`, error);
+            }
+        }
+        this.logger.debug(`Cache miss for key: ${cacheKey} after L1 and L2 checks.`);
         return undefined;
     }
 
-    setToL1(key, value, type = 'modelJsonInfo', options = {}) {
+    /**
+     * Sets data to the cache.
+     * @param {CacheDataType} dataType - The type of data to set.
+     * @param {string} sourceId - The ID of the data source.
+     * @param {string} pathIdentifier - The path or unique identifier for the data.
+     * @param {any} data - The data to cache.
+     * @param {object} metadataForCache - Metadata associated with the data's source.
+     * @param {string} [sourceTypeForTTL] - Optional: 'local' or 'webdav', for MODEL_LIST TTL.
+     * @returns {Promise<void>}
+     */
+    async setDataToCache(dataType, sourceId, pathIdentifier, data, metadataForCache, sourceTypeForTTL) {
         if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: setToL1 called but service not initialized or disabled. Key: ${key}, Type: ${type}`);
+            this.logger.debug(`setDataToCache: Service not initialized or disabled. DataType: ${dataType}`);
+            return;
+        }
+        if (data === undefined || data === null) {
+            this.logger.warn(`setDataToCache: Data is undefined/null for ${dataType} ${sourceId}:${pathIdentifier}. Skipping cache set.`);
             return;
         }
 
-        if (this.l1Cache.size >= this.l1MaxItems && !this.l1Cache.has(key)) {
-            const oldestKey = this.l1Cache.keys().next().value;
-            if (oldestKey) {
-                this.l1Cache.delete(oldestKey);
-                this.logger.info(`L1 cache full, removed oldest item: ${oldestKey}`);
+        const cacheKey = this._generateCacheKey(dataType, sourceId, pathIdentifier);
+        this.logger.debug(`setDataToCache: Attempting for key: ${cacheKey}, dataType: ${dataType}`);
+
+        const ttlSeconds = this._getTtlSeconds(dataType, sourceTypeForTTL);
+
+        // L1 Storage (for MODEL_LIST, MODEL_DETAIL)
+        if (dataType === CacheDataType.MODEL_LIST || dataType === CacheDataType.MODEL_DETAIL) {
+            if (this.l1Cache.size >= this.l1MaxItems && !this.l1Cache.has(cacheKey)) {
+                const oldestKey = this.l1Cache.keys().next().value;
+                if (oldestKey) {
+                    this.l1Cache.delete(oldestKey);
+                    this.logger.info(`L1 cache full, removed oldest item: ${oldestKey}`);
+                }
             }
+            const clonedData = structuredClone(data);
+            this.l1Cache.set(cacheKey, {
+                data: clonedData,
+                metadata: metadataForCache, // This is the source file's metadata
+                timestamp: Date.now(),
+                ttlMs: ttlSeconds * 1000,
+                dataType: dataType // Store dataType for validation context
+            });
+            this.logger.info(`L1 cache set for key: ${cacheKey} with TTL: ${ttlSeconds}s`);
         }
 
-        const itemTtlMs = options.ttlMs || this.l1TtlMs; // Use provided TTL or default L1 TTL
-        const clonedValue = structuredClone(value);
-        
-        const cacheEntry = {
-            data: clonedValue,
-            timestamp: Date.now(),
-            ttlMs: itemTtlMs,
-        };
-
-        if (type === 'modelJsonInfo' && options.sourceJsonStats) {
-            cacheEntry.sourceJsonStats = options.sourceJsonStats;
-        } else if (type === 'listModels' && options.directoryContentHash) {
-            cacheEntry.directoryContentHash = options.directoryContentHash;
-        }
-        
-        this.l1Cache.set(key, cacheEntry);
-        this.logger.info(`L1 cache set for key: ${key} (type: ${type}) with TTL: ${itemTtlMs}ms. Options: ${JSON.stringify(options)}`);
-    }
-
-    deleteFromL1(key) {
-        if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: deleteFromL1 called but service not initialized or disabled. Key: ${key}`);
-            return;
-        }
-        const deleted = this.l1Cache.delete(key);
-        if (deleted) {
-            this.logger.info(`L1 cache deleted for key: ${key}`);
-        } else {
-            this.logger.debug(`L1 cache delete: key not found: ${key}`);
-        }
-    }
-
-    clearL1Cache() {
-        if (!this.isInitialized) {
-            this.logger.warn('L1: clearL1Cache called before initialization.');
-            return;
-        }
-        this.l1Cache.clear();
-        this.logger.info('L1 memory cache cleared.');
-    }
-
-    clearL1ByPrefix(prefix) {
-        if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: clearL1ByPrefix called but service not initialized or disabled. Prefix: ${prefix}`);
-            return 0;
-        }
-        let clearedCount = 0;
-        for (const key of this.l1Cache.keys()) {
-            if (key.startsWith(prefix)) {
-                this.l1Cache.delete(key);
-                clearedCount++;
+        // L2 Storage (for MODEL_JSON_INFO)
+        if (dataType === CacheDataType.MODEL_JSON_INFO) {
+            if (!this.db) {
+                this.logger.warn(`L2 set skipped for key ${cacheKey}: DB not available.`);
+                return;
             }
-        }
-        if (clearedCount > 0) {
-            this.logger.info(`L1: Cleared ${clearedCount} entries with prefix: ${prefix}`);
-        }
-        return clearedCount;
-    }
-
-    clearL1ByType(type) {
-        // This requires keys to be structured to identify type, e.g., "listModels:..." or "modelJsonInfo:..."
-        // Or, L1 items themselves store their type, then iterate values.
-        // For now, assuming a prefix like "listModels:" or "modelJsonInfo:"
-        if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: clearL1ByType called but service not initialized or disabled. Type: ${type}`);
-            return 0;
-        }
-        this.logger.info(`L1: Clearing cache entries of type: ${type}`);
-        let clearedCount = 0;
-        // Example: if type is 'listModels', prefix is 'listModels:'
-        // This is a convention that ModelService must follow when generating keys for setToL1.
-        const prefixToClear = `${type}:`;
-        
-        for (const key of this.l1Cache.keys()) {
-            if (key.startsWith(prefixToClear)) {
-                this.l1Cache.delete(key);
-                clearedCount++;
-            }
-        }
-        if (clearedCount > 0) {
-            this.logger.info(`L1: Cleared ${clearedCount} entries of type '${type}' (using prefix '${prefixToClear}').`);
-        } else {
-            this.logger.info(`L1: No entries found for type '${type}' with prefix '${prefixToClear}'.`);
-        }
-        return clearedCount;
-    }
-
-
-    // --- L2 SQLite Cache Methods (NEW) ---
-
-    async getModelJsonInfoFromL2(cacheKey) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: getModelJsonInfoFromL2 - DB not available or service disabled. Key: ${cacheKey}`);
-            return undefined;
-        }
-        this.logger.debug(`L2: getModelJsonInfoFromL2 called for key: ${cacheKey}`);
-        try {
-            const stmt = this.db.prepare(`
-                SELECT bson_data, source_json_mtime_ms, source_json_size, cached_timestamp_ms, ttl_seconds
-                FROM model_json_info_cache
-                WHERE cache_key = ?
-            `);
-            const row = stmt.get(cacheKey);
-
-            if (!row) {
-                this.logger.debug(`L2: model_json_info_cache miss for key: ${cacheKey}`);
-                return undefined;
+            if (!metadataForCache || typeof metadataForCache.fileSize !== 'number' || typeof metadataForCache.metadata_lastModified_ms !== 'number') {
+                this.logger.error(`L2 set skipped for key ${cacheKey}: Invalid or missing metadataForCache (fileSize, metadata_lastModified_ms).`, metadataForCache);
+                return;
             }
 
-            const { bson_data, source_json_mtime_ms, source_json_size, cached_timestamp_ms, ttl_seconds } = row;
-            const expiresAt = cached_timestamp_ms + (ttl_seconds * 1000);
-
-            if (Date.now() >= expiresAt) {
-                this.logger.info(`L2: model_json_info_cache expired for key: ${cacheKey}. Deleting.`);
-                await this.deleteFromL2(cacheKey, 'model_json_info_cache');
-                return undefined;
-            }
-
-            let modelJsonInfo;
+            let bsonData;
             try {
-                modelJsonInfo = BSON.deserialize(bson_data);
+                bsonData = BSON.serialize(data);
             } catch (bsonError) {
-                this.logger.error(`L2: BSON deserialize error for key ${cacheKey} in model_json_info_cache: ${bsonError.message}. Deleting entry.`, bsonError);
-                await this.deleteFromL2(cacheKey, 'model_json_info_cache');
-                return undefined;
+                this.logger.error(`L2 BSON serialize error for key ${cacheKey}: ${bsonError.message}. Write aborted.`, bsonError);
+                return;
             }
-            
-            // Update last_accessed_timestamp_ms
-            const updateStmt = this.db.prepare(`UPDATE model_json_info_cache SET last_accessed_timestamp_ms = ? WHERE cache_key = ?`);
-            updateStmt.run(Date.now(), cacheKey);
 
-            this.logger.info(`L2: model_json_info_cache hit for key: ${cacheKey}`);
-            return {
-                modelJsonInfo,
-                sourceJsonStats: { mtimeMs: source_json_mtime_ms, size: source_json_size }
-            };
+            const cached_timestamp_ms = Date.now();
+            const last_accessed_timestamp_ms = cached_timestamp_ms;
 
-        } catch (error) {
-            this.logger.error(`L2: Error getting modelJsonInfo for key ${cacheKey} from SQLite: ${error.message}`, error);
-            return undefined;
+            try {
+                const stmt = this.db.prepare(`
+                    INSERT OR REPLACE INTO model_json_info_cache
+                    (cache_key, source_id, normalized_json_path, bson_data, 
+                     metadata_filesize, metadata_lastModified_ms, metadata_etag, 
+                     cached_timestamp_ms, ttl_seconds, last_accessed_timestamp_ms)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `);
+                const runInfo = stmt.run(
+                    cacheKey,
+                    sourceId,
+                    pathIdentifier.replace(/\\/g, '/'), // Ensure pathIdentifier is stored normalized
+                    bsonData,
+                    metadataForCache.fileSize,
+                    metadataForCache.metadata_lastModified_ms,
+                    metadataForCache.etag === undefined ? null : metadataForCache.etag, // Handle potentially undefined etag
+                    cached_timestamp_ms,
+                    ttlSeconds,
+                    last_accessed_timestamp_ms
+                );
+                this.logger.info(`L2 cache set for key: ${cacheKey}. Changes: ${runInfo.changes}. TTL: ${ttlSeconds}s`);
+                 if (runInfo.changes === 0) {
+                    this.logger.warn(`L2: stmt.run for key ${cacheKey} reported 0 changes. Data might not have been written as expected.`);
+                }
+            } catch (error) {
+                this.logger.error(`L2: Error setting data for key ${cacheKey} in SQLite: ${error.message}`, error);
+            }
         }
     }
 
-    async setModelJsonInfoToL2(cacheKey, modelJsonInfo, sourceJsonStats, ttlSeconds) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: setModelJsonInfoToL2 - DB not available or service disabled. Key: ${cacheKey}`);
+    /**
+     * Invalidates a specific cache entry.
+     * @param {CacheDataType} dataType - The type of data to invalidate.
+     * @param {string} sourceId - The ID of the data source.
+     * @param {string} pathIdentifier - The path or unique identifier for the data.
+     * @returns {Promise<void>}
+     */
+    async invalidateCacheEntry(dataType, sourceId, pathIdentifier) {
+        if (!this.isInitialized || !this.isEnabled) {
+            this.logger.debug(`invalidateCacheEntry: Service not initialized or disabled. DataType: ${dataType}`);
             return;
         }
-        this.logger.debug(`L2: setModelJsonInfoToL2 called for key: ${cacheKey}`);
+        const cacheKey = this._generateCacheKey(dataType, sourceId, pathIdentifier);
+        this.logger.info(`Invalidating cache entry for key: ${cacheKey}, dataType: ${dataType}`);
 
-        if (!sourceJsonStats || typeof sourceJsonStats.mtimeMs !== 'number' || typeof sourceJsonStats.size !== 'number') {
-            this.logger.error(`L2: Invalid or missing sourceJsonStats for key ${cacheKey}. Cannot write to model_json_info_cache.`);
-            return;
-        }
-        
-        // Extract sourceId and normalized_json_path from cacheKey (e.g., "{sourceId}:{normalized_json_path}")
-        const keyParts = cacheKey.split(':');
-        if (keyParts.length < 2) {
-            this.logger.error(`L2: Invalid cacheKey format for model_json_info_cache: ${cacheKey}. Expected {sourceId}:{normalized_json_path}.`);
-            return;
-        }
-        const source_id = keyParts.shift();
-        const normalized_json_path = keyParts.join(':');
-
-
-        let bsonData;
-        try {
-            bsonData = BSON.serialize(modelJsonInfo);
-        } catch (bsonError) {
-            this.logger.error(`L2: BSON serialize error for key ${cacheKey} in model_json_info_cache: ${bsonError.message}. Write aborted.`, bsonError);
-            return;
+        // Delete from L1
+        if (this.l1Cache.has(cacheKey)) {
+            this.l1Cache.delete(cacheKey);
+            this.logger.info(`L1 entry deleted for key: ${cacheKey}`);
         }
 
-        const effectiveTtlSeconds = ttlSeconds || (this.l2TtlMs / 1000);
-        const cached_timestamp_ms = Date.now();
-        const last_accessed_timestamp_ms = cached_timestamp_ms;
-
-        try {
-            const stmt = this.db.prepare(`
-                INSERT OR REPLACE INTO model_json_info_cache
-                (cache_key, source_id, normalized_json_path, bson_data, source_json_mtime_ms, source_json_size, cached_timestamp_ms, ttl_seconds, last_accessed_timestamp_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            // stmt.run(
-            //     cacheKey,
-            //     source_id,
-            //     normalized_json_path,
-            //     bsonData,
-            //     sourceJsonStats.mtimeMs,
-            //     sourceJsonStats.size,
-            //     cached_timestamp_ms,
-            //     effectiveTtlSeconds,
-            //     last_accessed_timestamp_ms
-            // );
-
-            // Capture the info object from the run command
-            const runInfo = stmt.run(
-                cacheKey,
-                source_id,
-                normalized_json_path,
-                bsonData,
-                sourceJsonStats.mtimeMs,
-                sourceJsonStats.size,
-                cached_timestamp_ms,
-                effectiveTtlSeconds,
-                last_accessed_timestamp_ms
-            );
-
-            this.logger.info(`L2: model_json_info_cache - DB write attempt for key: ${cacheKey}. Changes: ${runInfo.changes}, Last ROWID: ${runInfo.lastInsertRowid}. TTL: ${effectiveTtlSeconds}s`);
-
-            if (runInfo.changes === 0) {
-                this.logger.warn(`L2: stmt.run for key ${cacheKey} (model_json_info_cache) reported 0 changes. Data might not have been written as expected.`);
-            }
-
-            // // Verification read
-            // try {
-            //     const verifyStmt = this.db.prepare('SELECT cache_key, LENGTH(bson_data) as len FROM model_json_info_cache WHERE cache_key = ?');
-            //     const verifyRow = verifyStmt.get(cacheKey);
-            //     if (verifyRow) {
-            //         this.logger.info(`L2: Verification read for key ${cacheKey} (model_json_info_cache) successful. BSON data length: ${verifyRow.len}`);
-            //     } else {
-            //         this.logger.error(`L2: Verification read FAILED for key ${cacheKey} (model_json_info_cache). Data not found after insert/replace.`);
-            //     }
-            // } catch (verifyError) {
-            //     this.logger.error(`L2: Error during verification read for key ${cacheKey} (model_json_info_cache): ${verifyError.message}`, verifyError);
-            // }
-
-        } catch (error) {
-            this.logger.error(`L2: Error setting modelJsonInfo for key ${cacheKey} in SQLite (model_json_info_cache): ${error.message}`, error);
-            if (error.code) { // SQLite errors often have a code
-                 this.logger.error(`L2: SQLite error code: ${error.code}`);
-            }
-            this.logger.error('L2: Full error object during setModelJsonInfoToL2:', error);
+        // Delete from L2 if applicable
+        if (dataType === CacheDataType.MODEL_JSON_INFO) {
+            await this._deleteL2Entry(cacheKey);
         }
     }
-
-    async deleteFromL2(cacheKey, tableName) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: deleteFromL2 - DB not available or service disabled. Key: ${cacheKey}, Table: ${tableName}`);
-            return;
-        }
-        this.logger.debug(`L2: deleteFromL2 called for key: ${cacheKey}, table: ${tableName}`);
-        if (tableName !== 'model_json_info_cache') {
-            this.logger.error(`L2: deleteFromL2 - Invalid table name: ${tableName}. Only 'model_json_info_cache' is allowed.`);
+    
+    /**
+     * Helper to delete a single L2 entry.
+     * @param {string} cacheKey
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _deleteL2Entry(cacheKey) {
+        if (!this.db) {
+            this.logger.warn(`L2 delete skipped for key ${cacheKey}: DB not available.`);
             return;
         }
         try {
-            const stmt = this.db.prepare(`DELETE FROM ${tableName} WHERE cache_key = ?`);
+            const stmt = this.db.prepare(`DELETE FROM model_json_info_cache WHERE cache_key = ?`);
             const result = stmt.run(cacheKey);
             if (result.changes > 0) {
-                this.logger.info(`L2: Deleted key ${cacheKey} from table ${tableName}.`);
+                this.logger.info(`L2 entry deleted for key: ${cacheKey}`);
             } else {
-                this.logger.debug(`L2: Key ${cacheKey} not found in table ${tableName} for deletion.`);
+                this.logger.debug(`L2 entry not found for deletion: ${cacheKey}`);
             }
         } catch (error) {
-            this.logger.error(`L2: Error deleting key ${cacheKey} from table ${tableName}: ${error.message}`, error);
+            this.logger.error(`L2: Error deleting entry for key ${cacheKey}: ${error.message}`, error);
         }
     }
 
-    async clearL2Table(tableName) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: clearL2Table - DB not available or service disabled. Table: ${tableName}`);
+
+    /**
+     * Clears all cache entries for a specific data source.
+     * @param {string} sourceId - The ID of the data source.
+     * @returns {Promise<void>}
+     */
+    async clearCacheForSource(sourceId) {
+        if (!this.isInitialized || !this.isEnabled) {
+            this.logger.debug(`clearCacheForSource: Service not initialized or disabled. SourceID: ${sourceId}`);
             return;
         }
-        this.logger.debug(`L2: clearL2Table called for table: ${tableName}`);
-        if (tableName !== 'model_json_info_cache') {
-            this.logger.error(`L2: clearL2Table - Invalid table name: ${tableName}. Only 'model_json_info_cache' is allowed.`);
+        this.logger.info(`Clearing all cache entries for sourceId: ${sourceId}`);
+
+        // Clear L1 entries for this sourceId
+        let l1ClearedCount = 0;
+        const l1Prefix = `:${sourceId}:`; // Common part of the key after dataType
+        for (const key of this.l1Cache.keys()) {
+            if (key.includes(l1Prefix)) { // More general check than startsWith if dataType is variable
+                 const keyParts = key.split(':');
+                 if (keyParts.length > 1 && keyParts[1] === sourceId) {
+                    this.l1Cache.delete(key);
+                    l1ClearedCount++;
+                 }
+            }
+        }
+        this.logger.info(`L1: Cleared ${l1ClearedCount} entries for sourceId: ${sourceId}`);
+
+        // Clear L2 entries for this sourceId
+        if (!this.db) {
+            this.logger.warn(`L2 clear for source ${sourceId} skipped: DB not available.`);
             return;
         }
         try {
-            const stmt = this.db.prepare(`DELETE FROM ${tableName}`);
-            const result = stmt.run();
-            this.logger.info(`L2: Cleared table ${tableName}. ${result.changes} rows deleted.`);
+            const stmt = this.db.prepare(`DELETE FROM model_json_info_cache WHERE source_id = ?`);
+            const result = stmt.run(sourceId);
+            this.logger.info(`L2: Cleared ${result.changes} entries from model_json_info_cache for sourceId: ${sourceId}`);
         } catch (error) {
-            this.logger.error(`L2: Error clearing table ${tableName}: ${error.message}`, error);
+            this.logger.error(`L2: Error clearing entries by sourceId ${sourceId}: ${error.message}`, error);
         }
     }
 
-    async clearAllL2Cache() {
-        this.logger.info(`L2: Clearing 'model_json_info_cache' table.`);
-        await this.clearL2Table('model_json_info_cache');
-        // Optionally, VACUUM to shrink DB file, but be cautious as it's blocking.
-        // try {
-        //     this.db.exec('VACUUM');
-        //     this.logger.info('L2: Database VACUUM completed.');
-        // } catch (vacError) {
-        //     this.logger.error(`L2: Error during VACUUM: ${vacError.message}`, vacError);
-        // }
-    }
+    /**
+     * Clears all caches (L1 and L2).
+     * @returns {Promise<void>}
+     */
+    async clearAllCache() {
+        if (!this.isInitialized) { // No need to check isEnabled, clear should work even if temp disabled
+            this.logger.warn('clearAllCache called before initialization.');
+            // return; // Or proceed to clear what can be cleared
+        }
+        this.logger.info('Clearing all caches (L1 and L2).');
 
-    async runL2Cleanup() {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: runL2Cleanup - DB not available or service disabled.`);
+        // Clear L1
+        this.l1Cache.clear();
+        this.logger.info('L1 cache cleared.');
+
+        // Clear L2
+        if (!this.db) {
+            this.logger.warn('L2 clear all skipped: DB not available.');
             return;
         }
-        this.logger.info(`L2: Running cleanup task...`);
+        try {
+            const stmt = this.db.prepare(`DELETE FROM model_json_info_cache`);
+            const result = stmt.run();
+            this.logger.info(`L2: Cleared table model_json_info_cache. ${result.changes} rows deleted.`);
+            // Optionally VACUUM, but be cautious.
+            // this.db.exec('VACUUM');
+            // this.logger.info('L2: Database VACUUM completed after clearing all.');
+        } catch (error) {
+            this.logger.error(`L2: Error clearing all entries from model_json_info_cache: ${error.message}`, error);
+        }
+    }
+    
+    _scheduleL2Cleanup() {
+        // Run cleanup periodically (e.g., every hour)
+        // For simplicity, a basic interval. More robust scheduling might use a library or main process events.
+        const cleanupIntervalMs = 3600 * 1000; // 1 hour
+        setInterval(async () => {
+            if (this.isEnabled && this.db) {
+                this.logger.info('Periodic L2 cleanup task started...');
+                await this._runL2Cleanup();
+            }
+        }, cleanupIntervalMs);
+        this.logger.info(`Scheduled periodic L2 cleanup every ${cleanupIntervalMs / 1000 / 60} minutes.`);
+        
+        // Initial cleanup shortly after startup
+        setTimeout(async () => {
+            if (this.isEnabled && this.db) {
+                 this.logger.info('Initial L2 cleanup task started...');
+                 await this._runL2Cleanup();
+            }
+        }, 5 * 60 * 1000); // 5 minutes after init
+    }
+
+    async _runL2Cleanup() {
+        if (!this.db || !this.isEnabled) {
+            this.logger.debug(`L2 Cleanup: Skipped, DB not available or service disabled.`);
+            return;
+        }
+        this.logger.info(`L2 Cleanup: Running task...`);
         const now = Date.now();
         let totalExpiredDeleted = 0;
 
-        const tableNameToClean = 'model_json_info_cache'; // Only clean this table
-
         try {
-            // TTL Cleanup
+            // TTL Cleanup for model_json_info_cache
             const stmt = this.db.prepare(`
-                DELETE FROM ${tableNameToClean}
+                DELETE FROM model_json_info_cache
                 WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?
             `);
             const result = stmt.run(now);
             if (result.changes > 0) {
-                this.logger.info(`L2 Cleanup: Deleted ${result.changes} expired entries from ${tableNameToClean}.`);
+                this.logger.info(`L2 Cleanup: Deleted ${result.changes} expired entries from model_json_info_cache.`);
                 totalExpiredDeleted += result.changes;
             }
         } catch (error) {
-            this.logger.error(`L2 Cleanup: Error cleaning expired entries from ${tableNameToClean}: ${error.message}`, error);
+            this.logger.error(`L2 Cleanup: Error cleaning expired entries from model_json_info_cache: ${error.message}`, error);
         }
         
-        // LRU Cleanup for model_json_info_cache
-        const l2ModelInfoMaxItemsValue = await this.configService.getSetting('cache.l2.maxItems.modelInfo');
-        const l2MaxItemsModelInfo = (l2ModelInfoMaxItemsValue !== undefined && l2ModelInfoMaxItemsValue !== null) ? l2ModelInfoMaxItemsValue : 5000;
+        // LRU Cleanup for model_json_info_cache (if maxItems configured)
+        let l2MaxItemsModelInfo = 5000; // Default
+        if (this.configService) {
+            const l2ModelInfoMaxItemsValue = await this.configService.getSetting('cache.l2.maxItems.modelInfo'); // Assuming this config key exists
+            l2MaxItemsModelInfo = (l2ModelInfoMaxItemsValue !== undefined && l2ModelInfoMaxItemsValue !== null) ? l2ModelInfoMaxItemsValue : 5000;
+        }
         
-        if (l2MaxItemsModelInfo > 0) { // Only apply LRU if maxItems is positive
+        if (l2MaxItemsModelInfo > 0) {
             try {
-                const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${tableNameToClean}`);
+                const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM model_json_info_cache`);
                 const currentCount = countStmt.get().count;
 
                 if (currentCount > l2MaxItemsModelInfo) {
                     const itemsToDelete = currentCount - l2MaxItemsModelInfo;
-                    this.logger.info(`L2 Cleanup (${tableNameToClean}): Exceeds max items (${l2MaxItemsModelInfo}). Current: ${currentCount}. Deleting ${itemsToDelete} LRU items.`);
+                    this.logger.info(`L2 Cleanup (model_json_info_cache): Exceeds max items (${l2MaxItemsModelInfo}). Current: ${currentCount}. Deleting ${itemsToDelete} LRU items.`);
                     const deleteLruStmt = this.db.prepare(`
-                        DELETE FROM ${tableNameToClean}
+                        DELETE FROM model_json_info_cache
                         WHERE cache_key IN (
-                            SELECT cache_key FROM ${tableNameToClean}
+                            SELECT cache_key FROM model_json_info_cache
                             ORDER BY last_accessed_timestamp_ms ASC
                             LIMIT ?
                         )
                     `);
                     const lruResult = deleteLruStmt.run(itemsToDelete);
-                    this.logger.info(`L2 Cleanup (${tableNameToClean}): Deleted ${lruResult.changes} LRU entries.`);
+                    this.logger.info(`L2 Cleanup (model_json_info_cache): Deleted ${lruResult.changes} LRU entries.`);
                 }
             } catch (error) {
-                this.logger.error(`L2 Cleanup: Error during LRU cleanup for ${tableNameToClean}: ${error.message}`, error);
+                this.logger.error(`L2 Cleanup: Error during LRU cleanup for model_json_info_cache: ${error.message}`, error);
             }
         }
-
 
         if (totalExpiredDeleted > 0) {
             this.logger.info(`L2 Cleanup: Finished. Total expired entries deleted: ${totalExpiredDeleted}. LRU cleanup also performed if applicable.`);
@@ -558,178 +691,8 @@ class ModelInfoCacheService {
     }
 
 
-    // --- Unified Cache Methods (To be updated) ---
-
-    async get(cacheKey, type = 'modelJsonInfo') {
-        if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`Unified Get: Called but service not initialized or disabled. Type: ${type}, Key: ${cacheKey}`);
-            return undefined;
-        }
-        this.logger.debug(`Unified Get: Attempting for key: ${cacheKey}, type: ${type}`);
-
-        // 1. Try L1 Cache
-        // L1 stores structured items. The 'type' helps interpret L1 content and decide L2 strategy.
-        const l1Hit = this.getFromL1(cacheKey, type); // getFromL1 now returns the full L1 item structure
-        if (l1Hit !== undefined) {
-            // ModelService will use l1Hit.data, l1Hit.sourceJsonStats, l1Hit.directoryContentHash for further validation
-            this.logger.info(`Unified Get: L1 cache hit for key: ${cacheKey} (type: ${type})`);
-            return l1Hit; // Returns { data, timestamp, ttlMs, sourceJsonStats?, directoryContentHash? }
-        }
-        this.logger.debug(`Unified Get: L1 cache miss for key: ${cacheKey} (type: ${type}). Trying L2.`);
-
-        // 2. Try L2 Cache (SQLite) - Only for 'modelJsonInfo'
-        if (type === 'modelJsonInfo') {
-            const l2Result = await this.getModelJsonInfoFromL2(cacheKey); // This method is specific to model_json_info_cache
-            if (l2Result && l2Result.modelJsonInfo !== undefined) {
-                this.logger.info(`Unified Get: L2 cache hit for key: ${cacheKey} (type: modelJsonInfo).`);
-                // ModelService is responsible for constructing the full object if needed and updating L1.
-                // This service returns the raw L2 data and its metadata.
-                return {
-                    data: l2Result.modelJsonInfo,
-                    sourceJsonStats: l2Result.sourceJsonStats,
-                    fromL2: true // Indicate it's from L2, so ModelService knows to populate L1
-                };
-            }
-        } else if (type === 'listModels') {
-            // listModels results are L1 only. L1 was already checked and missed.
-            this.logger.debug(`Unified Get: L1 miss for 'listModels' type, key: ${cacheKey}. No L2 for this type.`);
-        } else {
-            this.logger.warn(`Unified Get: Unknown cache type "${type}" for key: ${cacheKey}`);
-            return undefined;
-        }
-
-        this.logger.info(`Unified Get: L1 and L2 cache miss for key: ${cacheKey}, type: ${type}`);
-        return undefined;
-    }
-
-    async set(cacheKey, value, ttlSeconds, type = 'modelJsonInfo', extraArgs = {}) {
-        if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`Unified Set: Called but service not initialized or disabled. Type: ${type}, Key: ${cacheKey}`);
-            return;
-        }
-        this.logger.info(`Unified Set: Attempting for key: ${cacheKey}, type: ${type}`);
-
-        const effectiveTtlSeconds = ttlSeconds || (type === 'modelJsonInfo' ? (this.l2TtlMs / 1000) : (this.l1TtlMs / 1000)); // Use L2 default for modelJsonInfo, L1 for others or specific TTL
-
-        // 1. Set to L1 Memory Cache
-        // L1 stores modelObj. If 'value' is modelJsonInfo, ModelService should have built modelObj first.
-        // This 'set' is likely called by ModelService with a full modelObj for L1.
-        // If type is 'modelJsonInfo', the 'value' here is assumed to be the modelJsonInfo part for L2,
-        // and ModelService would separately call setToMemory with the full modelObj.
-        // Let's assume 'value' for L1 is always the full modelObj if type implies it.
-        // For simplicity here, if type is modelJsonInfo, we assume 'value' is modelJsonInfo for L2,
-        // and L1 set is handled by ModelService with the full object.
-        // If type is listModels, 'value' is modelObjArray, which can go to L1 as is.
-
-        // The primary role of this unified 'set' method is to persist 'modelJsonInfo' to L2.
-        // ModelService is responsible for calling `setToL1` directly for L1 cache entries
-        // (both for fully constructed model objects derived from modelJsonInfo, and for listModels results).
-
-        if (type === 'modelJsonInfo') {
-            const { sourceJsonStats, isJsonInfoOnly } = extraArgs; // isJsonInfoOnly indicates 'value' is just JSON info
-            if (!sourceJsonStats) {
-                this.logger.warn(`Unified Set (L2 modelJsonInfo): sourceJsonStats missing for key ${cacheKey}. L2 write might be skipped or incomplete.`);
-            }
-            if (value === undefined || value === null) {
-                 this.logger.warn(`Unified Set (L2 modelJsonInfo): value is undefined/null for key ${cacheKey}. L2 write skipped.`);
-                 return;
-            }
-            // 'value' here is expected to be the modelJsonInfo data itself.
-            await this.setModelJsonInfoToL2(cacheKey, value, sourceJsonStats || {}, effectiveTtlSeconds);
-        } else if (type === 'listModels') {
-            // L1 set for listModels should be done by ModelService calling setToL1 directly with the array and options.
-            // No L2 operation for listModels.
-            this.logger.debug(`Unified Set: type 'listModels' is L1 only. L2 write skipped for key: ${cacheKey}. ModelService should use setToL1 directly.`);
-        } else {
-            this.logger.warn(`Unified Set: Unknown cache type "${type}" for L2. Key: ${cacheKey}`);
-        }
-        this.logger.info(`Unified Set: L2 processing (if applicable) complete for key ${cacheKey}, type ${type}.`);
-    }
-
-    // --- Invalidation and Clear Methods ---
-    
-    // deleteFromL1 is already defined above. Renamed from invalidateL1.
-
-    async invalidateL2(key, type = 'modelJsonInfo') {
-        if (type === 'modelJsonInfo') {
-            // deleteFromL2 now only accepts 'model_json_info_cache' as tableName
-            await this.deleteFromL2(key, 'model_json_info_cache');
-        } else {
-            this.logger.warn(`invalidateL2: type '${type}' does not have L2 storage. Key: ${key}`);
-        }
-    }
-    
-    async clearEntry(key, type = 'modelJsonInfo') {
-        this.logger.info(`Clearing cache entry for key: ${key}, type: ${type}`);
-        this.deleteFromL1(key); // Clears from L1 regardless of type
-        if (type === 'modelJsonInfo') {
-            await this.invalidateL2(key, 'modelJsonInfo'); // invalidateL2 only handles modelJsonInfo
-        }
-        // No L2 operation for 'listModels' type as it's L1 only
-    }
-
-    async clearBySource(sourceId) {
-        this.logger.info(`Attempting to clear all cache entries for sourceId: ${sourceId}`);
-        
-        // Clear L1 by sourceId using type-specific prefixes
-        // ModelService should ensure keys are prefixed like "modelJsonInfo:{sourceId}:..." and "listModels:{sourceId}:..."
-        let l1ClearedCount = 0;
-        l1ClearedCount += this.clearL1ByPrefix(`modelJsonInfo:${sourceId}:`);
-        l1ClearedCount += this.clearL1ByPrefix(`listModels:${sourceId}:`);
-        // Or, if ModelService uses a generic sourceId prefix for all its L1 entries:
-        // l1ClearedCount += this.clearL1ByPrefix(`${sourceId}:`);
-        // The current clearL1ByPrefix implementation is simple.
-        // A more robust clearBySource for L1 might iterate all keys and parse them if they have a standard structure.
-        this.logger.info(`L1: Cleared ${l1ClearedCount} entries potentially related to sourceId: ${sourceId} based on common prefixes.`);
-
-        // Clear L2 (model_json_info_cache only) by sourceId
-        if (!this.db) {
-            this.logger.warn('L2: Database not available, cannot clear by source from L2.');
-            return;
-        }
-        try {
-            const stmt1 = this.db.prepare(`DELETE FROM model_json_info_cache WHERE source_id = ?`);
-            const result1 = stmt1.run(sourceId);
-            this.logger.info(`L2: Cleared ${result1.changes} entries from model_json_info_cache for sourceId: ${sourceId}`);
-        } catch (error) {
-            this.logger.error(`L2: Error clearing model_json_info_cache entries by sourceId ${sourceId}: ${error.message}`, error);
-        }
-    }
-
-    async clearAll() {
-        this.clearL1Cache();
-        await this.clearAllL2Cache();
-        this.logger.info('All caches (L1 and L2) cleared.');
-    }
-
-    async invalidateListModelsCacheForDirectory(sourceId, directoryPath) {
-        // This method now only operates on L1 cache for 'listModels' type.
-        // It uses clearL1ByPrefix. The prefix must match how listModels keys are generated by ModelService.
-        // Example key structure assumed by ModelService: "listModels:{sourceId}:{normalizedDirectoryPath}:..."
-        this.logger.info(`L1: Invalidating listModels cache for sourceId: ${sourceId}, directoryPath: '${directoryPath}'`);
-
-        // ModelService should be responsible for normalizing directoryPath before generating cache keys
-        // and when calling this invalidation method.
-        // For example, ensuring consistent trailing slashes or lack thereof.
-        const prefix = `listModels:${sourceId}:${directoryPath}`;
-        
-        const clearedCount = this.clearL1ByPrefix(prefix);
-        
-        if (clearedCount > 0) {
-            this.logger.info(`L1: Cleared ${clearedCount} listModels cache entries with prefix '${prefix}'.`);
-        } else {
-            this.logger.info(`L1: No listModels cache entries found with prefix '${prefix}'. Consider key generation consistency.`);
-        }
-        // Note: This simple prefix invalidation might be too broad or too narrow if directoryPath is part of a more complex key structure
-        // or if parent/child directory invalidation logic is needed beyond simple prefix.
-        // For V2, this targets exact directory path matches based on prefix.
-        // Recursive invalidation (e.g., invalidating '/models' when '/models/subdir' changes) would require
-        // iterating all listModels keys and parsing the path, or ModelService explicitly calling invalidate for parent paths.
-    }
-
-
-    // --- Cache Stats Methods (Update for SQLite) ---
-    getL1CacheStats() { // Renamed from getMemoryCacheStats
+    // --- Cache Stats Methods ---
+    getL1CacheStats() {
         if (!this.isInitialized) {
             this.logger.warn('getL1CacheStats called before initialization.');
             return { items: 0, maxItems: this.l1MaxItems, isEnabled: this.isEnabled };
@@ -737,20 +700,20 @@ class ModelInfoCacheService {
         return {
             items: this.l1Cache.size,
             maxItems: this.l1MaxItems,
-            isEnabled: this.isEnabled, // Global cache enabled status
+            isEnabled: this.isEnabled,
         };
     }
 
-    async getDiskCacheStats() { // To be renamed/refactored to getL2CacheStats
+    async getL2CacheStats() {
         if (!this.isInitialized || !this.dbPath || !this.isEnabled || !this.db) {
             this.logger.warn(`L2 Stats: Called but service/DB not ready. Initialized: ${this.isInitialized}, DBPath: ${this.dbPath}, Enabled: ${this.isEnabled}, DB Ready: !!${this.db}`);
-            return { tables: {}, totalSize: 0, path: this.dbPath || 'N/A', isEnabled: this.isEnabled && !!this.db };
+            return { tables: {}, totalDbFileSize: 0, path: this.dbPath || 'N/A', isEnabled: this.isEnabled && !!this.db };
         }
 
         let totalSize = 0;
         const tableStats = {};
         try {
-            const stat = fs.statSync(this.dbPath);
+            const stat = await fs.stat(this.dbPath); // Use async stat
             totalSize = stat.size;
             
             const tableName = 'model_json_info_cache';
@@ -764,25 +727,23 @@ class ModelInfoCacheService {
             }
             this.logger.info(`L2 DB stats: Total size ${totalSize} bytes. Table counts: ${JSON.stringify(tableStats)}`);
         } catch (error) {
-            this.logger.error(`Error getting L2 DB file stats from ${this.dbPath}: ${error.message}`, error);
+            if (error.code === 'ENOENT') {
+                this.logger.warn(`L2 DB file not found at ${this.dbPath} for stats.`);
+            } else {
+                this.logger.error(`Error getting L2 DB file stats from ${this.dbPath}: ${error.message}`, error);
+            }
         }
         return {
             tables: tableStats,
-            totalDbFileSize: totalSize, // in bytes
+            totalDbFileSize: totalSize,
             path: this.dbPath,
             isEnabled: this.isEnabled && !!this.db,
         };
     }
 
     async getCacheStats() {
-        if (!this.isInitialized) {
-            this.logger.warn('getCacheStats called before initialization.');
-            // Attempt to initialize if not already, though it should be.
-            // await this.initialize(); // Avoid re-initializing if called early by mistake
-        }
-        
         const l1Stats = this.getL1CacheStats();
-        const l2Stats = await this.getDiskCacheStats();
+        const l2Stats = await this.getL2CacheStats();
 
         return {
             l1: l1Stats,
@@ -792,19 +753,28 @@ class ModelInfoCacheService {
         };
     }
     
-    // Call this when the application is shutting down
     close() {
         if (this.db) {
             try {
                 this.db.close();
-
                 this.logger.info('SQLite database connection closed.');
             } catch (err) {
                 this.logger.error('Error closing the SQLite database', err.message);
             }
             this.db = null;
         }
+        // Clear any scheduled cleanup timers
+        // (Node.js automatically handles setInterval cleanup on process exit, but explicit clear is good practice if service can be re-initialized)
+        if (this._cleanupIntervalId) {
+            clearInterval(this._cleanupIntervalId);
+            this._cleanupIntervalId = null;
+        }
+         if (this._initialCleanupTimeoutId) {
+            clearTimeout(this._initialCleanupTimeoutId);
+            this._initialCleanupTimeoutId = null;
+        }
     }
 }
 
-module.exports = ModelInfoCacheService;
+// Export CacheDataType along with the service
+module.exports = { ModelInfoCacheService, CacheDataType };
