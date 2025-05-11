@@ -27,7 +27,7 @@ class ModelInfoCacheService {
         this.db = null; // SQLite database instance
         this.dbPath = ''; // Path to the SQLite DB file
 
-        this.logger = log.scope('ModelInfoCacheService');
+        this.logger = log.scope('Service:ModelInfoCache');
         this.logger.info('Service instance created. SQLite and BSON will be used for L2 cache.');
     }
 
