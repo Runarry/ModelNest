@@ -4,9 +4,9 @@ const fsSync = require('fs'); // 保留 sync API 用于可能需要的场景，�
 const path = require('path');
 
 // 解析本地模型目录，返回标准模型对象数组
-async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}, ignorExtSupport = false) { // 改为 async 函数, 添加 sourceConfig
+async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}, ignorExtSupport = false, showSubdirectoryModels = true) { // 添加 showSubdirectoryModels 参数
   // sourceId 将在 parseSingleModelFile 内部处理
-  log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}`);
+  log.debug(`[modelParser] 解析目录: ${dir}, 支持扩展名: ${supportedExtensions}, showSubdirectoryModels: ${showSubdirectoryModels}`); // 更新日志
   try {
     await fs.stat(dir); // 异步检查目录是否存在和可访问
   } catch (statError) {
@@ -21,24 +21,116 @@ async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}, ign
   let filesInDir;
   try {
       filesInDir = await fs.readdir(dir); // 异步读取目录
-      log.debug(`[modelParser] 目录文件:`, filesInDir);
+      log.debug(`[modelParser] 目录 ${dir} 中的条目:`, filesInDir); // 更清晰的日志
   } catch (readError) {
       log.error(`[modelParser] 读取目录失败: ${dir}`, readError.message, readError.stack);
       return []; // Return empty array if directory cannot be read
   }
   const models = [];
  
-  for (const modelFileName of filesInDir) {
-    const modelFullPath = path.join(dir, modelFileName);
-    // parseSingleModelFile 会检查扩展名是否受支持
-    const modelObj = await parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig, ignorExtSupport);
-    if (modelObj) {
-      models.push(modelObj);
+  for (const itemName of filesInDir) { // 重命名 modelFileName 为 itemName 更通用
+    const itemFullPath = path.join(dir, itemName);
+    let stats;
+    try {
+      stats = await fs.stat(itemFullPath); // 获取条目状态
+    } catch (statError) {
+      // 如果无法获取状态 (例如权限问题，或者文件在读取目录后被删除)
+      log.warn(`[modelParser] 无法获取文件/目录状态: ${itemFullPath}. 错误: ${statError.message}`);
+      continue; // 跳过此条目
+    }
+
+    if (stats.isDirectory()) {
+      // 如果是目录
+      if (showSubdirectoryModels) {
+        log.debug(`[modelParser] 发现子目录，将递归解析: ${itemFullPath}`);
+        const subDirModels = await parseLocalModels(
+          itemFullPath,
+          supportedExtensions,
+          sourceConfig,
+          ignorExtSupport,
+          showSubdirectoryModels // 传递当前的 showSubdirectoryModels 值
+        );
+        if (subDirModels && subDirModels.length > 0) {
+          models.push(...subDirModels);
+        }
+      } else {
+        log.debug(`[modelParser] 发现子目录，但 showSubdirectoryModels 为 false，跳过: ${itemFullPath}`);
+        // 不从此子目录收集模型，也不递归进入
+      }
+    } else if (stats.isFile()) {
+      // 如果是文件，则尝试解析为模型
+      log.debug(`[modelParser] 发现文件，尝试解析为模型: ${itemFullPath}`);
+      // parseSingleModelFile 会检查扩展名是否受支持
+      const modelObj = await parseSingleModelFile(itemFullPath, supportedExtensions, sourceConfig, ignorExtSupport);
+      if (modelObj) {
+        models.push(modelObj);
+      }
+    } else {
+      // 既不是文件也不是目录 (例如符号链接，虽然 fs.stat 会解析符号链接)
+      // 或者其他类型的文件系统对象，通常我们只关心文件和目录
+      log.debug(`[modelParser] 跳过非文件、非目录的条目: ${itemFullPath}`);
     }
   }
-  log.debug(`[modelParser] 解析完成，模型数量: ${models.length}`);
+  log.debug(`[modelParser] 目录 ${dir} 解析完成，找到模型数量: ${models.length}`); // 更新日志
   return models;
 }
+// 新增：查找模型图片的辅助函数
+async function findImageForModel(dir, modelNameWithoutExt, filesInDir) {
+  let imageFullPath = '';
+  const imageExtensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp'];
+  const commonImageSubdirectories = ['preview', 'previews', 'image', 'images', 'cover', 'covers', 'thumb', 'thumbnail', 'thumbnails'];
+
+  // 1. 在模型文件同级目录查找图片
+  log.debug(`[modelParser findImageForModel] Searching for image for ${modelNameWithoutExt} in directory ${dir}`);
+  for (const ext of imageExtensions) {
+    const potentialImageName = `${modelNameWithoutExt}${ext}`;
+    const actualImageFileInDir = filesInDir.find(f => f.toLowerCase() === potentialImageName.toLowerCase());
+    if (actualImageFileInDir) {
+      imageFullPath = path.join(dir, actualImageFileInDir);
+      log.debug(`[modelParser findImageForModel] Found image for ${modelNameWithoutExt} at same level: ${imageFullPath}`);
+      break;
+    }
+  }
+
+  // 2. 如果在同级目录未找到，则在预定义的子目录中查找
+  if (!imageFullPath) {
+    log.debug(`[modelParser findImageForModel] Image for ${modelNameWithoutExt} not found in same directory. Searching in subdirectories: ${commonImageSubdirectories.join(', ')}`);
+    for (const subDirName of commonImageSubdirectories) {
+      const subDirPath = path.join(dir, subDirName);
+      try {
+        const subDirStat = await fs.stat(subDirPath);
+        if (subDirStat.isDirectory()) {
+          log.debug(`[modelParser findImageForModel] Checking subdirectory ${subDirPath} for image of ${modelNameWithoutExt}`);
+          const filesInSubDir = await fs.readdir(subDirPath);
+          for (const ext of imageExtensions) {
+            const potentialImageName = `${modelNameWithoutExt}${ext}`;
+            const actualImageFileInSubDir = filesInSubDir.find(f => f.toLowerCase() === potentialImageName.toLowerCase());
+            if (actualImageFileInSubDir) {
+              imageFullPath = path.join(subDirPath, actualImageFileInSubDir);
+              log.debug(`[modelParser findImageForModel] Found image for ${modelNameWithoutExt} in subdirectory: ${imageFullPath}`);
+              break;
+            }
+          }
+        }
+      } catch (e) {
+        if (e.code === 'ENOENT') {
+          // log.debug(`[modelParser findImageForModel] Image subdirectory ${subDirPath} not found for ${modelNameWithoutExt}.`);
+        } else {
+          log.warn(`[modelParser findImageForModel] Error accessing image subdirectory ${subDirPath} for ${modelNameWithoutExt}: ${e.message}`);
+        }
+      }
+      if (imageFullPath) {
+        break;
+      }
+    }
+  }
+
+  if (!imageFullPath) {
+      log.debug(`[modelParser findImageForModel] No image found for ${modelNameWithoutExt} after checking same level and subdirectories.`);
+  }
+  return imageFullPath;
+}
+
 // 解析单个本地模型文件，返回标准模型对象
 async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false) {
   const sourceId = sourceConfig.id || 'local';
@@ -75,13 +167,10 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
     }
   }
 
-
-
   const modelNameWithoutExt = path.basename(modelFileName, modelFileExt);
   
-  // 查找同名图片和 json
-  const imageName = filesInDir.find(f => f === `${modelNameWithoutExt}.png` || f === `${modelNameWithoutExt}.jpg` || f === `${modelNameWithoutExt}.jpeg` || f === `${modelNameWithoutExt}.gif` || f === `${modelNameWithoutExt}.webp`) || '';
-  const imageFullPath = imageName ? path.join(dir, imageName) : '';
+  // 使用新的辅助函数查找图片
+  const imageFullPath = await findImageForModel(dir, modelNameWithoutExt, filesInDir);
   
   const jsonFileName = filesInDir.find(f => f === `${modelNameWithoutExt}.json`) || '';
   const jsonFullPath = jsonFileName ? path.join(dir, jsonFileName) : '';
@@ -297,6 +386,7 @@ function prepareModelDataForSaving(modelObj) {
 module.exports = {
   parseLocalModels,
   parseSingleModelFile, // 导出新增的函数
+  findImageForModel, // 导出新的图片查找函数
   parseModelDetailFromJsonContent, // 导出新函数
   createWebDavModelObject, // 导出新创建的函数
   prepareModelDataForSaving, // 导出用于保存模型数据的函数

@@ -49,13 +49,18 @@ function compareDataSourceConfigs(config1, config2) {
 /**
  * 获取或创建数据源实例。
  * @param {object} sourceConfig - 数据源配置。
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例。
  * @returns {import('./baseDataSource').DataSource} 数据源实例。
  * @throws {Error} 如果配置无效或类型不受支持。
  */
-function getDataSourceInstance(sourceConfig) {
+function getDataSourceInstance(sourceConfig, modelInfoCacheService) {
     if (!sourceConfig || !sourceConfig.id || !sourceConfig.type) {
         log.error('[DataSourceInterface] getDataSourceInstance called with invalid sourceConfig:', sourceConfig);
         throw new Error('Invalid source configuration provided (missing id or type).');
+    }
+    if (!modelInfoCacheService) {
+        log.warn('[DataSourceInterface] getDataSourceInstance called without modelInfoCacheService. Cache will be unavailable for this instance.');
+        // throw new Error('modelInfoCacheService is required for getDataSourceInstance.'); // Or make it optional and handle
     }
     const sourceId = sourceConfig.id;
     const sourceType = sourceConfig.type;
@@ -67,6 +72,11 @@ function getDataSourceInstance(sourceConfig) {
         // 注意：现在使用关键字段比较来判断配置是否实质性更改
         if (compareDataSourceConfigs(dataSourceInstances[sourceId].config, sourceConfig)) {
              log.debug(`[DataSourceInterface] Reusing existing DataSource instance for sourceId: ${sourceId} (key fields match)`);
+             // 确保现有实例有缓存服务（如果之前没有传递）
+             if (modelInfoCacheService && !dataSourceInstances[sourceId].modelInfoCacheService) {
+                 log.warn(`[DataSourceInterface] Attaching modelInfoCacheService to existing instance for sourceId: ${sourceId}`);
+                 dataSourceInstances[sourceId].modelInfoCacheService = modelInfoCacheService;
+             }
              return dataSourceInstances[sourceId];
         } else {
              log.warn(`[DataSourceInterface] Source config changed (key fields mismatch) for sourceId: ${sourceId}. Creating new instance.`);
@@ -82,9 +92,9 @@ function getDataSourceInstance(sourceConfig) {
     log.debug(`[DataSourceInterface] Creating new DataSource instance for sourceId: ${sourceId}, type: ${sourceType}`);
     let ds;
     if (sourceType === 'local') {
-        ds = new LocalDataSource(sourceConfig);
+        ds = new LocalDataSource(sourceConfig, modelInfoCacheService);
     } else if (sourceType === 'webdav') {
-        ds = new WebDavDataSource(sourceConfig);
+        ds = new WebDavDataSource(sourceConfig, modelInfoCacheService);
         // WebDavDataSource 内部应处理初始化逻辑（如 ensureInitialized）
         // 但在这里调用 ensureInitialized 可能更安全，以防万一它不是在构造函数中完成的
         // await ds.ensureInitialized(); // 如果 WebDAV 需要异步初始化
@@ -104,10 +114,11 @@ function getDataSourceInstance(sourceConfig) {
  * @param {object} sourceConfig - The configuration object for the data source.
  * @param {object} model - The model object (must include 'jsonPath').
  * @param {string} dataToWrite - The JSON string data to write.
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例。
  * @returns {Promise<void>} A promise that resolves when the write operation is complete.
  * @throws {Error} If the data source type is unknown, config is invalid, or writing fails.
  */
-async function writeModelJson(sourceConfig, model, dataToWrite) {
+async function writeModelJson(sourceConfig, model, dataToWrite, modelInfoCacheService) {
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] writeModelJson called with invalid sourceConfig:', sourceConfig);
@@ -138,7 +149,7 @@ async function writeModelJson(sourceConfig, model, dataToWrite) {
 
     try {
         // 获取数据源实例
-        const ds = getDataSourceInstance(sourceConfig);
+        const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
         // 调用标准接口方法
         await ds.writeModelJson(filePath, dataToWrite);
         const duration = Date.now() - startTime;
@@ -157,10 +168,11 @@ async function writeModelJson(sourceConfig, model, dataToWrite) {
  * @param {object} sourceConfig - The configuration object for the data source.
  * @param {string|null} directory - The specific subdirectory to list models from (relative to source root), or null for the root.
  * @param {string[]} supportedExts - An array of supported file extensions (e.g., ['.safetensors', '.ckpt']).
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例。
  * @returns {Promise<Array<object>>} A promise that resolves with an array of model objects.
  * @throws {Error} If the data source type is unknown or listing fails.
  */
-async function listModels(sourceConfig, directory = null, supportedExts = []) { // 添加 supportedExts 参数
+async function listModels(sourceConfig, directory = null, supportedExts = [], showSubdirectory = false, modelInfoCacheService) { // 添加 showSubdirectory 和 modelInfoCacheService
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] listModels called with invalid sourceConfig:', sourceConfig);
@@ -177,9 +189,9 @@ async function listModels(sourceConfig, directory = null, supportedExts = []) { 
 
     try {
         // 获取数据源实例
-        const ds = getDataSourceInstance(sourceConfig);
-        // 调用标准接口方法
-        const models = await ds.listModels(directory, sourceConfig, supportedExts);
+        const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
+        // 调用标准接口方法, 注意 listModels 在具体数据源中也可能需要 showSubdirectory
+        const models = await ds.listModels(directory, sourceConfig, supportedExts, showSubdirectory);
         const duration = Date.now() - startTime;
         log.info(`[DataSourceInterface] Successfully listed models for sourceId: ${sourceId}, directory: ${directory}. Found ${models.length} models. 耗时: ${duration}ms`);
         return models;
@@ -194,10 +206,11 @@ async function listModels(sourceConfig, directory = null, supportedExts = []) { 
  * Lists subdirectories using the appropriate data source instance.
  *
  * @param {object} sourceConfig - The configuration object for the data source.
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例。
  * @returns {Promise<Array<string>>} A promise that resolves with an array of subdirectory names.
  * @throws {Error} If the data source type is unknown or listing fails.
  */
-async function listSubdirectories(sourceConfig) {
+async function listSubdirectories(sourceConfig, modelInfoCacheService) {
     const startTime = Date.now();
      if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] listSubdirectories called with invalid sourceConfig:', sourceConfig);
@@ -209,7 +222,7 @@ async function listSubdirectories(sourceConfig) {
 
     try {
         // 获取数据源实例
-        const ds = getDataSourceInstance(sourceConfig);
+        const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
         // 调用标准接口方法
         const subdirs = await ds.listSubdirectories();
         const duration = Date.now() - startTime;
@@ -227,10 +240,11 @@ async function listSubdirectories(sourceConfig) {
  *
  * @param {object} sourceConfig - The configuration object for the data source.
  * @param {string} jsonPath - The path to the model's JSON file.
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例。
  * @returns {Promise<object>} A promise that resolves with the model detail object.
  * @throws {Error} If the data source type is unknown or reading fails.
  */
-async function readModelDetail(sourceConfig, jsonPath, modelFilePath) {
+async function readModelDetail(sourceConfig, jsonPath, modelFilePath, modelInfoCacheService) {
     log.debug(`[DataSourceInterface readModelDetail] Entry. sourceId: ${sourceConfig?.id}, jsonPath: ${jsonPath}`);
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
@@ -244,7 +258,7 @@ async function readModelDetail(sourceConfig, jsonPath, modelFilePath) {
 
     try {
         // 获取数据源实例
-        const ds = getDataSourceInstance(sourceConfig);
+        const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
         // 调用标准接口方法
         const detail = await ds.readModelDetail(jsonPath||"", modelFilePath, sourceConfig.id);
         log.debug('[DataSourceInterface readModelDetail] modelObj from concrete data source:', JSON.stringify(detail, null, 2));
@@ -264,10 +278,11 @@ async function readModelDetail(sourceConfig, jsonPath, modelFilePath) {
  *
  * @param {object} sourceConfig - The configuration object for the data source.
  * @param {string} imagePath - The path to the image file.
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例 (虽然此函数可能不直接使用它，但保持接口一致性)。
  * @returns {Promise<object|null>} A promise that resolves with an object containing { path, data, mimeType } or null if not found/error.
  * @throws {Error} If the data source type is unknown (but returns null for fetch errors).
  */
-async function getImageData(sourceConfig, imagePath) {
+async function getImageData(sourceConfig, imagePath, modelInfoCacheService) {
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] getImageData called with invalid sourceConfig:', sourceConfig);
@@ -283,7 +298,7 @@ async function getImageData(sourceConfig, imagePath) {
 
     try {
         // 获取数据源实例
-        const ds = getDataSourceInstance(sourceConfig);
+        const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
         // 调用标准接口方法
         const imageData = await ds.getImageData(imagePath);
         const duration = Date.now() - startTime;
@@ -306,10 +321,11 @@ async function getImageData(sourceConfig, imagePath) {
  *
  * @param {object} sourceConfig - The configuration object for the data source.
  * @param {string} filePath - The path to the file.
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例 (虽然此函数可能不直接使用它，但保持接口一致性)。
  * @returns {Promise<{mtimeMs: number, size: number}|null>} A promise that resolves with file stats or null if not found/error.
  * @throws {Error} If the data source type is unknown or fetching stats fails.
  */
-async function getFileStats(sourceConfig, filePath) {
+async function getFileStats(sourceConfig, filePath, modelInfoCacheService) {
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] getFileStats called with invalid sourceConfig:', sourceConfig);
@@ -325,7 +341,7 @@ async function getFileStats(sourceConfig, filePath) {
 
     try {
         // 获取数据源实例
-        const ds = getDataSourceInstance(sourceConfig);
+        const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
         // 调用标准接口方法
         const stats = await ds.getFileStats(filePath);
         const duration = Date.now() - startTime;
@@ -350,14 +366,15 @@ async function getFileStats(sourceConfig, filePath) {
  * @param {string} directory - 目录路径（相对）。
  * @param {string[]} [supportedExts] - 支持的扩展名，仅 local 需要。
  * @param {boolean} [showSubdirectory] - 是否递归，仅 local 需要。
+ * @param {import('../services/modelInfoCacheService')} modelInfoCacheService - ModelInfoCacheService 实例。
  * @returns {Promise<string|null>} 目录内容摘要（hash/etag/lastmod），失败时返回 null。
  */
-async function getDirectoryContentMetadataDigest(sourceConfig, directory, supportedExts = [], showSubdirectory = false) {
+async function getDirectoryContentMetadataDigest(sourceConfig, directory, supportedExts = [], showSubdirectory = false, modelInfoCacheService) {
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
         log.error('[DataSourceInterface] getDirectoryContentMetadataDigest called with invalid sourceConfig:', sourceConfig);
         throw new Error('Invalid source configuration provided (missing type or id).');
     }
-    const ds = getDataSourceInstance(sourceConfig);
+    const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
     if (sourceConfig.type === 'local') {
         // local: 需要 supportedExts 和 showSubdirectory
         return await ds.getDirectoryContentMetadataDigest(directory, supportedExts, showSubdirectory);

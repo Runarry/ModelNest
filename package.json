@@ -5,6 +5,7 @@
   "main": "main.js",
   "scripts": {
     "start": "cross-env LOG_LEVEL=debug IS_DEV_MODE=true electron .",
+    "start:warn": "cross-env LOG_LEVEL=warn IS_DEV_MODE=false electron .",
     "dev": "npm run build:renderer && npm start",
     "build:renderer": "cross-env NODE_ENV=production rollup -c rollup.config.mjs",
     "watch:renderer": "rollup -c rollup.config.mjs -w",
