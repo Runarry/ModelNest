@@ -244,33 +244,6 @@ class WebDavDataSource extends DataSource {
   }
 
   /**
-   * Recursively retrieves items from the cache starting from dirPath.
-   * @param {string} dirPath The starting directory path (resolved).
-   * @param {Map<string, Array<object>>} cache The cache to use (this._allItemsCache).
-   * @param {Set<string>} visitedDirs Tracks visited directories to prevent infinite loops.
-   * @returns {Array<object>} A flat list of all items (files and directories) under dirPath.
-   */
-  _getRecursiveItemsFromCache(dirPath, cache, visitedDirs = new Set()) {
-    if (!cache || !cache.has(dirPath) || visitedDirs.has(dirPath)) {
-      if (visitedDirs.has(dirPath)) log.warn(`[WebDavDataSource][_getRecursiveItemsFromCache] Circular reference or re-visit detected for ${dirPath}`);
-      return [];
-    }
-    visitedDirs.add(dirPath);
-
-    const itemsInCurrentDir = cache.get(dirPath) || [];
-    let allItems = [...itemsInCurrentDir]; // Start with items in the current directory
-
-    for (const item of itemsInCurrentDir) {
-      if (item.type === 'directory' && item.filename) {
-        // item.filename is the resolved path of the subdirectory
-        const subDirItems = this._getRecursiveItemsFromCache(item.filename, cache, visitedDirs);
-        allItems = allItems.concat(subDirItems);
-      }
-    }
-    return allItems;
-  }
-
-  /**
    * Batch fetches content for multiple JSON files.
    * @param {string[]} jsonFilePaths - An array of fully resolved paths to JSON files.
    * @returns {Promise<Map<string, string|null>>} A map where keys are file paths and values are file contents (string) or null if fetching failed.
