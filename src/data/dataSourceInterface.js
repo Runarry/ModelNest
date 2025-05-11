@@ -347,6 +347,32 @@ async function getFileStats(sourceConfig, filePath) {
     }
 }
 
+/**
+ * 获取目录内容摘要（用于缓存失效判断）。
+ * @param {object} sourceConfig - 数据源配置。
+ * @param {string} directory - 目录路径（相对）。
+ * @param {string[]} [supportedExts] - 支持的扩展名，仅 local 需要。
+ * @param {boolean} [showSubdirectory] - 是否递归，仅 local 需要。
+ * @returns {Promise<string|null>} 目录内容摘要（hash/etag/lastmod），失败时返回 null。
+ */
+async function getDirectoryContentMetadataDigest(sourceConfig, directory, supportedExts = [], showSubdirectory = false) {
+    if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
+        log.error('[DataSourceInterface] getDirectoryContentMetadataDigest called with invalid sourceConfig:', sourceConfig);
+        throw new Error('Invalid source configuration provided (missing type or id).');
+    }
+    const ds = getDataSourceInstance(sourceConfig);
+    if (sourceConfig.type === 'local') {
+        // local: 需要 supportedExts 和 showSubdirectory
+        return await ds.getDirectoryContentMetadataDigest(directory, supportedExts, showSubdirectory);
+    } else if (sourceConfig.type === 'webdav') {
+        // webdav: 只需要目录
+        return await ds.getDirectoryContentMetadataDigest(directory);
+    } else {
+        log.error(`[DataSourceInterface] getDirectoryContentMetadataDigest: Unsupported data source type: ${sourceConfig.type}`);
+        throw new Error(`Unsupported data source type: ${sourceConfig.type}`);
+    }
+}
+
 module.exports = {
     writeModelJson,
     listModels,
@@ -354,6 +380,7 @@ module.exports = {
     readModelDetail,
     getImageData,
     getFileStats, // Export the new function
+    getDirectoryContentMetadataDigest,
     // 可以选择性地导出 getDataSourceInstance 如果其他模块需要直接访问实例
     // getDataSourceInstance
 };
