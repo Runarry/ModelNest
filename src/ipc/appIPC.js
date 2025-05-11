@@ -186,8 +186,8 @@ function initializeAppIPC(services) {
       if (!services.modelInfoCacheService) {
         throw new Error('ModelInfoCacheService 未初始化');
       }
-      await services.modelInfoCacheService.clearMemoryCache();
-      log.info('[IPC] ModelInfo Memory Cache cleared successfully.');
+      await services.modelInfoCacheService.clearL1Cache(); // V2: Renamed from clearMemoryCache
+      log.info('[IPC] ModelInfo L1 Cache cleared successfully.');
       return { success: true };
     } catch (error) {
       log.error('[IPC] Failed to clear ModelInfo Memory Cache:', error);
@@ -201,8 +201,8 @@ function initializeAppIPC(services) {
       if (!services.modelInfoCacheService) {
         throw new Error('ModelInfoCacheService 未初始化');
       }
-      await services.modelInfoCacheService.clearDiskCache();
-      log.info('[IPC] ModelInfo Disk Cache cleared successfully.');
+      await services.modelInfoCacheService.clearAllL2Cache(); // V2: clearDiskCache is now clearAllL2Cache, specific to model_json_info_cache
+      log.info('[IPC] ModelInfo L2 Cache (model_json_info_cache) cleared successfully.');
       return { success: true };
     } catch (error) {
       log.error('[IPC] Failed to clear ModelInfo Disk Cache:', error);
@@ -276,10 +276,11 @@ function initializeAppIPC(services) {
         throw new Error('ModelInfoCacheService 未初始化');
       }
       
-      // Clear modelJsonInfo cache
-      const modelInfoCacheKey = `model_info:${sourceId}:${resourcePath}`; // Assuming resourcePath is normalized_json_path
-      await services.modelInfoCacheService.clearEntry(modelInfoCacheKey, 'modelJsonInfo');
-      log.info(`[IPC] Cleared model_info cache for key: ${modelInfoCacheKey}`);
+      // Clear modelJsonInfo cache (L1 and L2 for this specific entry)
+      // V2: Key format should align with ModelService/ModelInfoCacheService, e.g., "modelJsonInfo:sourceId:jsonPath"
+      const modelJsonInfoCacheKey = `modelJsonInfo:${sourceId}:${resourcePath}`; // Assuming resourcePath is equivalent to jsonPath
+      await services.modelInfoCacheService.clearEntry(modelJsonInfoCacheKey, 'modelJsonInfo');
+      log.info(`[IPC] Cleared modelJsonInfo (L1 & L2) cache for key: ${modelJsonInfoCacheKey}`);
 
       // Invalidate listModels cache for the directory
       const directoryPath = path.dirname(resourcePath);

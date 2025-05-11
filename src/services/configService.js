@@ -9,20 +9,33 @@ const DEFAULT_CONFIG = {
   modelSources: [],
   supportedExtensions: [],
   imageCache: {
-    maxCacheSizeMB: 200, // 默认图片缓存大小 (MB)
-    compressQuality: 80, // 默认压缩质量 (修改为 80)
-    // 注意：cacheDir 通常在 imageCache.js 中基于 process.cwd() 设置，不在此处定义
+    maxCacheSizeMB: 200,
+    compressQuality: 80,
   },
-  locale: null, // 添加默认的 locale 配置项
-  modelInfoCache: {
+  locale: null,
+  cache: { // V2: New cache configuration structure
     enabled: true,
-    memoryCacheMaxItems: 500,
-    diskCachePath: path.join(app.getPath('userData'), 'ModelNestCache', 'model_info_files'),
-    defaultTTLSeconds: {
-      api: 3600, // 1 hour
-      file: 86400, // 24 hours
+    l1: {
+      enabled: true,
+      maxItems: 200, // Default max items for L1 cache (e.g., for listModels results, full model objects)
+      ttlSeconds: { // Default TTLs for L1 items if not specified by type
+        default: 3600,       // 1 hour general default for L1 items not otherwise specified
+        modelInfo: 3600,     // TTL for full model objects (derived from modelJsonInfo) in L1
+        listModelsLocal: 300,  // 5 minutes for listModels results from local sources
+        listModelsWebDAV: 1800 // 30 minutes for listModels results from WebDAV sources
+      }
     },
-  },
+    l2: { // L2 is now only for model_json_info_cache
+      // enabled: true, // L2 is implicitly enabled if cache.enabled is true and DB can be initialized.
+      ttlSeconds: {
+         modelJsonInfo: 604800 // 7 days TTL for model_json_info_cache items in L2
+      },
+      dbPath: "", // User configurable, if empty, defaults to app.getPath('userData')/ModelNestCache/model_cache.sqlite
+      maxItems: { // Max items for L2 tables (relevant for cleanup)
+          modelJsonInfo: 5000 // Max items for the model_json_info_cache table
+      }
+    }
+  }
 };
 
 class ConfigService {

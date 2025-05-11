@@ -60,11 +60,13 @@ class ModelInfoCacheService {
 
 
                 this.l1MaxItems = await this.configService.getSetting('cache.l1.maxItems') || DEFAULT_L1_MAX_ITEMS;
-                const l1TtlConfig = await this.configService.getSetting('cache.l1.ttlSeconds');
-                this.l1TtlMs = (l1TtlConfig || DEFAULT_L1_TTL_SECONDS) * 1000;
+                const l1DefaultTtlConfig = await this.configService.getSetting('cache.l1.ttlSeconds.default');
+                this.l1TtlMs = (l1DefaultTtlConfig || DEFAULT_L1_TTL_SECONDS) * 1000;
+                log.info(`Default L1 TTL set to: ${this.l1TtlMs}ms (from config: ${l1DefaultTtlConfig}s)`);
 
-                const l2TtlConfig = await this.configService.getSetting('cache.l2.ttlSeconds');
-                this.l2TtlMs = (l2TtlConfig || DEFAULT_L2_TTL_SECONDS) * 1000;
+                const l2ModelJsonInfoTtlConfig = await this.configService.getSetting('cache.l2.ttlSeconds.modelJsonInfo');
+                this.l2TtlMs = (l2ModelJsonInfoTtlConfig || DEFAULT_L2_TTL_SECONDS) * 1000;
+                log.info(`Default L2 TTL for modelJsonInfo set to: ${this.l2TtlMs}ms (from config: ${l2ModelJsonInfoTtlConfig}s)`);
                 
                 // Determine DB Path
                 const configuredDbPath = await this.configService.getSetting('cache.l2.dbPath');
@@ -143,31 +145,10 @@ class ModelInfoCacheService {
             `);
             this.logger.info('Table "model_json_info_cache" ensured.');
 
-            this.db.exec(`
-                CREATE TABLE IF NOT EXISTS list_models_cache (
-                    cache_key TEXT PRIMARY KEY,
-                    source_id TEXT NOT NULL,
-                    directory_path TEXT NOT NULL,
-                    show_subdirectory INTEGER NOT NULL,
-                    supported_exts_hash TEXT NOT NULL,
-                    directory_content_hash TEXT,
-                    bson_data BLOB NOT NULL,
-                    cached_timestamp_ms INTEGER NOT NULL,
-                    ttl_seconds INTEGER NOT NULL,
-                    last_accessed_timestamp_ms INTEGER NOT NULL
-                );
-            `);
-            // directory_content_hash is NULLABLE
-            // Added show_subdirectory and supported_exts_hash as per design doc 3.3.2
-            this.logger.info('Table "list_models_cache" ensured.');
-
             // Create indexes as per design document
             this.db.exec(`CREATE INDEX IF NOT EXISTS idx_mjic_source_id ON model_json_info_cache (source_id);`);
             this.db.exec(`CREATE INDEX IF NOT EXISTS idx_mjic_last_accessed ON model_json_info_cache (last_accessed_timestamp_ms);`);
-            // Indexes for list_models_cache
-            this.db.exec(`CREATE INDEX IF NOT EXISTS idx_lmc_source_id_dir ON list_models_cache (source_id, directory_path);`);
-            this.db.exec(`CREATE INDEX IF NOT EXISTS idx_lmc_last_accessed ON list_models_cache (last_accessed_timestamp_ms);`);
-            this.logger.info('Indexes for cache tables ensured.');
+            this.logger.info('Indexes for model_json_info_cache table ensured.');
 
         } catch (error) {
             this.logger.error(`Error creating SQLite tables or indexes: ${error.message}`, error);
@@ -175,57 +156,76 @@ class ModelInfoCacheService {
         }
     }
     
-    // --- L1 Memory Cache Methods (mostly unchanged, ensure deep copies if necessary as per design doc) ---
-    getFromMemory(key) {
+    // --- L1 Memory Cache Methods ---
+    getFromL1(key, type = 'modelJsonInfo') { // Added type for context, though L1 structure is generic
         if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: getFromMemory called but service not initialized or disabled. Initialized: ${this.isInitialized}, Enabled: ${this.isEnabled}`);
+            this.logger.debug(`L1: getFromL1 called but service not initialized or disabled. Key: ${key}, Type: ${type}`);
             return undefined;
         }
         const cachedItem = this.l1Cache.get(key);
         if (cachedItem) {
-            const { data, timestamp, ttl, sourceJsonStats } = cachedItem; // sourceJsonStats is part of L1 item
-            const effectiveTtl = ttl || this.l1TtlMs;
-            if (Date.now() < timestamp + effectiveTtl) {
-                // Design doc mentions: "校验 L1 (TTL, sourceJsonStats vs FS)"
-                // This check should ideally happen in the ModelService or a higher-level get method
-                // that has access to the file system stats of the original JSON.
-                // For now, this method only checks TTL.
-                this.logger.debug(`L1 cache hit for key: ${key}`);
-                this.l1Cache.delete(key);
-                this.l1Cache.set(key, cachedItem); // LRU
-                return JSON.parse(JSON.stringify(data)); // Return deep clone as per design doc
+            const { data, timestamp, ttlMs, sourceJsonStats, directoryContentHash } = cachedItem;
+            const effectiveTtlMs = ttlMs || this.l1TtlMs; // Use item-specific TTL if present, else default L1 TTL
+
+            if (Date.now() < timestamp + effectiveTtlMs) {
+                this.logger.debug(`L1 cache hit for key: ${key} (type: ${type})`);
+                this.l1Cache.delete(key); // For LRU behavior
+                this.l1Cache.set(key, cachedItem); // Move to end
+                
+                // Return all relevant metadata for the caller (ModelService) to validate
+                return {
+                    data: JSON.parse(JSON.stringify(data)), // Deep clone
+                    timestamp,
+                    ttlMs: effectiveTtlMs,
+                    sourceJsonStats, // Will be undefined if not set (e.g., for listModels)
+                    directoryContentHash // Will be undefined if not set (e.g., for modelJsonInfo)
+                };
             } else {
-                this.logger.info(`L1 cache expired for key: ${key}`);
+                this.logger.info(`L1 cache expired for key: ${key} (type: ${type})`);
                 this.l1Cache.delete(key);
             }
         } else {
-            this.logger.debug(`L1 cache miss for key: ${key}`);
+            this.logger.debug(`L1 cache miss for key: ${key} (type: ${type})`);
         }
         return undefined;
     }
 
-    setToMemory(key, value, ttl, sourceJsonStats = null) {
+    setToL1(key, value, type = 'modelJsonInfo', options = {}) {
         if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: setToMemory called but service not initialized or disabled. Initialized: ${this.isInitialized}, Enabled: ${this.isEnabled}`);
+            this.logger.debug(`L1: setToL1 called but service not initialized or disabled. Key: ${key}, Type: ${type}`);
             return;
         }
-        if (this.l1Cache.size >= this.l1MaxItems && !this.l1Cache.has(key)) { // only remove if adding a new key
+
+        if (this.l1Cache.size >= this.l1MaxItems && !this.l1Cache.has(key)) {
             const oldestKey = this.l1Cache.keys().next().value;
             if (oldestKey) {
                 this.l1Cache.delete(oldestKey);
                 this.logger.info(`L1 cache full, removed oldest item: ${oldestKey}`);
             }
         }
-        const itemTtl = ttl || this.l1TtlMs;
-        // Store a deep clone in memory to prevent external modifications
+
+        const itemTtlMs = options.ttlMs || this.l1TtlMs; // Use provided TTL or default L1 TTL
         const clonedValue = JSON.parse(JSON.stringify(value));
-        this.l1Cache.set(key, { data: clonedValue, timestamp: Date.now(), ttl: itemTtl, sourceJsonStats });
-        this.logger.info(`L1 cache set for key: ${key} with TTL: ${itemTtl}ms. sourceJsonStats: ${sourceJsonStats ? JSON.stringify(sourceJsonStats) : 'null'}`);
+        
+        const cacheEntry = {
+            data: clonedValue,
+            timestamp: Date.now(),
+            ttlMs: itemTtlMs,
+        };
+
+        if (type === 'modelJsonInfo' && options.sourceJsonStats) {
+            cacheEntry.sourceJsonStats = options.sourceJsonStats;
+        } else if (type === 'listModels' && options.directoryContentHash) {
+            cacheEntry.directoryContentHash = options.directoryContentHash;
+        }
+        
+        this.l1Cache.set(key, cacheEntry);
+        this.logger.info(`L1 cache set for key: ${key} (type: ${type}) with TTL: ${itemTtlMs}ms. Options: ${JSON.stringify(options)}`);
     }
 
-    deleteFromMemory(key) {
+    deleteFromL1(key) {
         if (!this.isInitialized || !this.isEnabled) {
-            this.logger.debug(`L1: deleteFromMemory called but service not initialized or disabled. Initialized: ${this.isInitialized}, Enabled: ${this.isEnabled}`);
+            this.logger.debug(`L1: deleteFromL1 called but service not initialized or disabled. Key: ${key}`);
             return;
         }
         const deleted = this.l1Cache.delete(key);
@@ -236,16 +236,59 @@ class ModelInfoCacheService {
         }
     }
 
-    clearMemoryCache() {
-        // Allow clearing even if disabled, as it's a management operation
+    clearL1Cache() {
         if (!this.isInitialized) {
-            this.logger.warn('L1: clearMemoryCache called before initialization.');
-            // Optionally, one might still want to clear if it's partially set up
-            // For now, strict check.
+            this.logger.warn('L1: clearL1Cache called before initialization.');
             return;
         }
         this.l1Cache.clear();
         this.logger.info('L1 memory cache cleared.');
+    }
+
+    clearL1ByPrefix(prefix) {
+        if (!this.isInitialized || !this.isEnabled) {
+            this.logger.debug(`L1: clearL1ByPrefix called but service not initialized or disabled. Prefix: ${prefix}`);
+            return 0;
+        }
+        let clearedCount = 0;
+        for (const key of this.l1Cache.keys()) {
+            if (key.startsWith(prefix)) {
+                this.l1Cache.delete(key);
+                clearedCount++;
+            }
+        }
+        if (clearedCount > 0) {
+            this.logger.info(`L1: Cleared ${clearedCount} entries with prefix: ${prefix}`);
+        }
+        return clearedCount;
+    }
+
+    clearL1ByType(type) {
+        // This requires keys to be structured to identify type, e.g., "listModels:..." or "modelJsonInfo:..."
+        // Or, L1 items themselves store their type, then iterate values.
+        // For now, assuming a prefix like "listModels:" or "modelJsonInfo:"
+        if (!this.isInitialized || !this.isEnabled) {
+            this.logger.debug(`L1: clearL1ByType called but service not initialized or disabled. Type: ${type}`);
+            return 0;
+        }
+        this.logger.info(`L1: Clearing cache entries of type: ${type}`);
+        let clearedCount = 0;
+        // Example: if type is 'listModels', prefix is 'listModels:'
+        // This is a convention that ModelService must follow when generating keys for setToL1.
+        const prefixToClear = `${type}:`;
+        
+        for (const key of this.l1Cache.keys()) {
+            if (key.startsWith(prefixToClear)) {
+                this.l1Cache.delete(key);
+                clearedCount++;
+            }
+        }
+        if (clearedCount > 0) {
+            this.logger.info(`L1: Cleared ${clearedCount} entries of type '${type}' (using prefix '${prefixToClear}').`);
+        } else {
+            this.logger.info(`L1: No entries found for type '${type}' with prefix '${prefixToClear}'.`);
+        }
+        return clearedCount;
     }
 
 
@@ -397,155 +440,14 @@ class ModelInfoCacheService {
         }
     }
 
-    async getListModelsResultFromL2(cacheKey) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: getListModelsResultFromL2 - DB not available or service disabled. Key: ${cacheKey}`);
-            return undefined;
-        }
-        this.logger.debug(`L2: getListModelsResultFromL2 called for key: ${cacheKey}`);
-        try {
-            const stmt = this.db.prepare(`
-                SELECT bson_data, directory_content_hash, cached_timestamp_ms, ttl_seconds
-                FROM list_models_cache
-                WHERE cache_key = ?
-            `);
-            const row = stmt.get(cacheKey);
-
-            if (!row) {
-                this.logger.debug(`L2: list_models_cache miss for key: ${cacheKey}`);
-                return undefined;
-            }
-
-            const { bson_data, directory_content_hash, cached_timestamp_ms, ttl_seconds } = row;
-            const expiresAt = cached_timestamp_ms + (ttl_seconds * 1000);
-
-            if (Date.now() >= expiresAt) {
-                this.logger.info(`L2: list_models_cache expired for key: ${cacheKey}. Deleting.`);
-                await this.deleteFromL2(cacheKey, 'list_models_cache');
-                return undefined;
-            }
-
-            let modelObjArray;
-            try {
-                const deserializedObject = BSON.deserialize(bson_data);
-                if (deserializedObject && typeof deserializedObject === 'object' && deserializedObject.hasOwnProperty('data') && Array.isArray(deserializedObject.data)) {
-                    modelObjArray = deserializedObject.data;
-                } else {
-                    // Handle cases where data might be stored in an old format or is corrupted differently
-                    this.logger.error(`L2: BSON deserialize error for key ${cacheKey} in list_models_cache: Unexpected data structure. Expected { data: [...] }. Deleting entry.`);
-                    await this.deleteFromL2(cacheKey, 'list_models_cache');
-                    return undefined;
-                }
-            } catch (bsonError) {
-                this.logger.error(`L2: BSON deserialize error for key ${cacheKey} in list_models_cache: ${bsonError.message}. Deleting entry.`, bsonError);
-                await this.deleteFromL2(cacheKey, 'list_models_cache');
-                return undefined;
-            }
-
-            const updateStmt = this.db.prepare(`UPDATE list_models_cache SET last_accessed_timestamp_ms = ? WHERE cache_key = ?`);
-            updateStmt.run(Date.now(), cacheKey);
-
-            this.logger.info(`L2: list_models_cache hit for key: ${cacheKey}`);
-            return {
-                data: modelObjArray, // Renamed to 'data' for consistency with unified get
-                directoryContentHash: directory_content_hash, // Keep original name from DB
-                cachedTimestampMs: cached_timestamp_ms,
-                ttlSeconds: ttl_seconds
-            };
-
-        } catch (error) {
-            this.logger.error(`L2: Error getting listModelsResult for key ${cacheKey} from SQLite: ${error.message}`, error);
-            return undefined;
-        }
-    }
-
-    async setListModelsResultToL2(cacheKey, modelObjArray, directoryContentHash, ttlSeconds, keyParts) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: setListModelsResultToL2 - DB not available or service disabled. Key: ${cacheKey}`);
-            return;
-        }
-        this.logger.debug(`L2: setListModelsResultToL2 called for key: ${cacheKey}`);
-
-        if (!keyParts ||
-            typeof keyParts.sourceId !== 'string' ||
-            typeof keyParts.directoryPath !== 'string' ||
-            typeof keyParts.showSubdirectory !== 'number' || // Expect 0 or 1
-            typeof keyParts.supportedExtsHash !== 'string') {
-             this.logger.error(`L2: Invalid or missing keyParts for key ${cacheKey} in list_models_cache. Required: sourceId, directoryPath, showSubdirectory, supportedExtsHash. Got: ${JSON.stringify(keyParts)}`);
-             return;
-        }
-        
-        let bsonData;
-        try {
-            // Wrap the array in an object before serializing
-            const dataToSerialize = { data: modelObjArray };
-            bsonData = BSON.serialize(dataToSerialize);
-        } catch (bsonError) {
-            this.logger.error(`L2: BSON serialize error for key ${cacheKey} in list_models_cache: ${bsonError.message}. Write aborted.`, bsonError);
-            return;
-        }
-
-        const effectiveTtlSeconds = ttlSeconds || (this.l2TtlMs / 1000); // Default L2 TTL
-        const cached_timestamp_ms = Date.now();
-        const last_accessed_timestamp_ms = cached_timestamp_ms;
-
-        try {
-            const stmt = this.db.prepare(`
-                INSERT OR REPLACE INTO list_models_cache
-                (cache_key, source_id, directory_path, show_subdirectory, supported_exts_hash, directory_content_hash, bson_data, cached_timestamp_ms, ttl_seconds, last_accessed_timestamp_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `);
-            const runInfo = this.db.prepare(`
-                INSERT OR REPLACE INTO list_models_cache
-                (cache_key, source_id, directory_path, show_subdirectory, supported_exts_hash, directory_content_hash, bson_data, cached_timestamp_ms, ttl_seconds, last_accessed_timestamp_ms)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            `).run(
-                cacheKey,
-                keyParts.sourceId,
-                keyParts.directoryPath,
-                keyParts.showSubdirectory,
-                keyParts.supportedExtsHash,
-                directoryContentHash, // Can be null
-                bsonData,
-                cached_timestamp_ms,
-                effectiveTtlSeconds,
-                last_accessed_timestamp_ms
-            );
-
-            this.logger.info(`L2: list_models_cache attempted set for key: ${cacheKey} with TTL: ${effectiveTtlSeconds}s. Changes: ${runInfo.changes}, Last ROWID: ${runInfo.lastInsertRowid}`);
-
-            if (runInfo.changes === 0) {
-                this.logger.warn(`L2: stmt.run for key ${cacheKey} reported 0 changes. Data might not have been written as expected.`);
-            }
-
-            // Optional: Immediately try to read back the data to verify
-            try {
-                const verifyStmt = this.db.prepare('SELECT cache_key, LENGTH(bson_data) as len FROM list_models_cache WHERE cache_key = ?');
-                const verifyRow = verifyStmt.get(cacheKey);
-                if (verifyRow) {
-                    this.logger.info(`L2: Verification read for key ${cacheKey} successful. BSON data length: ${verifyRow.len}`);
-                } else {
-                    this.logger.error(`L2: Verification read FAILED for key ${cacheKey}. Data not found after insert/replace.`);
-                }
-            } catch (verifyError) {
-                this.logger.error(`L2: Error during verification read for key ${cacheKey}: ${verifyError.message}`, verifyError);
-            }
-
-        } catch (error) {
-            this.logger.error(`L2: Error setting listModelsResult for key ${cacheKey} in SQLite: ${error.message}`, error);
-            // Log the full error object for more details, including potential SQLite error codes
-            this.logger.error('Full error object during setListModelsResultToL2:', JSON.stringify(error, Object.getOwnPropertyNames(error)));
-        }
-    }
-    
     async deleteFromL2(cacheKey, tableName) {
         if (!this.db || !this.isEnabled) {
             this.logger.debug(`L2: deleteFromL2 - DB not available or service disabled. Key: ${cacheKey}, Table: ${tableName}`);
             return;
         }
         this.logger.debug(`L2: deleteFromL2 called for key: ${cacheKey}, table: ${tableName}`);
-        if (tableName !== 'model_json_info_cache' && tableName !== 'list_models_cache') {
-            this.logger.error(`L2: deleteFromL2 - Invalid table name: ${tableName}`);
+        if (tableName !== 'model_json_info_cache') {
+            this.logger.error(`L2: deleteFromL2 - Invalid table name: ${tableName}. Only 'model_json_info_cache' is allowed.`);
             return;
         }
         try {
@@ -567,8 +469,8 @@ class ModelInfoCacheService {
             return;
         }
         this.logger.debug(`L2: clearL2Table called for table: ${tableName}`);
-        if (tableName !== 'model_json_info_cache' && tableName !== 'list_models_cache') {
-            this.logger.error(`L2: clearL2Table - Invalid table name: ${tableName}`);
+        if (tableName !== 'model_json_info_cache') {
+            this.logger.error(`L2: clearL2Table - Invalid table name: ${tableName}. Only 'model_json_info_cache' is allowed.`);
             return;
         }
         try {
@@ -581,9 +483,8 @@ class ModelInfoCacheService {
     }
 
     async clearAllL2Cache() {
-        this.logger.info(`L2: Clearing all L2 cache tables.`);
+        this.logger.info(`L2: Clearing 'model_json_info_cache' table.`);
         await this.clearL2Table('model_json_info_cache');
-        await this.clearL2Table('list_models_cache');
         // Optionally, VACUUM to shrink DB file, but be cautious as it's blocking.
         // try {
         //     this.db.exec('VACUUM');
@@ -602,59 +503,47 @@ class ModelInfoCacheService {
         const now = Date.now();
         let totalExpiredDeleted = 0;
 
-        const tablesToClean = ['model_json_info_cache', 'list_models_cache'];
+        const tableNameToClean = 'model_json_info_cache'; // Only clean this table
 
-        for (const tableName of tablesToClean) {
-            try {
-                // TTL Cleanup: Delete entries where (cached_timestamp_ms + ttl_seconds * 1000) < now
-                const stmt = this.db.prepare(`
-                    DELETE FROM ${tableName}
-                    WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?
-                `);
-                const result = stmt.run(now);
-                if (result.changes > 0) {
-                    this.logger.info(`L2 Cleanup: Deleted ${result.changes} expired entries from ${tableName}.`);
-                    totalExpiredDeleted += result.changes;
-                }
-            } catch (error) {
-                this.logger.error(`L2 Cleanup: Error cleaning expired entries from ${tableName}: ${error.message}`, error);
+        try {
+            // TTL Cleanup
+            const stmt = this.db.prepare(`
+                DELETE FROM ${tableNameToClean}
+                WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?
+            `);
+            const result = stmt.run(now);
+            if (result.changes > 0) {
+                this.logger.info(`L2 Cleanup: Deleted ${result.changes} expired entries from ${tableNameToClean}.`);
+                totalExpiredDeleted += result.changes;
             }
+        } catch (error) {
+            this.logger.error(`L2 Cleanup: Error cleaning expired entries from ${tableNameToClean}: ${error.message}`, error);
         }
         
-        // LRU Cleanup
-        // Design doc: cache.l2.maxItems.modelInfo, cache.l2.maxItems.listModels
+        // LRU Cleanup for model_json_info_cache
         const l2MaxItemsModelInfo = (await this.configService.getSetting('cache.l2.maxItems.modelInfo')) || 5000;
-        const l2MaxItemsListModels = (await this.configService.getSetting('cache.l2.maxItems.listModels')) || 1000; // Example default
-
-        const maxItemsConfig = {
-            'model_json_info_cache': l2MaxItemsModelInfo,
-            'list_models_cache': l2MaxItemsListModels
-        };
         
-        for (const tableName of tablesToClean) {
-            const currentMaxItems = maxItemsConfig[tableName];
-            if (!currentMaxItems) continue; // Skip if no maxItems configured for this table
-
+        if (l2MaxItemsModelInfo > 0) { // Only apply LRU if maxItems is positive
             try {
-                const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`);
+                const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${tableNameToClean}`);
                 const currentCount = countStmt.get().count;
 
-                if (currentCount > currentMaxItems) {
-                    const itemsToDelete = currentCount - currentMaxItems;
-                    this.logger.info(`L2 Cleanup (${tableName}): Exceeds max items (${currentMaxItems}). Current: ${currentCount}. Deleting ${itemsToDelete} LRU items.`);
+                if (currentCount > l2MaxItemsModelInfo) {
+                    const itemsToDelete = currentCount - l2MaxItemsModelInfo;
+                    this.logger.info(`L2 Cleanup (${tableNameToClean}): Exceeds max items (${l2MaxItemsModelInfo}). Current: ${currentCount}. Deleting ${itemsToDelete} LRU items.`);
                     const deleteLruStmt = this.db.prepare(`
-                        DELETE FROM ${tableName}
+                        DELETE FROM ${tableNameToClean}
                         WHERE cache_key IN (
-                            SELECT cache_key FROM ${tableName}
+                            SELECT cache_key FROM ${tableNameToClean}
                             ORDER BY last_accessed_timestamp_ms ASC
                             LIMIT ?
                         )
                     `);
                     const lruResult = deleteLruStmt.run(itemsToDelete);
-                    this.logger.info(`L2 Cleanup (${tableName}): Deleted ${lruResult.changes} LRU entries.`);
+                    this.logger.info(`L2 Cleanup (${tableNameToClean}): Deleted ${lruResult.changes} LRU entries.`);
                 }
             } catch (error) {
-                this.logger.error(`L2 Cleanup: Error during LRU cleanup for ${tableName}: ${error.message}`, error);
+                this.logger.error(`L2 Cleanup: Error during LRU cleanup for ${tableNameToClean}: ${error.message}`, error);
             }
         }
 
@@ -677,56 +566,34 @@ class ModelInfoCacheService {
         this.logger.debug(`Unified Get: Attempting for key: ${cacheKey}, type: ${type}`);
 
         // 1. Try L1 Cache
-        // L1 stores modelObj directly, so type distinction is less critical here, but key is important.
-        let l1Data = this.getFromMemory(cacheKey);
-        if (l1Data !== undefined) {
-            // Here, ModelService would perform the sourceJsonStats check if l1Data is a modelObj
-            // and has sourceJsonStats. This service returns what it has.
-            this.logger.info(`Unified Get: L1 cache hit for key: ${cacheKey}`);
-            return l1Data; // This is expected to be a modelObj if L1 stores them
+        // L1 stores structured items. The 'type' helps interpret L1 content and decide L2 strategy.
+        const l1Hit = this.getFromL1(cacheKey, type); // getFromL1 now returns the full L1 item structure
+        if (l1Hit !== undefined) {
+            // ModelService will use l1Hit.data, l1Hit.sourceJsonStats, l1Hit.directoryContentHash for further validation
+            this.logger.info(`Unified Get: L1 cache hit for key: ${cacheKey} (type: ${type})`);
+            return l1Hit; // Returns { data, timestamp, ttlMs, sourceJsonStats?, directoryContentHash? }
         }
-        this.logger.debug(`Unified Get: L1 cache miss for key: ${cacheKey}. Trying L2.`);
+        this.logger.debug(`Unified Get: L1 cache miss for key: ${cacheKey} (type: ${type}). Trying L2.`);
 
-        // 2. Try L2 Cache (SQLite)
-        let l2Data;
-        let l2SourceJsonStats; // For modelJsonInfo
-        let l2DirectoryContentHash; // For listModels
-
+        // 2. Try L2 Cache (SQLite) - Only for 'modelJsonInfo'
         if (type === 'modelJsonInfo') {
-            const l2Result = await this.getModelJsonInfoFromL2(cacheKey);
-            if (l2Result) {
-                l2Data = l2Result.modelJsonInfo;
-                l2SourceJsonStats = l2Result.sourceJsonStats;
+            const l2Result = await this.getModelJsonInfoFromL2(cacheKey); // This method is specific to model_json_info_cache
+            if (l2Result && l2Result.modelJsonInfo !== undefined) {
+                this.logger.info(`Unified Get: L2 cache hit for key: ${cacheKey} (type: modelJsonInfo).`);
+                // ModelService is responsible for constructing the full object if needed and updating L1.
+                // This service returns the raw L2 data and its metadata.
+                return {
+                    data: l2Result.modelJsonInfo,
+                    sourceJsonStats: l2Result.sourceJsonStats,
+                    fromL2: true // Indicate it's from L2, so ModelService knows to populate L1
+                };
             }
         } else if (type === 'listModels') {
-            const l2Result = await this.getListModelsResultFromL2(cacheKey);
-            if (l2Result) {
-                l2Data = l2Result.modelObjArray;
-                l2DirectoryContentHash = l2Result.directoryContentHash;
-            }
+            // listModels results are L1 only. L1 was already checked and missed.
+            this.logger.debug(`Unified Get: L1 miss for 'listModels' type, key: ${cacheKey}. No L2 for this type.`);
         } else {
             this.logger.warn(`Unified Get: Unknown cache type "${type}" for key: ${cacheKey}`);
             return undefined;
-        }
-
-        if (l2Data !== undefined) {
-            this.logger.info(`Unified Get: L2 cache hit for key: ${cacheKey}, type: ${type}. Updating L1.`);
-            // If L2 provided data, ModelService would use it to construct a full modelObj (if type is modelJsonInfo)
-            // and then set that modelObj into L1.
-            // For now, this service will set the L2 data directly into L1, which might differ from L1's typical content (full modelObj).
-            // This needs careful handling in ModelService.
-            // Or, L1 should only store what L2 provides for that type, if we simplify L1's role.
-            // Design doc: L1 stores modelObj. L2 stores modelJsonInfo.
-            // So, if L2 (modelJsonInfo) hits, ModelService builds modelObj, then sets L1.
-            // This method should probably just return l2Data and its associated metadata.
-            // The L1 update with the full modelObj should happen in ModelService.
-            
-            // For now, returning L2 data directly. ModelService will handle L1 update.
-            if (type === 'modelJsonInfo') {
-                 return { data: l2Data, sourceJsonStats: l2SourceJsonStats };
-            } else if (type === 'listModels') {
-                 return { data: l2Data, directoryContentHash: l2DirectoryContentHash };
-            }
         }
 
         this.logger.info(`Unified Get: L1 and L2 cache miss for key: ${cacheKey}, type: ${type}`);
@@ -752,62 +619,68 @@ class ModelInfoCacheService {
         // and L1 set is handled by ModelService with the full object.
         // If type is listModels, 'value' is modelObjArray, which can go to L1 as is.
 
-        if (type === 'listModels') { // listModels results can be directly stored in L1
-            this.setToMemory(cacheKey, value, effectiveTtlSeconds * 1000, extraArgs.directoryContentHash || null);
-        }
-        // For 'modelJsonInfo', L1 (modelObj) is typically set by ModelService after constructing the full object.
-        // This service's 'set' focuses on L2 for 'modelJsonInfo'.
+        // The primary role of this unified 'set' method is to persist 'modelJsonInfo' to L2.
+        // ModelService is responsible for calling `setToL1` directly for L1 cache entries
+        // (both for fully constructed model objects derived from modelJsonInfo, and for listModels results).
 
-        // 2. Set to L2 Disk Cache (SQLite)
         if (type === 'modelJsonInfo') {
-            const { sourceJsonStats } = extraArgs;
+            const { sourceJsonStats, isJsonInfoOnly } = extraArgs; // isJsonInfoOnly indicates 'value' is just JSON info
             if (!sourceJsonStats) {
                 this.logger.warn(`Unified Set (L2 modelJsonInfo): sourceJsonStats missing for key ${cacheKey}. L2 write might be skipped or incomplete.`);
-                // return; // Or proceed without it, depending on strictness
             }
+            if (value === undefined || value === null) {
+                 this.logger.warn(`Unified Set (L2 modelJsonInfo): value is undefined/null for key ${cacheKey}. L2 write skipped.`);
+                 return;
+            }
+            // 'value' here is expected to be the modelJsonInfo data itself.
             await this.setModelJsonInfoToL2(cacheKey, value, sourceJsonStats || {}, effectiveTtlSeconds);
         } else if (type === 'listModels') {
-            const { directoryContentHash, keyParts } = extraArgs;
-            if (!directoryContentHash || !keyParts) {
-                this.logger.warn(`Unified Set (L2 listModels): directoryContentHash or keyParts missing for key ${cacheKey}. L2 write might be skipped.`);
-               // return;
-            }
-            await this.setListModelsResultToL2(cacheKey, value, directoryContentHash || '', effectiveTtlSeconds, keyParts || {});
+            // L1 set for listModels should be done by ModelService calling setToL1 directly with the array and options.
+            // No L2 operation for listModels.
+            this.logger.debug(`Unified Set: type 'listModels' is L1 only. L2 write skipped for key: ${cacheKey}. ModelService should use setToL1 directly.`);
         } else {
             this.logger.warn(`Unified Set: Unknown cache type "${type}" for L2. Key: ${cacheKey}`);
         }
-        this.logger.info(`Unified Set: Processed for key ${cacheKey}, type ${type}.`);
+        this.logger.info(`Unified Set: L2 processing (if applicable) complete for key ${cacheKey}, type ${type}.`);
     }
 
     // --- Invalidation and Clear Methods ---
     
-    invalidateL1(key) {
-        this.deleteFromMemory(key);
-    }
+    // deleteFromL1 is already defined above. Renamed from invalidateL1.
 
     async invalidateL2(key, type = 'modelJsonInfo') {
-        const tableName = type === 'modelJsonInfo' ? 'model_json_info_cache' : 'list_models_cache';
-        await this.deleteFromL2(key, tableName);
+        if (type === 'modelJsonInfo') {
+            // deleteFromL2 now only accepts 'model_json_info_cache' as tableName
+            await this.deleteFromL2(key, 'model_json_info_cache');
+        } else {
+            this.logger.warn(`invalidateL2: type '${type}' does not have L2 storage. Key: ${key}`);
+        }
     }
     
     async clearEntry(key, type = 'modelJsonInfo') {
         this.logger.info(`Clearing cache entry for key: ${key}, type: ${type}`);
-        this.deleteFromMemory(key); // L1 key is usually the same
-        const tableName = type === 'modelJsonInfo' ? 'model_json_info_cache' : 'list_models_cache';
-        await this.deleteFromL2(key, tableName);
+        this.deleteFromL1(key); // Clears from L1 regardless of type
+        if (type === 'modelJsonInfo') {
+            await this.invalidateL2(key, 'modelJsonInfo'); // invalidateL2 only handles modelJsonInfo
+        }
+        // No L2 operation for 'listModels' type as it's L1 only
     }
 
     async clearBySource(sourceId) {
         this.logger.info(`Attempting to clear all cache entries for sourceId: ${sourceId}`);
+        
+        // Clear L1 by sourceId using type-specific prefixes
+        // ModelService should ensure keys are prefixed like "modelJsonInfo:{sourceId}:..." and "listModels:{sourceId}:..."
         let l1ClearedCount = 0;
-        for (const key of this.l1Cache.keys()) {
-            if (key.startsWith(`${sourceId}:`)) {
-                this.l1Cache.delete(key);
-                l1ClearedCount++;
-            }
-        }
-        this.logger.info(`L1: Cleared ${l1ClearedCount} entries for sourceId: ${sourceId}`);
+        l1ClearedCount += this.clearL1ByPrefix(`modelJsonInfo:${sourceId}:`);
+        l1ClearedCount += this.clearL1ByPrefix(`listModels:${sourceId}:`);
+        // Or, if ModelService uses a generic sourceId prefix for all its L1 entries:
+        // l1ClearedCount += this.clearL1ByPrefix(`${sourceId}:`);
+        // The current clearL1ByPrefix implementation is simple.
+        // A more robust clearBySource for L1 might iterate all keys and parse them if they have a standard structure.
+        this.logger.info(`L1: Cleared ${l1ClearedCount} entries potentially related to sourceId: ${sourceId} based on common prefixes.`);
 
+        // Clear L2 (model_json_info_cache only) by sourceId
         if (!this.db) {
             this.logger.warn('L2: Database not available, cannot clear by source from L2.');
             return;
@@ -816,80 +689,53 @@ class ModelInfoCacheService {
             const stmt1 = this.db.prepare(`DELETE FROM model_json_info_cache WHERE source_id = ?`);
             const result1 = stmt1.run(sourceId);
             this.logger.info(`L2: Cleared ${result1.changes} entries from model_json_info_cache for sourceId: ${sourceId}`);
-
-            const stmt2 = this.db.prepare(`DELETE FROM list_models_cache WHERE source_id = ?`);
-            const result2 = stmt2.run(sourceId);
-            this.logger.info(`L2: Cleared ${result2.changes} entries from list_models_cache for sourceId: ${sourceId}`);
         } catch (error) {
-            this.logger.error(`L2: Error clearing entries by sourceId ${sourceId}: ${error.message}`, error);
+            this.logger.error(`L2: Error clearing model_json_info_cache entries by sourceId ${sourceId}: ${error.message}`, error);
         }
     }
 
-    async clearAll() { // This should call the new L2 methods
-        this.clearMemoryCache();
+    async clearAll() {
+        this.clearL1Cache();
         await this.clearAllL2Cache();
         this.logger.info('All caches (L1 and L2) cleared.');
     }
 
     async invalidateListModelsCacheForDirectory(sourceId, directoryPath) {
-        if (!this.db || !this.isEnabled) {
-            this.logger.debug(`L2: invalidateListModelsCacheForDirectory - DB not available or service disabled. Source: ${sourceId}, Dir: ${directoryPath}`);
-            return;
+        // This method now only operates on L1 cache for 'listModels' type.
+        // It uses clearL1ByPrefix. The prefix must match how listModels keys are generated by ModelService.
+        // Example key structure assumed by ModelService: "listModels:{sourceId}:{normalizedDirectoryPath}:..."
+        this.logger.info(`L1: Invalidating listModels cache for sourceId: ${sourceId}, directoryPath: '${directoryPath}'`);
+
+        // ModelService should be responsible for normalizing directoryPath before generating cache keys
+        // and when calling this invalidation method.
+        // For example, ensuring consistent trailing slashes or lack thereof.
+        const prefix = `listModels:${sourceId}:${directoryPath}`;
+        
+        const clearedCount = this.clearL1ByPrefix(prefix);
+        
+        if (clearedCount > 0) {
+            this.logger.info(`L1: Cleared ${clearedCount} listModels cache entries with prefix '${prefix}'.`);
+        } else {
+            this.logger.info(`L1: No listModels cache entries found with prefix '${prefix}'. Consider key generation consistency.`);
         }
-        // Normalize directoryPath: ensure it's relative, no trailing slash (unless root '/'), starts with '/' if not root.
-        // For root, it might be empty string or '/'. Let's assume DB stores root as '/' or an empty string consistently.
-        // And other paths like 'models' or 'models/lora'.
-        // The cache key generation for listModels should produce consistent directory_path values.
-        // For this invalidation, we assume directoryPath is as stored or can be matched.
-        // A common representation for root in DB could be an empty string or a single '/'.
-        // Let's assume `directoryPath` passed here is like 'models/subdir' or '' for root.
-        // And `list_models_cache.directory_path` stores it similarly.
-
-        const normDirPath = directoryPath === '/' ? '' : (directoryPath.startsWith('/') ? directoryPath.substring(1) : directoryPath);
-        // If root is stored as '/', then normDirPath for root should be '/'
-        // If root is stored as '', then normDirPath for root should be ''
-
-        this.logger.info(`L2: Invalidating list_models_cache for sourceId: ${sourceId}, directoryPath: ${directoryPath} (normalized: ${normDirPath})`);
-
-        try {
-            // Delete entries where the cached directory is exactly the one modified.
-            // Delete entries where a cached parent directory (with show_subdirectory=1) might now be stale.
-            // Example: if 'A/B/C' is modified, invalidate 'A/B/C', 'A/B' (if recursive), 'A' (if recursive).
-            const stmt = this.db.prepare(`
-                DELETE FROM list_models_cache
-                WHERE source_id = ?
-                  AND (
-                    directory_path = ?
-                    OR (
-                         ? LIKE (CASE WHEN directory_path = '' THEN '%' ELSE directory_path || '/%' END)
-                         AND show_subdirectory = 1
-                       )
-                  )
-            `);
-            // Note: The LIKE condition `? LIKE directory_path || '/%'` means "modifiedPath starts with cachedParentPath".
-            // Example: modifiedPath = 'models/lora', cachedParentPath = 'models'. 'models/lora' LIKE 'models/%' -> true.
-            // If cachedParentPath is root (''), then `directory_path || '/%'` becomes `/%`.
-            // If `directory_path` is stored as `/` for root, then `directory_path || '%'`
-            // The CASE WHEN handles root directory stored as empty string.
-            
-            const result = stmt.run(sourceId, normDirPath, normDirPath);
-            this.logger.info(`L2: Invalidated ${result.changes} entries in list_models_cache for sourceId: ${sourceId}, directoryPath: ${directoryPath}`);
-        } catch (error) {
-            this.logger.error(`L2: Error invalidating list_models_cache for sourceId ${sourceId}, directoryPath ${directoryPath}: ${error.message}`, error);
-        }
+        // Note: This simple prefix invalidation might be too broad or too narrow if directoryPath is part of a more complex key structure
+        // or if parent/child directory invalidation logic is needed beyond simple prefix.
+        // For V2, this targets exact directory path matches based on prefix.
+        // Recursive invalidation (e.g., invalidating '/models' when '/models/subdir' changes) would require
+        // iterating all listModels keys and parsing the path, or ModelService explicitly calling invalidate for parent paths.
     }
 
 
     // --- Cache Stats Methods (Update for SQLite) ---
-    getMemoryCacheStats() {
+    getL1CacheStats() { // Renamed from getMemoryCacheStats
         if (!this.isInitialized) {
-            this.logger.warn('getMemoryCacheStats called before initialization.');
-            return { items: 0 };
+            this.logger.warn('getL1CacheStats called before initialization.');
+            return { items: 0, maxItems: this.l1MaxItems, isEnabled: this.isEnabled };
         }
         return {
             items: this.l1Cache.size,
             maxItems: this.l1MaxItems,
-            isEnabled: this.isEnabled,
+            isEnabled: this.isEnabled, // Global cache enabled status
         };
     }
 
@@ -905,16 +751,14 @@ class ModelInfoCacheService {
             const stat = fs.statSync(this.dbPath);
             totalSize = stat.size;
             
-            const tables = ['model_json_info_cache', 'list_models_cache'];
-            for (const tableName of tables) {
-                try {
-                    const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`);
-                    const result = stmt.get();
-                    tableStats[tableName] = { items: result.count };
-                } catch (tableError) {
-                    this.logger.error(`Error getting item count for table ${tableName}: ${tableError.message}`);
-                    tableStats[tableName] = { items: 0, error: tableError.message };
-                }
+            const tableName = 'model_json_info_cache';
+            try {
+                const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`);
+                const result = stmt.get();
+                tableStats[tableName] = { items: result.count };
+            } catch (tableError) {
+                this.logger.error(`Error getting item count for table ${tableName}: ${tableError.message}`);
+                tableStats[tableName] = { items: 0, error: tableError.message };
             }
             this.logger.info(`L2 DB stats: Total size ${totalSize} bytes. Table counts: ${JSON.stringify(tableStats)}`);
         } catch (error) {
@@ -935,12 +779,12 @@ class ModelInfoCacheService {
             // await this.initialize(); // Avoid re-initializing if called early by mistake
         }
         
-        const memoryStats = this.getMemoryCacheStats();
-        const l2Stats = await this.getDiskCacheStats(); // This is now L2 stats
+        const l1Stats = this.getL1CacheStats();
+        const l2Stats = await this.getDiskCacheStats();
 
         return {
-            l1: memoryStats, // Renamed for clarity
-            l2: l2Stats,     // Renamed for clarity
+            l1: l1Stats,
+            l2: l2Stats,
             serviceEnabled: this.isEnabled,
             initialized: this.isInitialized,
         };
