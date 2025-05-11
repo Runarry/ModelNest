@@ -10,7 +10,8 @@
     "build:renderer": "cross-env NODE_ENV=production rollup -c rollup.config.mjs",
     "watch:renderer": "rollup -c rollup.config.mjs -w",
     "pack": "npm run build:renderer && electron-builder --dir -c electron-builder.yml",
-    "dist": "npm run build:renderer && electron-builder -c electron-builder.yml"
+    "dist": "npm run build:renderer && electron-builder -c electron-builder.yml",
+      "rebuild": "electron-rebuild"
   },
   "dependencies": {
     "axios": "^1.9.0",
@@ -34,7 +35,7 @@
     "cssnano": "^7.0.7",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.15",
-    "electron-rebuild": "^3.2.9",
+    "@electron/rebuild": "^4.0.1",
     "postcss": "^8.5.3",
     "postcss-import": "^16.1.0",
     "rollup": "^4.40.2",
