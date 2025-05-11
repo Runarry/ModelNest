@@ -419,18 +419,18 @@ class ModelInfoCacheService {
                 this.logger.warn(`L2: stmt.run for key ${cacheKey} (model_json_info_cache) reported 0 changes. Data might not have been written as expected.`);
             }
 
-            // Verification read
-            try {
-                const verifyStmt = this.db.prepare('SELECT cache_key, LENGTH(bson_data) as len FROM model_json_info_cache WHERE cache_key = ?');
-                const verifyRow = verifyStmt.get(cacheKey);
-                if (verifyRow) {
-                    this.logger.info(`L2: Verification read for key ${cacheKey} (model_json_info_cache) successful. BSON data length: ${verifyRow.len}`);
-                } else {
-                    this.logger.error(`L2: Verification read FAILED for key ${cacheKey} (model_json_info_cache). Data not found after insert/replace.`);
-                }
-            } catch (verifyError) {
-                this.logger.error(`L2: Error during verification read for key ${cacheKey} (model_json_info_cache): ${verifyError.message}`, verifyError);
-            }
+            // // Verification read
+            // try {
+            //     const verifyStmt = this.db.prepare('SELECT cache_key, LENGTH(bson_data) as len FROM model_json_info_cache WHERE cache_key = ?');
+            //     const verifyRow = verifyStmt.get(cacheKey);
+            //     if (verifyRow) {
+            //         this.logger.info(`L2: Verification read for key ${cacheKey} (model_json_info_cache) successful. BSON data length: ${verifyRow.len}`);
+            //     } else {
+            //         this.logger.error(`L2: Verification read FAILED for key ${cacheKey} (model_json_info_cache). Data not found after insert/replace.`);
+            //     }
+            // } catch (verifyError) {
+            //     this.logger.error(`L2: Error during verification read for key ${cacheKey} (model_json_info_cache): ${verifyError.message}`, verifyError);
+            // }
 
         } catch (error) {
             this.logger.error(`L2: Error setting modelJsonInfo for key ${cacheKey} in SQLite (model_json_info_cache): ${error.message}`, error);
