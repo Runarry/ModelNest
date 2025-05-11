@@ -297,43 +297,43 @@ class ModelService {
 
   async getModelDetail(sourceId, jsonPath, modelFilePath = null) {
     log.info(`[ModelService] getModelDetail called. sourceId: ${sourceId}, jsonPath: ${jsonPath}, modelFilePath: ${modelFilePath}`);
-    const modelJsonInfoCacheKey = `modelJsonInfo:\${sourceId}:\${jsonPath}`;
+    const modelJsonInfoCacheKey = `modelJsonInfo:${sourceId}:${jsonPath}`;
     const l1CacheKeyForFullModelObj = modelJsonInfoCacheKey;
 
-    log.debug(`[ModelService getModelDetail] Cache key for L1 (full obj) and L2 (jsonInfo): \${modelJsonInfoCacheKey}`);
+    log.debug(`[ModelService getModelDetail] Cache key for L1 (full obj) and L2 (jsonInfo): ${modelJsonInfoCacheKey}`);
 
     try {
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
       if (!sourceConfig) {
-        log.warn(`[ModelService getModelDetail] Source config not found for ID: \${sourceId}. Cannot proceed.`);
+        log.warn(`[ModelService getModelDetail] Source config not found for ID: ${sourceId}. Cannot proceed.`);
         return {};
       }
-      log.debug(`[ModelService getModelDetail] Retrieved source config for ID: \${sourceId}`);
+      log.debug(`[ModelService getModelDetail] Retrieved source config for ID: ${sourceId}`);
 
       let currentSourceJsonStats = null;
       try {
         currentSourceJsonStats = await dataSourceInterface.getFileStats(sourceConfig, jsonPath);
-        log.debug(`[ModelService getModelDetail] Current .json file stats for \${jsonPath}:`, currentSourceJsonStats);
+        log.debug(`[ModelService getModelDetail] Current .json file stats for ${jsonPath}:`, currentSourceJsonStats);
       } catch (statError) {
-        log.warn(`[ModelService getModelDetail] Could not get .json file stats for \${jsonPath}. Cache validation will be affected. Error: \${statError.message}`);
+        log.warn(`[ModelService getModelDetail] Could not get .json file stats for ${jsonPath}. Cache validation will be affected. Error: ${statError.message}`);
       }
 
       const l1FullModelObjEntry = await this.modelInfoCacheService.getFromL1(l1CacheKeyForFullModelObj, 'modelJsonInfo'); 
       
       if (l1FullModelObjEntry) {
-        log.debug(`[ModelService getModelDetail] L1 cache hit for full model object: \${l1CacheKeyForFullModelObj}`);
+        log.debug(`[ModelService getModelDetail] L1 cache hit for full model object: ${l1CacheKeyForFullModelObj}`);
         const { data: cachedFullModelObj, sourceJsonStats: l1SourceJsonStats } = l1FullModelObjEntry;
         
         if (currentSourceJsonStats && l1SourceJsonStats &&
             currentSourceJsonStats.mtimeMs === l1SourceJsonStats.mtimeMs &&
             currentSourceJsonStats.size === l1SourceJsonStats.size) {
-          log.info(`[ModelService getModelDetail] L1 cache for full model object valid (stats match) for \${l1CacheKeyForFullModelObj}. Returning cached data.`);
+          log.info(`[ModelService getModelDetail] L1 cache for full model object valid (stats match) for ${l1CacheKeyForFullModelObj}. Returning cached data.`);
           return cachedFullModelObj;
         } else {
-          log.info(`[ModelService getModelDetail] L1 cache for full model object stale or stats mismatch for \${l1CacheKeyForFullModelObj}.`);
+          log.info(`[ModelService getModelDetail] L1 cache for full model object stale or stats mismatch for ${l1CacheKeyForFullModelObj}.`);
         }
       } else {
-        log.info(`[ModelService getModelDetail] L1 cache miss for full model object: \${l1CacheKeyForFullModelObj}.`);
+        log.info(`[ModelService getModelDetail] L1 cache miss for full model object: ${l1CacheKeyForFullModelObj}.`);
       }
 
       const cachedJsonInfoResult = await this.modelInfoCacheService.get(modelJsonInfoCacheKey, 'modelJsonInfo');
@@ -342,24 +342,24 @@ class ModelService {
 
       if (cachedJsonInfoResult) {
         const { data: jsonDataFromCache, sourceJsonStats: cachedSourceJsonStats, fromL2 } = cachedJsonInfoResult;
-        log.debug(`[ModelService getModelDetail] modelInfoCacheService.get returned for \${modelJsonInfoCacheKey}. FromL2: \${fromL2}`);
+        log.debug(`[ModelService getModelDetail] modelInfoCacheService.get returned for ${modelJsonInfoCacheKey}. FromL2: ${fromL2}`);
 
         if (currentSourceJsonStats && cachedSourceJsonStats &&
             currentSourceJsonStats.mtimeMs === cachedSourceJsonStats.mtimeMs &&
             currentSourceJsonStats.size === cachedSourceJsonStats.size) {
-          log.info(`[ModelService getModelDetail] Cached modelJsonInfo for \${modelJsonInfoCacheKey} is valid (stats match).`);
+          log.info(`[ModelService getModelDetail] Cached modelJsonInfo for ${modelJsonInfoCacheKey} is valid (stats match).`);
           modelJsonData = jsonDataFromCache;
           sourceStatsForUsedJsonData = cachedSourceJsonStats; 
         } else {
-          log.info(`[ModelService getModelDetail] Cached modelJsonInfo for \${modelJsonInfoCacheKey} is stale or stats mismatch. Will fetch from source.`);
+          log.info(`[ModelService getModelDetail] Cached modelJsonInfo for ${modelJsonInfoCacheKey} is stale or stats mismatch. Will fetch from source.`);
         }
       } else {
-        log.info(`[ModelService getModelDetail] Cache miss for modelJsonInfo (L1 and L2) for \${modelJsonInfoCacheKey}. Will fetch from source.`);
+        log.info(`[ModelService getModelDetail] Cache miss for modelJsonInfo (L1 and L2) for ${modelJsonInfoCacheKey}. Will fetch from source.`);
       }
 
       let fullModelObj;
       if (!modelJsonData) { 
-        log.info(`[ModelService getModelDetail] Fetching full model detail (including .json) from dataSourceInterface for \${jsonPath}`);
+        log.info(`[ModelService getModelDetail] Fetching full model detail (including .json) from dataSourceInterface for ${jsonPath}`);
         fullModelObj = await dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath);
         
         if (fullModelObj && fullModelObj.modelJsonInfo) {
@@ -367,9 +367,9 @@ class ModelService {
             try {
                 currentSourceJsonStats = await dataSourceInterface.getFileStats(sourceConfig, jsonPath);
                 sourceStatsForUsedJsonData = currentSourceJsonStats; 
-                log.debug(`[ModelService getModelDetail] Updated .json file stats after read for \${jsonPath}:`, currentSourceJsonStats);
+                log.debug(`[ModelService getModelDetail] Updated .json file stats after read for ${jsonPath}:`, currentSourceJsonStats);
             } catch (statError) {
-                log.warn(`[ModelService getModelDetail] Could not get .json file stats after read for \${jsonPath}. Cache might lack stats. Error: \${statError.message}`);
+                log.warn(`[ModelService getModelDetail] Could not get .json file stats after read for ${jsonPath}. Cache might lack stats. Error: ${statError.message}`);
                 currentSourceJsonStats = null; 
                 sourceStatsForUsedJsonData = null;
             }
@@ -377,21 +377,21 @@ class ModelService {
             if (modelJsonData && Object.keys(modelJsonData).length > 0 && currentSourceJsonStats) {
                 const l2TtlModelJsonInfoSeconds = await this.configService.getSetting('cache.l2.ttlSeconds.modelJsonInfo', 3600 * 24 * 7);
                 await this.modelInfoCacheService.set(modelJsonInfoCacheKey, modelJsonData, l2TtlModelJsonInfoSeconds, 'modelJsonInfo', { sourceJsonStats: currentSourceJsonStats, isJsonInfoOnly: true });
-                log.info(`[ModelService getModelDetail] Stored/Updated modelJsonInfo in L2 for \${modelJsonInfoCacheKey}`);
+                log.info(`[ModelService getModelDetail] Stored/Updated modelJsonInfo in L2 for ${modelJsonInfoCacheKey}`);
             } else {
-                log.warn(`[ModelService getModelDetail] modelJsonData is empty or currentSourceJsonStats missing after fetch for \${jsonPath}. Not storing .json content in L2.`);
+                log.warn(`[ModelService getModelDetail] modelJsonData is empty or currentSourceJsonStats missing after fetch for ${jsonPath}. Not storing .json content in L2.`);
             }
         } else {
-            log.warn(`[ModelService getModelDetail] dataSourceInterface.readModelDetail did not return a valid modelObj or modelJsonInfo for \${jsonPath}.`);
+            log.warn(`[ModelService getModelDetail] dataSourceInterface.readModelDetail did not return a valid modelObj or modelJsonInfo for ${jsonPath}.`);
             return {};
         }
       } else {
-        log.info(`[ModelService getModelDetail] Using cached modelJsonData for \${jsonPath}. Reading base model structure.`);
+        log.info(`[ModelService getModelDetail] Using cached modelJsonData for ${jsonPath}. Reading base model structure.`);
         fullModelObj = await dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath); 
         if (fullModelObj) {
             fullModelObj.modelJsonInfo = modelJsonData; 
         } else {
-            log.error(`[ModelService getModelDetail] Failed to read base model structure for \${jsonPath} when using cached .json data.`);
+            log.error(`[ModelService getModelDetail] Failed to read base model structure for ${jsonPath} when using cached .json data.`);
             return {};
         }
       }
@@ -400,33 +400,33 @@ class ModelService {
         const l1TtlModelInfoSeconds = await this.configService.getSetting('cache.l1.ttlSeconds.modelInfo', 3600);
         if (sourceStatsForUsedJsonData) { 
             await this.modelInfoCacheService.setToL1(l1CacheKeyForFullModelObj, fullModelObj, 'modelJsonInfo', { sourceJsonStats: sourceStatsForUsedJsonData, ttlMs: l1TtlModelInfoSeconds * 1000 });
-            log.info(`[ModelService getModelDetail] Stored/Updated full model object in L1 for \${l1CacheKeyForFullModelObj}`);
+            log.info(`[ModelService getModelDetail] Stored/Updated full model object in L1 for ${l1CacheKeyForFullModelObj}`);
         } else {
-            log.warn(`[ModelService getModelDetail] sourceStatsForUsedJsonData is missing for \${jsonPath}. Not storing full model object in L1 as stats are crucial for L1 validation.`);
+            log.warn(`[ModelService getModelDetail] sourceStatsForUsedJsonData is missing for ${jsonPath}. Not storing full model object in L1 as stats are crucial for L1 validation.`);
         }
       } else {
-        log.warn(`[ModelService getModelDetail] Constructed fullModelObj is empty for \${jsonPath}. Not caching in L1.`);
+        log.warn(`[ModelService getModelDetail] Constructed fullModelObj is empty for ${jsonPath}. Not caching in L1.`);
         return {};
       }
       
-      log.info(`[ModelService getModelDetail] Successfully retrieved/constructed model detail for source \${sourceId}, path \${jsonPath}`);
+      log.info(`[ModelService getModelDetail] Successfully retrieved/constructed model detail for source ${sourceId}, path ${jsonPath}`);
       return fullModelObj;
 
     } catch (error) {
-      log.error(`[ModelService] Error getting model detail for source \${sourceId}, path \${jsonPath}:`, error.message, error.stack);
+      log.error(`[ModelService] Error getting model detail for source ${sourceId}, path ${jsonPath}:`, error.message, error.stack);
       throw error;
     }
   }
 
   async getAvailableFilterOptions(sourceId = null, directory = '', supportedExtensions = null) {
-    log.info(`[ModelService] getAvailableFilterOptions called. sourceId: \${sourceId || 'all'}, directory: \${directory}`);
+    log.info(`[ModelService] getAvailableFilterOptions called. sourceId: ${sourceId || 'all'}, directory: ${directory}`);
     if (!sourceId) {
       log.debug('[ModelService getAvailableFilterOptions] sourceId is null or undefined, returning empty options immediately.');
       return { baseModels: [], modelTypes: [] };
     }
 
     if (this.filterOptionsCache.has(sourceId)) {
-      log.debug(`[ModelService getAvailableFilterOptions] Using cached filter options for source \${sourceId}`);
+      log.debug(`[ModelService getAvailableFilterOptions] Using cached filter options for source ${sourceId}`);
       return this.filterOptionsCache.get(sourceId);
     }
 
@@ -435,7 +435,7 @@ class ModelService {
 
       const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
       if (!sourceConfig) {
-        log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: \${sourceId}. Returning empty options.`);
+        log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
         return { baseModels: [], modelTypes: [] };
       }
 
@@ -443,9 +443,9 @@ class ModelService {
 
       try {
         modelObjsToProcess = await this.listModels(sourceId, '', {}, extsToUse, true); 
-        log.debug(`[ModelService getAvailableFilterOptions] Fetched \${modelObjsToProcess.length} modelObjs for source \${sourceId} to build filter options.`);
+        log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelObjsToProcess.length} modelObjs for source ${sourceId} to build filter options.`);
       } catch (error) {
-        log.error(`[ModelService getAvailableFilterOptions] Error listing modelObjs for source \${sourceId}: \${error.message}`);
+        log.error(`[ModelService getAvailableFilterOptions] Error listing modelObjs for source ${sourceId}: ${error.message}`);
         return { baseModels: [], modelTypes: [] };
       }
 
@@ -470,7 +470,7 @@ class ModelService {
       };
       
       this.filterOptionsCache.set(sourceId, options);
-      log.info(`[ModelService getAvailableFilterOptions] Options generated and cached for source \${sourceId} - BaseModels: \${sortedBaseModels.length}, ModelTypes: \${sortedModelTypes.length}`);
+      log.info(`[ModelService getAvailableFilterOptions] Options generated and cached for source ${sourceId} - BaseModels: ${sortedBaseModels.length}, ModelTypes: ${sortedModelTypes.length}`);
       return options;
     } catch (error) {
       log.error('[ModelService] Error in getAvailableFilterOptions:', error.message, error.stack);
