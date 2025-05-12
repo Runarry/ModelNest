@@ -184,7 +184,7 @@ class ModelService {
             baseModels.add(modelObj.baseModel.trim());
           }
           if (modelObj.modelType && typeof modelObj.modelType === 'string' && modelObj.modelType.trim() !== '') {
-            modelTypes.add(modelObj.modelType.trim().toUpperCase());
+            modelTypes.add(modelObj.modelType.trim().toLowerCase());
           }
         });
 
