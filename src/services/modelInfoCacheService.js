@@ -340,8 +340,10 @@ class ModelInfoCacheService {
                 if (dbRow) {
                     if (this._isL2EntryValid(dbRow, currentMetadata)) {
                         this.logger.info(`L2 cache hit and valid for key: ${cacheKey}`);
-                        try {
-                            const data = BSON.deserialize(dbRow.bson_data);
+                        // Try to deserialize BSON data safely using the helper function
+                        const data = this._deserializeBson(dbRow.bson_data, cacheKey);
+
+                        if (data !== null) {
                             // Update last_accessed_timestamp_ms
                             const updateStmt = this.db.prepare(`UPDATE model_json_info_cache SET last_accessed_timestamp_ms = ? WHERE cache_key = ?`);
                             updateStmt.run(Date.now(), cacheKey);
@@ -349,10 +351,11 @@ class ModelInfoCacheService {
                             // Optionally, promote to L1 (though design doc doesn't explicitly require this step here,
                             // it's a common pattern. For now, just return from L2).
                             // If promoting, use setDataToCache with L1 target.
-                            return data; // BSON.deserialize already returns a new object
-                        } catch (bsonError) {
-                            this.logger.error(`L2 BSON deserialize error for key ${cacheKey}: ${bsonError.message}. Deleting entry.`, bsonError);
-                            this._deleteL2Entry(cacheKey); // Removed await
+                            return data; // Deserialized data is valid
+                        } else {
+                            // Deserialization failed (error already logged in helper)
+                            this.logger.warn(`L2 BSON deserialize failed for key ${cacheKey}. Deleting invalid entry.`);
+                            this._deleteL2Entry(cacheKey); // Delete the corrupted/invalid entry
                             return undefined;
                         }
                     } else {
@@ -431,12 +434,13 @@ class ModelInfoCacheService {
                 return;
             }
 
-            let bsonData;
-            try {
-                bsonData = BSON.serialize(data);
-            } catch (bsonError) {
-                this.logger.error(`L2 BSON serialize error for key ${cacheKey}: ${bsonError.message}. Write aborted.`, bsonError);
-                return;
+            // Try to serialize BSON data safely using the helper function
+            const bsonData = this._serializeBson(data, cacheKey);
+
+            if (bsonData === null) {
+                // Serialization failed (error already logged in helper)
+                this.logger.error(`L2 BSON serialize failed for key ${cacheKey}. Write aborted.`);
+                return; // Do not proceed with database write
             }
 
             const cached_timestamp_ms = Date.now();
@@ -618,6 +622,37 @@ class ModelInfoCacheService {
             // this.logger.info('L2: Database VACUUM completed after clearing all.');
         } catch (error) {
             this.logger.error(`L2: Error clearing all entries from model_json_info_cache: ${error.message}`, error);
+        }
+    }
+/**
+     * Safely serializes data to BSON format.
+     * @param {any} data - The data to serialize.
+     * @param {string} cacheKey - The cache key for logging purposes.
+     * @returns {Buffer|null} Serialized BSON buffer or null on error.
+     * @private
+     */
+    _serializeBson(data, cacheKey) {
+        try {
+            return BSON.serialize(data);
+        } catch (bsonError) {
+            this.logger.error(`BSON serialize error for key ${cacheKey}: ${bsonError.message}.`, bsonError);
+            return null;
+        }
+    }
+
+    /**
+     * Safely deserializes data from BSON format.
+     * @param {Buffer} bsonData - The BSON buffer to deserialize.
+     * @param {string} cacheKey - The cache key for logging purposes.
+     * @returns {any|null} Deserialized data or null on error.
+     * @private
+     */
+    _deserializeBson(bsonData, cacheKey) {
+        try {
+            return BSON.deserialize(bsonData);
+        } catch (bsonError) {
+            this.logger.error(`BSON deserialize error for key ${cacheKey}: ${bsonError.message}.`, bsonError);
+            return null;
         }
     }
 
