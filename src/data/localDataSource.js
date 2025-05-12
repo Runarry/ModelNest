@@ -7,10 +7,6 @@ const crypto = require('crypto');
 const DataSource = require('./baseDataSource');
 const { CacheDataType } = require('../services/constants/cacheConstants'); // 导入 CacheDataType
 
-/**
- * @file LocalDataSource class for accessing models from the local file system.
- * @author Roo
- */
 
 /**
  * Represents a local data source for models.
