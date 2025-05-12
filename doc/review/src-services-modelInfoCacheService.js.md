@@ -70,9 +70,9 @@
 
 ### 5.2. 潜在问题与风险
 
--   **定时器管理缺陷:** 在 `close()` 方法中 ([`close`](src/services/modelInfoCacheService.js:768))，尝试清除的 `_cleanupIntervalId` 和 `_initialCleanupTimeoutId` 并未在 `_scheduleL2Cleanup()` ([`_scheduleL2Cleanup`](src/services/modelInfoCacheService.js:610)) 中被正确赋值为实例属性 (即 `this._cleanupIntervalId`)。这会导致定时器无法被正确清除，可能引发内存泄漏或意外行为，尤其是在服务可能被多次初始化和关闭的场景下。
--   **L2 LRU 清理时机:** L2 的 LRU 清理是定期执行的 ([`_runL2Cleanup`](src/services/modelInfoCacheService.js:631))，而非实时。这意味着在两次清理任务之间，L2 缓存的实际大小可能临时超出配置的 `l2MaxItemsModelInfo`。
--   **L1 `clearCacheForSource` 效率:** 清除特定源的 L1 缓存时 ([`clearCacheForSource`](src/services/modelInfoCacheService.js:553))，需要遍历 L1 `Map` 的所有键。当 L1 缓存非常大时，这可能效率不高。
+-   **定时器管理缺陷:** 在 `close()` 方法中 ([`close`](src/services/modelInfoCacheService.js:768))，尝试清除的 `_cleanupIntervalId` 和 `_initialCleanupTimeoutId` 并未在 `_scheduleL2Cleanup()` ([`_scheduleL2Cleanup`](src/services/modelInfoCacheService.js:610)) 中被正确赋值为实例属性 (即 `this._cleanupIntervalId`)。这会导致定时器无法被正确清除，可能引发内存泄漏或意外行为，尤其是在服务可能被多次初始化和关闭的场景下。 -- 已处理
+-   **L2 LRU 清理时机:* `l2MaxItemsModelInfo`。
+-   **L1 `clearCacheForSource` 效率:** 清除特定* L2 的 LRU 清理是定期执行的 ([`_runL2Cleanup`](src/services/modelInfoCacheService.js:631))，而非实时。这意味着在两次清理任务之间，L2 缓存的实际大小可能临时超出配置的源的 L1 缓存时 ([`clearCacheForSource`](src/services/modelInfoCacheService.js:553))，需要遍历 L1 `Map` 的所有键。当 L1 缓存非常大时，这可能效率不高。
 -   **并发性:** 虽然 Node.js 的主要逻辑是单线程的，但异步操作的交错执行，尤其是在 L1 和 L2 状态更新之间，理论上可能存在细微的竞态条件，尽管 `better-sqlite3` 的同步特性和 `Map` 操作的原子性降低了这种风险。
 -   **`structuredClone` 和 BSON 开销:** 对于非常大的数据对象，`structuredClone()` 和 BSON 序列化/反序列化可能会引入一定的性能开销。
 -   **L2 清理任务的健壮性:** `_runL2Cleanup` ([`_runL2Cleanup`](src/services/modelInfoCacheService.js:631)) 中的数据库操作如果失败，错误会被记录，但任务本身不会重试或有更复杂的错误处理策略。

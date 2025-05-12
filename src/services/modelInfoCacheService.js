@@ -632,7 +632,7 @@ class ModelInfoCacheService {
         // Run cleanup periodically (e.g., every hour)
         // For simplicity, a basic interval. More robust scheduling might use a library or main process events.
         const cleanupIntervalMs = 3600 * 1000; // 1 hour
-        setInterval(async () => {
+        this._cleanupIntervalId = setInterval(async () => {
             if (this.isEnabled && this.db) {
                 this.logger.info('Periodic L2 cleanup task started...');
                 await this._runL2Cleanup();
@@ -641,7 +641,7 @@ class ModelInfoCacheService {
         this.logger.info(`Scheduled periodic L2 cleanup every ${cleanupIntervalMs / 1000 / 60} minutes.`);
         
         // Initial cleanup shortly after startup
-        setTimeout(async () => {
+        this._initialCleanupTimeoutId = setTimeout(async () => {
             if (this.isEnabled && this.db) {
                  this.logger.info('Initial L2 cleanup task started...');
                  await this._runL2Cleanup();
