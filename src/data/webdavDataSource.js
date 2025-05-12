@@ -4,6 +4,7 @@ const {createWebDavModelObject } = require('./modelParser'); // 导入 createWeb
 const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
 const crypto = require('crypto'); // 引入 crypto 模块
+const pLimit = require('p-limit').default; // 引入 p-limit
 
 /**
  * Parses a WebDAV lastmod timestamp string into milliseconds.
@@ -221,22 +222,26 @@ class WebDavDataSource extends DataSource {
 
     this.logger.info(`_batchFetchJsonContents: Starting batch fetch for ${jsonFilePaths.length} JSON files.`);
 
-    const fetchPromises = jsonFilePaths.map(filePath =>
-      this.client.getFileContents(filePath, { format: 'text' })
-        .then(content => ({ status: 'fulfilled', path: filePath, value: content }))
-        .catch(error => ({ status: 'rejected', path: filePath, reason: error }))
-    );
+    // 新增并发限制
+    const limit = pLimit(8);
 
-    const settledResults = await Promise.allSettled(fetchPromises);
+    const fetchPromises = jsonFilePaths.map(filePath => limit(async () => {
+      try {
+        const content = await this.client.getFileContents(filePath, { format: 'text' });
+        return { status: 'fulfilled', path: filePath, value: content };
+      } catch (error) {
+        return { status: 'rejected', path: filePath, reason: error };
+      }
+    }));
 
-    settledResults.forEach(result => {
-      if (result.status === 'fulfilled' && result.value.status === 'fulfilled') {
-        resultsMap.set(result.value.path, result.value.value);
-      } else if (result.status === 'fulfilled' && result.value.status === 'rejected') {
-        resultsMap.set(result.value.path, null); 
-        this.logger.error(`_batchFetchJsonContents: Failed to fetch ${result.value.path}:`, result.value.reason.message, result.value.reason.response?.status);
-      } else if (result.status === 'rejected') {
-        this.logger.error(`_batchFetchJsonContents: A promise in batch fetch was rejected unexpectedly:`, result.reason);
+    const results = await Promise.all(fetchPromises); // Use Promise.all as limit handles concurrency
+
+    results.forEach(result => {
+      if (result.status === 'fulfilled') {
+        resultsMap.set(result.path, result.value);
+      } else { // status === 'rejected'
+        resultsMap.set(result.path, null);
+        this.logger.error(`_batchFetchJsonContents: Failed to fetch ${result.path}:`, result.reason.message, result.reason.response?.status);
       }
     });
 
@@ -535,25 +540,30 @@ class WebDavDataSource extends DataSource {
     }
 
     const modelListResult = [];
+    // 新增并发限制
+    const limit = pLimit(8);
     const modelBuildPromises = [];
 
+    this.logger.info(`开始使用并发限制 (limit=${8}) 构建 ${modelFileItems.length} 个模型条目.`);
     for (const modelFile of modelFileItems) {
       // _buildModelEntry now handles L2 caching for MODEL_JSON_INFO internally
-      modelBuildPromises.push(
+      // 使用 limit 包裹异步操作
+      modelBuildPromises.push(limit(() =>
         this._buildModelEntry(modelFile, currentSourceId, resolvedRootOfSource, preFetchedJsonContentsMap)
-      );
+      ));
     }
     
-    this.logger.info(`开始并行构建 ${modelBuildPromises.length} 个模型条目.`);
+    // 等待所有受限的 Promise 完成
     const settledModelEntries = await Promise.allSettled(modelBuildPromises);
 
     settledModelEntries.forEach(result => {
       if (result.status === 'fulfilled' && result.value) {
         modelListResult.push(result.value);
       } else if (result.status === 'fulfilled' && !result.value) {
-        this.logger.warn(`_buildModelEntry 返回 null，跳过一个模型条目.`);
+        // _buildModelEntry 返回 null 的情况，日志已在 _buildModelEntry 内部记录
+        this.logger.debug(`_buildModelEntry returned null, skipping one model entry.`);
       } else if (result.status === 'rejected') {
-        this.logger.error(`构建模型条目时发生未捕获的错误:`, result.reason);
+        this.logger.error(`构建模型条目时发生未捕获的错误 (Promise rejected):`, result.reason);
       }
     });
 
