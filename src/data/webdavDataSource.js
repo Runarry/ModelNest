@@ -1,7 +1,6 @@
 const DataSource = require('./baseDataSource'); // 导入新的基类
-// 从 modelInfoCacheService 导入 CacheDataType
-const { CacheDataType } = require('../services/modelInfoCacheService');
-const { parseModelDetailFromJsonContent, createWebDavModelObject } = require('./modelParser'); // 导入 createWebDavModelObject
+const { CacheDataType } = require('../services/constants/cacheConstants');
+const {createWebDavModelObject } = require('./modelParser'); // 导入 createWebDavModelObject
 const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
 const crypto = require('crypto'); // 引入 crypto 模块

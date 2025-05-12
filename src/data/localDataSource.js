@@ -4,7 +4,7 @@ const path = require('path');
 const log = require('electron-log');
 const crypto = require('crypto');
 const DataSource = require('./baseDataSource');
-const { CacheDataType } = require('../services/modelInfoCacheService'); // 导入 CacheDataType
+const { CacheDataType } = require('../services/constants/cacheConstants'); // 导入 CacheDataType
 
 /**
  * @file LocalDataSource class for accessing models from the local file system.

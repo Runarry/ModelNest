@@ -748,4 +748,4 @@ class ModelInfoCacheService {
     }
 }
 
-module.exports = { ModelInfoCacheService, CacheDataType };
+module.exports = { ModelInfoCacheService };
