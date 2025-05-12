@@ -1,3 +1,4 @@
+const pLimit = require('p-limit');
 const { parseSingleModelFile } = require('./modelParser');
 const fs = require('fs');
 const path = require('path');
@@ -107,6 +108,9 @@ class LocalDataSource extends DataSource {
     const pathIdentifier = this._generateListModelsPathIdentifier(normalizedDirectory, showSubdirectory, effectiveSupportedExts);
     log.info(`[LocalDataSource listModels] Root: ${rootPath}, Directory: ${normalizedDirectory}, SourceId: ${sourceId}, PathIdentifier: ${pathIdentifier}`);
 
+    // 新增并发限制
+    const limit = pLimit(8);
+
     if (!sourceId) {
         log.error('[LocalDataSource listModels] sourceId (this.config.id) is missing. Cannot use cache.');
     }
@@ -150,7 +154,8 @@ class LocalDataSource extends DataSource {
         
         const modelFiles = files.filter(f => f.isFile() && currentSupportedExts.some(ext => f.name.toLowerCase().endsWith(ext.toLowerCase())));
 
-        for (const modelFile of modelFiles) {
+        // 并发受控处理 modelFiles
+        await Promise.all(modelFiles.map(modelFile => limit(async () => {
             const modelFilePath = path.join(currentDir, modelFile.name);
             const relativeModelFilePath = path.relative(rootPath, modelFilePath); // For pathIdentifier in MODEL_DETAIL
             const associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json';
@@ -219,14 +224,14 @@ class LocalDataSource extends DataSource {
             if (modelObj) {
                 allModels.push(modelObj);
             }
-        }
+        })));
 
+        // 并发受控递归子目录
         if (currentShowSubdirectory) {
-          for (const f of files) {
-            if (f.isDirectory()) {
-              await walk(path.join(currentDir, f.name), currentSourceConfig, currentSupportedExts, currentShowSubdirectory);
-            }
-          }
+          const subDirs = files.filter(f => f.isDirectory());
+          await Promise.all(subDirs.map(f =>
+            limit(() => walk(path.join(currentDir, f.name), currentSourceConfig, currentSupportedExts, currentShowSubdirectory))
+          ));
         }
       } catch (error) {
         if (error.code === 'ENOENT') {
@@ -672,6 +677,9 @@ class LocalDataSource extends DataSource {
 
     log.debug(`[LocalDataSource getDirectoryContentMetadataDigest] Dir: ${targetDirectory}, showSubDir: ${showSubdirectory}, exts: ${supportedExts.join(',')}`);
 
+    // 新增并发限制
+    const limit = pLimit(8);
+
     try {
       await fs.promises.access(targetDirectory);
     } catch (error) {
@@ -689,7 +697,7 @@ class LocalDataSource extends DataSource {
     const collectMetadata = async (currentPath) => {
       try {
         const entries = await fs.promises.readdir(currentPath, { withFileTypes: true });
-        for (const entry of entries) {
+        await Promise.all(entries.map(entry => limit(async () => {
           const entryFullPath = path.join(currentPath, entry.name);
           const relativeEntryPath = path.relative(targetDirectory, entryFullPath).replace(/\\/g, '/');
 
@@ -708,7 +716,7 @@ class LocalDataSource extends DataSource {
           } else if (entry.isDirectory() && showSubdirectory) {
             await collectMetadata(entryFullPath);
           }
-        }
+        })));
       } catch (readDirError) {
          if (readDirError.code !== 'ENOENT') {
             log.warn(`[LocalDataSource getDirectoryContentMetadataDigest] Error reading dir: ${currentPath}`, readDirError);

@@ -11,7 +11,7 @@
     "watch:renderer": "rollup -c rollup.config.mjs -w",
     "pack": "npm run build:renderer && electron-builder --dir -c electron-builder.yml",
     "dist": "npm run build:renderer && electron-builder -c electron-builder.yml",
-      "rebuild": "electron-rebuild"
+    "rebuild": "electron-rebuild"
   },
   "dependencies": {
     "axios": "^1.9.0",
@@ -19,6 +19,7 @@
     "bson": "^6.10.3",
     "electron-log": "^5.4.0",
     "electron-updater": "^6.6.4",
+    "p-limit": "^6.2.0",
     "sharp": "^0.34.1",
     "turndown": "^7.2.0",
     "webdav": "^5.8.0"
@@ -26,6 +27,7 @@
   "devDependencies": {
     "@babel/core": "^7.27.1",
     "@babel/preset-env": "^7.27.2",
+    "@electron/rebuild": "^4.0.1",
     "@rollup/plugin-babel": "^6.0.4",
     "@rollup/plugin-commonjs": "^28.0.3",
     "@rollup/plugin-node-resolve": "^16.0.1",
@@ -35,7 +37,6 @@
     "cssnano": "^7.0.7",
     "electron": "^36.2.0",
     "electron-builder": "^26.0.15",
-    "@electron/rebuild": "^4.0.1",
     "postcss": "^8.5.3",
     "postcss-import": "^16.1.0",
     "rollup": "^4.40.2",
