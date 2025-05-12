@@ -93,6 +93,17 @@ class ModelInfoCacheService {
 
             this.db = new Database(this.dbPath, { verbose: this.logger.debug.bind(this.logger) });
             this.logger.info(`SQLite database connected at: ${this.dbPath}`);
+
+            // Apply performance PRAGMAs
+            try {
+                this.db.pragma('journal_mode = WAL');
+                this.db.pragma('synchronous = NORMAL');
+                this.logger.info('Applied PRAGMA settings: journal_mode=WAL, synchronous=NORMAL.');
+            } catch (pragmaError) {
+                this.logger.error(`Failed to apply PRAGMA settings: ${pragmaError.message}`, pragmaError);
+                // Continue initialization even if PRAGMAs fail, but log the error.
+            }
+
             this._createTables();
         } catch (error) {
             this.logger.error(`Failed to initialize SQLite database at '${this.dbPath}': ${error.message}`, error);
@@ -631,7 +642,7 @@ class ModelInfoCacheService {
         }, 5 * 60 * 1000); // 5 minutes after init
     }
 
-    async _runL2Cleanup() {
+    async _runL2Cleanup() { // Keep async because configService.getSetting is async
         if (!this.db || !this.isEnabled) {
             this.logger.debug(`L2 Cleanup: Skipped, DB not available or service disabled.`);
             return;
@@ -639,57 +650,94 @@ class ModelInfoCacheService {
         this.logger.info(`L2 Cleanup: Running task...`);
         const now = Date.now();
         let totalExpiredDeleted = 0;
+        let totalLruDeleted = 0;
 
-        try {
-            // TTL Cleanup for model_json_info_cache
-            const stmt = this.db.prepare(`
-                DELETE FROM model_json_info_cache
-                WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?
-            `);
-            const result = stmt.run(now);
-            if (result.changes > 0) {
-                this.logger.info(`L2 Cleanup: Deleted ${result.changes} expired entries from model_json_info_cache.`);
-                totalExpiredDeleted += result.changes;
-            }
-        } catch (error) {
-            this.logger.error(`L2 Cleanup: Error cleaning expired entries from model_json_info_cache: ${error.message}`, error);
-        }
-
-        // LRU Cleanup for model_json_info_cache (if maxItems configured)
+        // --- Read config BEFORE transaction ---
         let l2MaxItemsModelInfo = 5000; // Default
         if (this.configService) {
-            const l2ModelInfoMaxItemsValue = await this.configService.getSetting('cache.l2.maxItems.modelInfo'); // Assuming this config key exists
-            l2MaxItemsModelInfo = (l2ModelInfoMaxItemsValue !== undefined && l2ModelInfoMaxItemsValue !== null) ? l2ModelInfoMaxItemsValue : 5000;
+            try {
+                const l2ModelInfoMaxItemsValue = await this.configService.getSetting('cache.l2.maxItems.modelInfo'); // Assuming this config key exists
+                l2MaxItemsModelInfo = (l2ModelInfoMaxItemsValue !== undefined && l2ModelInfoMaxItemsValue !== null) ? l2ModelInfoMaxItemsValue : 5000;
+                this.logger.debug(`L2 Cleanup: Using maxItems for modelInfo: ${l2MaxItemsModelInfo}`);
+            } catch (configError) {
+                this.logger.error(`L2 Cleanup: Failed to read 'cache.l2.maxItems.modelInfo' from config: ${configError.message}. Falling back to default ${l2MaxItemsModelInfo}.`, configError);
+            }
+        } else {
+            this.logger.warn(`L2 Cleanup: ConfigService not available, using default maxItems for modelInfo: ${l2MaxItemsModelInfo}`);
         }
 
-        if (l2MaxItemsModelInfo > 0) {
-            try {
-                const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM model_json_info_cache`);
-                const currentCount = countStmt.get().count;
+        // --- Define the synchronous transaction function ---
+        const cleanupTransaction = this.db.transaction(() => {
+            // --- Transaction Start ---
+            // Note: Variables defined outside (now, l2MaxItemsModelInfo) are accessible here.
+            // We need to track changes *inside* the transaction scope for accurate counts *after* potential rollbacks.
+            let expiredDeletedInTx = 0;
+            let lruDeletedInTx = 0;
 
-                if (currentCount > l2MaxItemsModelInfo) {
-                    const itemsToDelete = currentCount - l2MaxItemsModelInfo;
-                    this.logger.info(`L2 Cleanup (model_json_info_cache): Exceeds max items (${l2MaxItemsModelInfo}). Current: ${currentCount}. Deleting ${itemsToDelete} LRU items.`);
-                    const deleteLruStmt = this.db.prepare(`
-                        DELETE FROM model_json_info_cache
-                        WHERE cache_key IN (
-                            SELECT cache_key FROM model_json_info_cache
-                            ORDER BY last_accessed_timestamp_ms ASC
-                            LIMIT ?
-                        )
-                    `);
-                    const lruResult = deleteLruStmt.run(itemsToDelete);
-                    this.logger.info(`L2 Cleanup (model_json_info_cache): Deleted ${lruResult.changes} LRU entries.`);
+            // 1. TTL Cleanup
+            try {
+                const stmt = this.db.prepare(`
+                    DELETE FROM model_json_info_cache
+                    WHERE (cached_timestamp_ms + ttl_seconds * 1000) < ?
+                `);
+                const result = stmt.run(now);
+                if (result.changes > 0) {
+                    this.logger.info(`L2 Cleanup (TTL): Deleted ${result.changes} expired entries.`);
+                    expiredDeletedInTx = result.changes; // Track changes within TX
                 }
             } catch (error) {
-                this.logger.error(`L2 Cleanup: Error during LRU cleanup for model_json_info_cache: ${error.message}`, error);
+                this.logger.error(`L2 Cleanup (TTL): Error cleaning expired entries: ${error.message}`, error);
+                // Log error but continue within transaction for LRU cleanup
             }
-        }
 
-        if (totalExpiredDeleted > 0) {
-            this.logger.info(`L2 Cleanup: Finished. Total expired entries deleted: ${totalExpiredDeleted}. LRU cleanup also performed if applicable.`);
-        } else {
-            this.logger.info(`L2 Cleanup: Finished. No expired entries found. LRU cleanup performed if applicable.`);
+            // 2. LRU Cleanup (only if needed and enabled)
+            if (l2MaxItemsModelInfo > 0) {
+                try {
+                    const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM model_json_info_cache`);
+                    const currentCount = countStmt.get().count;
+                    const itemsOverLimit = currentCount - l2MaxItemsModelInfo;
+
+                    if (itemsOverLimit > 0) {
+                        this.logger.info(`L2 Cleanup (LRU): Exceeds max items (${l2MaxItemsModelInfo}). Current: ${currentCount}. Deleting ${itemsOverLimit} LRU items.`);
+                        const deleteLruStmt = this.db.prepare(`
+                            DELETE FROM model_json_info_cache
+                            WHERE cache_key IN (
+                                SELECT cache_key FROM model_json_info_cache
+                                ORDER BY last_accessed_timestamp_ms ASC
+                                LIMIT ?
+                            )
+                        `);
+                        const lruResult = deleteLruStmt.run(itemsOverLimit);
+                        if (lruResult.changes > 0) {
+                            this.logger.info(`L2 Cleanup (LRU): Deleted ${lruResult.changes} LRU entries.`);
+                            lruDeletedInTx = lruResult.changes; // Track changes within TX
+                        }
+                    } else {
+                         this.logger.debug(`L2 Cleanup (LRU): Item count (${currentCount}) within limit (${l2MaxItemsModelInfo}). No LRU deletion needed.`);
+                    }
+                } catch (error) {
+                    this.logger.error(`L2 Cleanup (LRU): Error during LRU cleanup: ${error.message}`, error);
+                    // Log error, transaction might rollback depending on the severity and other operations.
+                }
+            } else {
+                 this.logger.debug(`L2 Cleanup (LRU): LRU cleanup skipped as maxItems is not positive (${l2MaxItemsModelInfo}).`);
+            }
+            // --- Transaction End ---
+            // Return the counts from the transaction function so they can be accessed after execution
+            return { expiredDeleted: expiredDeletedInTx, lruDeleted: lruDeletedInTx };
+        }); // End of transaction definition
+
+        // --- Execute the transaction ---
+        try {
+            const resultCounts = cleanupTransaction(); // Execute the transaction and get returned counts
+            totalExpiredDeleted = resultCounts.expiredDeleted;
+            totalLruDeleted = resultCounts.lruDeleted;
+            this.logger.info(`L2 Cleanup Transaction finished successfully. Expired deleted: ${totalExpiredDeleted}. LRU deleted: ${totalLruDeleted}.`);
+        } catch (transactionError) {
+            this.logger.error(`L2 Cleanup Transaction failed: ${transactionError.message}`, transactionError);
+            // Counts remain 0 as the transaction likely rolled back.
+            totalExpiredDeleted = 0;
+            totalLruDeleted = 0;
         }
     }
 
