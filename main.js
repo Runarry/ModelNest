@@ -3,66 +3,23 @@ const __DEV__ = process.env.IS_DEV_MODE === 'true';
 const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dialog here
 const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
-const fs = require('fs');
+// const fs = require('fs'); // fs is now used in logger.js
 
 const imageCache = require('./src/common/imageCache');
 const os = require('os');
 const crypto = require('crypto');
-const log = require('electron-log');
+const log = require('electron-log'); // electron-log is still used for direct logging in main.js if needed, and by logger.js
+const { initializeLogger } = require('./src/utils/logger'); // Import the logger initializer
 
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the model library IPC initializer
 const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app IPC initializer
 const { initializeModelCrawlerIPC } = require('./src/ipc/modelCrawlerIPC.js'); // Import the model crawler IPC initializer
-let mainWindow; // Declare mainWindow globally
+const { createWindow, getMainWindow } = require('./src/utils/windowManager'); // Import window manager
 let services = null; // Declare services globally
-
-// 创建主窗口 (TODO: Modify to accept services and pass webContents to updateService)
-function createWindow(services) {
-  log.info('[Lifecycle] 创建主窗口');
-  mainWindow = new BrowserWindow({ // Assign to mainWindow
-    width: 1270,
-    height: 800,
-    icon: path.join(__dirname, 'assets/icon.png'),
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
-      nodeIntegration: false,
-      contextIsolation: true
-    }
-  });
-  mainWindow.removeMenu();
-  mainWindow.loadFile(path.join(__dirname, 'src/renderer/index.html'));
-  // 在开发模式下打开 DevTools
-  if (__DEV__) {
-    mainWindow.webContents.openDevTools();
-  }
-  mainWindow.on('closed', () => {
-    log.info('[Lifecycle] 主窗口已关闭');
-  });
-}
+// let mainWindow; // mainWindow is now managed by windowManager
 
 app.whenReady().then(async () => { // 改为 async 回调
   log.info('[Lifecycle] 应用启动，准备初始化主进程');
-  // 日志文件路径配置
-  const logsDir = path.join(app.getPath('userData'), 'logs');
-  const logFile = path.join(logsDir, 'main.log');
-  try {
-    if (!fs.existsSync(logsDir)) {
-      fs.mkdirSync(logsDir, { recursive: true });
-      log.info(`[Log] 日志目录已创建: ${logsDir}`);
-    }
-  } catch (e) {
-    // 若目录创建失败，降级为默认路径
-    log.error('日志目录创建失败:', e.message, e.stack);
-  }
-  log.transports.file.resolvePath = () => logFile;
-  log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] {text}';
-  log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
-
-  // 配置 electron-log 捕获未处理的异常和拒绝
-  log.errorHandler.startCatching({
-    showDialog: process.env.NODE_ENV !== 'production' // 只在非生产环境显示对话框
-  });
-  log.info('[Log] 配置 electron-log 捕获未处理错误');
 
   // --- Initialize Services ---
   const { initializeServices } = require('./src/services'); // 引入初始化函数
@@ -70,58 +27,23 @@ app.whenReady().then(async () => { // 改为 async 回调
   services = await initializeServices(); // Assign to the global services variable
   log.info('[Main] 所有服务已初始化');
 
-  // --- 日志级别设置 ---
-  const appConfig = await services.configService.getConfig();
-  let finalLogLevel = 'warn'; // 默认级别
+  // --- Initialize Logger ---
+  await initializeLogger(services.configService); // Initialize logger after services
+  log.info('[Main] Logger 已初始化');
 
-  // 1. 优先从 configService 获取有效的 logLevel
-  //    检查是否为非空字符串
-  if (appConfig && typeof appConfig.logLevel === 'string' && appConfig.logLevel.trim() !== '') {
-      finalLogLevel = appConfig.logLevel.trim();
-      // 使用 info 级别记录来源，这条日志本身也会受最终级别限制
-      log.info(`[Log] 使用来自 configService 的日志级别: ${finalLogLevel}`);
-  }
-  // 2. 如果 configService 没有提供有效级别，则检查环境变量 LOG_LEVEL
-  else if (process.env.LOG_LEVEL && process.env.LOG_LEVEL.trim() !== '') {
-      finalLogLevel = process.env.LOG_LEVEL.trim();
-      // 使用 warn 级别记录回退，因为这通常表示配置缺失
-      log.warn(`[Log] configService 未提供有效日志级别，回退到环境变量 LOG_LEVEL: ${finalLogLevel}`);
-  }
-  // 3. 如果都没有提供有效级别，则使用默认值
-  else {
-      // 使用 warn 级别记录回退
-      log.warn(`[Log] configService 和环境变量均未提供有效日志级别，使用默认级别: ${finalLogLevel}`);
-  }
-
-  // 应用日志级别
-  // 设置主级别
-  log.level = finalLogLevel;
-  // 显式设置 transports 的级别以确保生效
-  // (根据 electron-log 的行为，有时单独设置 transport 级别更可靠)
-  if (log.transports.console) {
-    log.transports.console.level = finalLogLevel;
-  }
-  // 确保文件 transport 也遵循级别设置
-  // 注意：文件 transport 的其他配置（如路径、格式）在前面已设置
-  if (log.transports.file) {
-    log.transports.file.level = finalLogLevel;
-  }
-
-  // 这条日志现在会根据 finalLogLevel 是否 >= info 来决定是否输出
-  log.info(`[Log] 最终日志级别已设置为: ${finalLogLevel}`);
 
   // 使用 services.configService 获取配置来设置 imageCache
+  const appConfig = await services.configService.getConfig(); // getConfig needs to be called to get appConfig
   imageCache.setConfig(appConfig.imageCache || {});
   log.info('[ImageCache] ImageCache 配置已根据服务设置');
 
   // 将 services 对象传递给需要它的地方
-  // 注意: initializeIPC 和 createWindow 函数本身尚未修改以接收 services
   // 初始化 IPC Handlers，传入 services 对象
   initializeAppIPC(services);
   initializeModelLibraryIPC(services);
   log.info('[IPC] IPC Handlers 已初始化');
 
-  createWindow(services);
+  const mainWindow = createWindow(__DEV__); // Create window using windowManager and pass __DEV__
 
   // Initialize IPC handlers that require mainWindow AFTER it's created
   if (mainWindow && services) {
@@ -187,7 +109,7 @@ ipcMain.handle('updater.downloadUpdate', async () => {
 
 app.on('activate', function () {
     log.info('[Lifecycle] 应用激活');
-    if (BrowserWindow.getAllWindows().length === 0) createWindow(); // createWindow 应该在 app ready 后调用，这里可能需要调整逻辑，但暂时保留
+    if (BrowserWindow.getAllWindows().length === 0) createWindow(__DEV__);
   });
 
   // 全局异常处理
@@ -249,7 +171,7 @@ app.on('window-all-closed', async function () { // Ensure the function is async
 // IPC: 打开文件夹选择对话框
 ipcMain.handle('open-folder-dialog', async (event) => {
   // const { dialog } = require('electron'); // Moved import to the top
-  const result = await dialog.showOpenDialog(mainWindow, { // Use mainWindow
+  const result = await dialog.showOpenDialog(getMainWindow(), { // Use getMainWindow()
     properties: ['openDirectory']
   });
 
