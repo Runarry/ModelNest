@@ -61,7 +61,8 @@ async function parseLocalModels(dir, supportedExtensions, sourceConfig = {}, ign
       // 如果是文件，则尝试解析为模型
       log.debug(`[modelParser] 发现文件，尝试解析为模型: ${itemFullPath}`);
       // parseSingleModelFile 会检查扩展名是否受支持
-      const modelObj = await parseSingleModelFile(itemFullPath, supportedExtensions, sourceConfig, ignorExtSupport);
+      // 传递 filesInDir 以避免重复读取目录
+      const modelObj = await parseSingleModelFile(itemFullPath, supportedExtensions, sourceConfig, ignorExtSupport, null, null, filesInDir);
       if (modelObj) {
         models.push(modelObj);
       }
@@ -132,9 +133,10 @@ async function findImageForModel(dir, modelNameWithoutExt, filesInDir) {
 }
 
 // 解析单个本地模型文件，返回标准模型对象
-async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false, preloadedModelJsonInfo = null, preloadedJsonFileStats = null) {
+// 新增 preloadedFilesInDir 参数以避免重复读取目录
+async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false, preloadedModelJsonInfo = null, preloadedJsonFileStats = null, preloadedFilesInDir = null) {
   const sourceId = sourceConfig.id || 'local';
-  log.debug(`[modelParser] 解析单个模型文件: ${modelFullPath}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}, preloadedModelJsonInfo: ${!!preloadedModelJsonInfo}`);
+  log.debug(`[modelParser] 解析单个模型文件: ${modelFullPath}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}, preloadedModelJsonInfo: ${!!preloadedModelJsonInfo}, preloadedFilesInDir: ${!!preloadedFilesInDir}`);
 
   try {
     await fs.stat(modelFullPath); // 异步检查文件是否存在和可访问
@@ -149,14 +151,19 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
 
   const dir = path.dirname(modelFullPath);
   const modelFileName = path.basename(modelFullPath);
-  let filesInDir;
+  let filesInDir = preloadedFilesInDir; // 优先使用预加载的目录内容
 
-  try {
-    filesInDir = await fs.readdir(dir); // 异步读取目录
-    log.debug(`[modelParser] 模型所在目录文件:`, filesInDir);
-  } catch (readError) {
-    log.error(`[modelParser] 读取模型所在目录失败: ${dir}`, readError.message, readError.stack);
-    return null; // 如果目录无法读取，则返回 null
+  // 仅当未预加载时才读取目录
+  if (!filesInDir) {
+    try {
+      filesInDir = await fs.readdir(dir); // 异步读取目录
+      log.debug(`[modelParser] 读取模型所在目录文件:`, filesInDir);
+    } catch (readError) {
+      log.error(`[modelParser] 读取模型所在目录失败: ${dir}`, readError.message, readError.stack);
+      return null; // 如果目录无法读取，则返回 null
+    }
+  } else {
+    log.debug(`[modelParser] 使用预加载的模型所在目录文件:`, filesInDir);
   }
 
   const modelFileExt = path.extname(modelFileName).toLowerCase();
