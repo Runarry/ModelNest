@@ -1,5 +1,3 @@
-// 移除 LOCALE_KEY 常量
-
 import { logMessage, getConfig, saveConfig } from '../apiBridge.js'; // 导入 API 桥接和配置函数
 
 const SUPPORTED_LOCALES = [
@@ -20,7 +18,7 @@ function getDefaultLocale() {
   const supportedLang = SUPPORTED_LOCALES.find(l => l.code.startsWith(langPart + '-'));
   if (supportedLang) return supportedLang.code;
   // 默认回退
-  return 'zh-CN';
+  return 'en-US';
 }
 
 /**
@@ -45,16 +43,16 @@ export async function initializeI18n() {
     await loadLocale(initialLocale, false); // 初始加载时不保存配置，因为它已经是配置或默认值
     logMessage('info', `[i18n] Initialization complete with locale: ${currentLocale}`);
   } catch (error) {
-    logMessage('error', `[i18n] Failed to load initial locale '${initialLocale}'. Trying fallback 'zh-CN'.`, error.message, error.stack);
+    logMessage('error', `[i18n] Failed to load initial locale '${initialLocale}'. Trying fallback 'en-US'.`, error.message, error.stack);
     try {
-        // 如果初始加载失败，尝试加载中文作为最终回退
-        await loadLocale('zh-CN', false);
-        logMessage('info', `[i18n] Fallback locale 'zh-CN' loaded successfully.`);
+        // 如果初始加载失败，尝试加载英文作为最终回退
+        await loadLocale('en-US', false);
+        logMessage('info', `[i18n] Fallback locale 'en-US' loaded successfully.`);
     } catch (fallbackError) {
-        logMessage('error', `[i18n] Failed to load fallback locale 'zh-CN'. i18n may not function correctly.`, fallbackError.message, fallbackError.stack);
+        logMessage('error', `[i18n] Failed to load fallback locale 'en-US'. i18n may not function correctly.`, fallbackError.message, fallbackError.stack);
         // 此时 i18n 可能无法正常工作，messages 可能为空
         messages = {};
-        currentLocale = 'zh-CN'; // 至少设置一个 currentLocale
+        currentLocale = 'en-US'; // 至少设置一个 currentLocale
     }
   }
 }
