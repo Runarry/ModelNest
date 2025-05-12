@@ -3,7 +3,6 @@ const __DEV__ = process.env.IS_DEV_MODE === 'true';
 const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dialog here
 const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
-// const fs = require('fs'); // fs is now used in logger.js
 
 const imageCache = require('./src/common/imageCache');
 const os = require('os');
@@ -16,7 +15,6 @@ const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app I
 const { initializeModelCrawlerIPC } = require('./src/ipc/modelCrawlerIPC.js'); // Import the model crawler IPC initializer
 const { createWindow, getMainWindow } = require('./src/utils/windowManager'); // Import window manager
 let services = null; // Declare services globally
-// let mainWindow; // mainWindow is now managed by windowManager
 
 app.whenReady().then(async () => { // 改为 async 回调
   log.info('[Lifecycle] 应用启动，准备初始化主进程');
@@ -62,9 +60,6 @@ app.whenReady().then(async () => { // 改为 async 回调
     log.error('[Main] Failed to initialize post-window IPC or pass webContents: mainWindow or services not available.');
   }
 
-  // --- Electron Updater Logic is now handled by UpdateService ---
-  // The UpdateService will be initialized along with other services.
-  // IPC handlers below will delegate actions to the UpdateService.
 // --- Updater IPC Handlers ---
   ipcMain.handle('updater.checkForUpdate', async () => {
     log.info('[Updater IPC] 收到 checkForUpdate 请求');
@@ -76,7 +71,6 @@ app.whenReady().then(async () => { // 改为 async 回调
     } catch (error) {
       log.error('[Updater IPC] Error during checkForUpdates via service:', error.message, error.stack);
       // UpdateService should ideally handle sending error status too
-      // sendUpdateStatus('error', `手动检查更新失败: ${error.message}`); // Keep for now if service doesn't send
       throw error; // Re-throw for the renderer to catch
     }
   });
@@ -147,13 +141,6 @@ app.on('window-all-closed', async function () { // Ensure the function is async
   log.info('[Lifecycle] 所有窗口已关闭');
   if (process.platform !== 'darwin') {
     try {
-      // 移除：不再在应用关闭时自动清理图片缓存
-      // if (services && services.imageService) {
-      //     await services.imageService.cleanupCache(); // Call the service method
-      // } else {
-      //     log.warn('[Lifecycle] Services or ImageService not available during window-all-closed.');
-      // }
-
       // WebDAV 缓存清理逻辑暂时忽略 (根据指令)
     } catch (e) {
       // 如果有其他清理逻辑失败，仍然记录错误
@@ -164,13 +151,9 @@ app.on('window-all-closed', async function () { // Ensure the function is async
   }
 });
 
-// IPC: 获取子目录列表
-// IPC: 获取模型详情
-// IPC: 获取模型图片数据
 
 // IPC: 打开文件夹选择对话框
 ipcMain.handle('open-folder-dialog', async (event) => {
-  // const { dialog } = require('electron'); // Moved import to the top
   const result = await dialog.showOpenDialog(getMainWindow(), { // Use getMainWindow()
     properties: ['openDirectory']
   });
