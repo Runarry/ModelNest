@@ -1,6 +1,6 @@
 import { clearChildren, setLoading, imageObserver, loadImage } from '../utils/ui-utils.js';
 import { t } from '../core/i18n.js';
-import { logMessage, listModels, listSubdirectories, getAllSourceConfigs } from '../apiBridge.js';
+import { logMessage, listModels, listSubdirectories, getAllSourceConfigs, getBlockedTags } from '../apiBridge.js'; // Added getBlockedTags
 import { CrawlStatusModal } from './crawl-status-modal.js';
 import FilterPanel from './filter-panel.js';
 import { BlobUrlCache } from '../core/blobUrlCache.js';
@@ -29,6 +29,7 @@ let allSourceConfigs = [];
 let currentSourceConfig = null;
 let crawlStatusModal = null;
 let globalTagsTooltip = null;
+let blockedTags = []; // Add state for blocked tags
 
 // ===== Virtual Scroll State & Constants =====
 let virtualScrollInstance = null;
@@ -45,7 +46,7 @@ const CARD_ROW_ITEM_HEIGHT = CARD_HEIGHT + VERTICAL_ROW_GAP;
 const LIST_ITEM_HEIGHT = 80; // Example height for a list item, adjust as needed
 
 // ===== Initialization =====
-export function initMainView(config, showDetailCallback) {
+export async function initMainView(config, showDetailCallback) { // Make init async to await _loadBlockedTags
     sourceSelect = document.getElementById(config.sourceSelectId);
     openFilterPanelBtn = document.getElementById(config.openFilterPanelBtnId);
     filterPanelContainer = document.getElementById(config.filterPanelContainerId);
@@ -98,6 +99,9 @@ export function initMainView(config, showDetailCallback) {
 
     // Listen for model updates from the detail view
     window.addEventListener('model-updated', _handleModelUpdatedEvent);
+
+    // Load blocked tags on initialization
+    await _loadBlockedTags();
 }
 
 let _showDetail = (model) => logMessage('warn', "showDetailCallback not initialized.");
@@ -403,7 +407,42 @@ export async function renderSources() {
     }
 }
 
-const MAX_VISIBLE_TAGS = 6; // Keep consistent or define separately for list/card if needed
+const MAX_VISIBLE_TAGS = 5; // Keep consistent or define separately for list/card if needed
+
+/**
+ * Checks if a given tag is blocked based on the loaded configuration.
+ * @param {string} tag - The tag text to check.
+ * @returns {boolean} True if the tag is blocked, false otherwise.
+ */
+function _tagBlocked(tag) {
+    // Check if the tag exists in the blockedTags array (case-insensitive check is often preferred for tags)
+    // Using .some() for efficiency, converting both to lowercase for comparison
+    return blockedTags.some(blockedTag => blockedTag.toLowerCase() === tag.toLowerCase());
+}
+
+/**
+ * Loads the list of blocked tags from the main process config service.
+ * Updates the module-level blockedTags array.
+ * @private
+ * @returns {Promise<void>}
+ */
+async function _loadBlockedTags() {
+    logMessage('debug', '[MainView] Loading blocked tags...');
+    try {
+        // Use the apiBridge function to get the blocked tags
+        const tags = await getBlockedTags();
+        if (Array.isArray(tags)) {
+            blockedTags = tags;
+            logMessage('info', `[MainView] Loaded ${blockedTags.length} blocked tags.`);
+        } else {
+            logMessage('warn', '[MainView] getBlockedTags did not return an array. Using empty list.');
+            blockedTags = [];
+        }
+    } catch (error) {
+        logMessage('error', '[MainView] Failed to load blocked tags:', error);
+        blockedTags = []; // Ensure it's an empty array on error
+    }
+}
 
 function _renderSingleModelElement(modelObj) { // Renders the core card structure, used by both views now
     const card = document.createElement('li'); // Use LI as it was likely styled as such
@@ -473,11 +512,15 @@ function _renderSingleModelElement(modelObj) { // Renders the core card structur
     const tagsContainer = document.createElement('div');
     tagsContainer.className = 'tags-container';
     const tags = modelObj.modelJsonInfo && modelObj.modelJsonInfo.tags ? modelObj.modelJsonInfo.tags : [];
-    if (tags.length > 0) {
+    
+    // Filter out blocked tags before rendering
+    const visibleTags = tags.filter(tag => !_tagBlocked(tag));
+
+    if (visibleTags.length > 0) {
         const isCardView = displayMode === 'card';
         const maxTagsToShow = isCardView ? MAX_VISIBLE_TAGS : Infinity;
 
-        tags.forEach((tagText, index) => {
+        visibleTags.forEach((tagText, index) => {
             if (index < maxTagsToShow) {
                 const tagElementVisible = document.createElement('span');
                 tagElementVisible.className = 'tag';
@@ -486,7 +529,7 @@ function _renderSingleModelElement(modelObj) { // Renders the core card structur
             }
         });
 
-        if (isCardView && tags.length > maxTagsToShow) {
+        if (isCardView && visibleTags.length > maxTagsToShow) {
             const ellipsis = document.createElement('span');
             ellipsis.className = 'tag tag-ellipsis';
             ellipsis.textContent = '...';

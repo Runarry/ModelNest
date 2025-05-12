@@ -64,5 +64,8 @@ clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片�
   clearModelInfoMemoryCache: () => ipcRenderer.invoke('clearModelInfoMemoryCache'),
   clearModelInfoDiskCache: () => ipcRenderer.invoke('clearModelInfoDiskCache'),
   getModelInfoCacheStats: () => ipcRenderer.invoke('getModelInfoCacheStats'),
+
+  // Add API to get blocked tags from config
+  getBlockedTags: () => ipcRenderer.invoke('get-blocked-tags'),
 });
 console.log('[Preload] API exposed successfully.');

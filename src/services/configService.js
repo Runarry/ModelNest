@@ -244,6 +244,17 @@ class ConfigService {
     // Return a deep copy if the value is an object or array
     return deepClone(value);
   }
+
+  /**
+   * Gets the list of blocked tags from the configuration.
+   * @returns {Promise<string[]>} A promise that resolves with an array of blocked tags, or an empty array if not found.
+   */
+  async getBlockedTags() {
+    // Use getSetting to retrieve the 'renderer.blockedTags' value
+    const blockedTags = await this.getSetting('blockedTags');
+    // Ensure the result is an array, defaulting to an empty array if not
+    return Array.isArray(blockedTags) ? blockedTags : [];
+  }
 }
 
 // Export a single instance (Singleton pattern)

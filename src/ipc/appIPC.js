@@ -298,6 +298,23 @@ function initializeAppIPC(services) {
   });
 
 
+  ipcMain.handle('get-blocked-tags', async () => {
+    log.info('[IPC] get-blocked-tags 请求');
+    try {
+      if (!services.configService) {
+        throw new Error('ConfigService 未初始化');
+      }
+      // 调用 ConfigService 中专门的 getBlockedTags 接口
+      const blockedTags = await services.configService.getBlockedTags();
+      log.info('[IPC] 获取屏蔽标签列表成功');
+      return blockedTags;
+    } catch (error) {
+      log.error('[IPC] 获取屏蔽标签列表失败:', error);
+      throw error; // 将错误传递给渲染进程
+    }
+  });
+
+
   // --- End ModelInfoCacheService IPC Handlers ---
 
   log.info('[IPC] App IPC Handlers 初始化完成');

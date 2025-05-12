@@ -139,3 +139,4 @@ export const removeCrawlStatusUpdateListener = api.removeCrawlStatusUpdateListen
 export const getImageCacheSize = api.getImageCacheSize;
 export const getProcessVersions = api.getProcessVersions; // 添加 getProcessVersions
 export const getFilterOptions = api.getFilterOptions;
+export const getBlockedTags = api.getBlockedTags; // Add getBlockedTags API
