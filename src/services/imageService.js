@@ -98,32 +98,30 @@ class ImageService {
             } else {
                 // 否则，尝试将原始 Buffer 存入缓存（imageCache.setCache 会进行处理）
                 log.debug(`[ImageService] Attempting imageCache.setCache for key: ${libraryId}/${imageName}, source buffer size: ${sourceBuffer.length} bytes, preferredFormat: ${preferredFormat}, originalMimeType: ${originalMimeType}`);
+                let processedResult = null; // Variable to hold the result from setCache
                 try {
                     // 将获取到的 preferredFormat 和 originalMimeType 传递给 setCache
-                    await imageCache.setCache(libraryId, imageName, sourceBuffer, preferredFormat, originalMimeType);
+                    processedResult = await imageCache.setCache(libraryId, imageName, sourceBuffer, preferredFormat, originalMimeType); // Capture the return value
                     log.info(`[ImageService] imageCache.setCache call completed successfully for ${libraryId}/${imageName}`);
                 } catch (setCacheError) {
                     log.error(`[ImageService] imageCache.setCache failed for ${libraryId}/${imageName} with format ${preferredFormat}:`, setCacheError.message, setCacheError.stack);
-                    // 即使 setCache 失败，也可能需要决定是否返回原始数据或 null
-                    // 这里选择继续尝试读取（万一 setCache 内部部分成功或有其他问题），但记录错误
+                    // If setCache fails, processedResult will be null, which is handled below
                 }
 
-                // 4. 再次从缓存获取处理后的图片 Buffer (无论 setCache 是否报错，都尝试读取)
-                log.debug(`[ImageService] Attempting imageCache.getCache AGAIN for key: ${libraryId}/${imageName} (after setCache attempt)`);
-                const finalCacheResult = await imageCache.getCache(libraryId, imageName); // Returns { data: Buffer, mimeType: string | null } | null
-                log.debug(`[ImageService] imageCache.getCache (after setCache attempt) returned for key: ${libraryId}/${imageName}. Result: ${finalCacheResult ? `Data: ${finalCacheResult.data.length} bytes, MimeType: ${finalCacheResult.mimeType}` : 'null'}`);
+                // 4. 使用 setCache 返回的处理后的图片 Buffer
+                log.debug(`[ImageService] Using result from imageCache.setCache for key: ${libraryId}/${imageName}. Result: ${processedResult ? `Data: ${processedResult.data.length} bytes, MimeType: ${processedResult.mimeType}` : 'null'}`);
 
-                if (finalCacheResult && finalCacheResult.data) {
-                    // 成功从缓存获取处理后的数据
-                    const finalMimeType = finalCacheResult.mimeType || 'application/octet-stream'; // 使用缓存的 mimeType 或默认值
-                    log.info(`[ImageService] Successfully retrieved processed buffer from cache after setCache attempt for ${libraryId}/${imageName}. Using MIME type: ${finalMimeType}`);
-                    return { data: finalCacheResult.data, mimeType: finalMimeType };
+                if (processedResult && processedResult.data) {
+                    // 成功从 setCache 获取处理后的数据
+                    const finalMimeType = processedResult.mimeType || 'application/octet-stream'; // 使用处理后的 mimeType 或默认值
+                    log.info(`[ImageService] Successfully retrieved processed buffer from setCache for ${libraryId}/${imageName}. Using MIME type: ${finalMimeType}`);
+                    return { data: processedResult.data, mimeType: finalMimeType };
                 } else {
-                    // 如果 setCache 之后 getCache 仍然失败
-                    log.error(`[ImageService] CRITICAL: Failed to retrieve image from cache immediately after setCache attempt for ${libraryId}/${imageName}. This might indicate a write/read issue or setCache failure.`);
+                    // 如果 setCache 失败或返回 null
+                    log.error(`[ImageService] CRITICAL: imageCache.setCache failed or returned null for ${libraryId}/${imageName}.`);
                     // 降级：返回原始 buffer
                     const fallbackMimeType = originalMimeType || 'application/octet-stream';
-                    log.warn(`[ImageService] Falling back to returning original source buffer for ${libraryId}/${imageName} due to post-setCache read failure. Using MIME type: ${fallbackMimeType}`);
+                    log.warn(`[ImageService] Falling back to returning original source buffer for ${libraryId}/${imageName} due to setCache failure. Using MIME type: ${fallbackMimeType}`);
                     return { data: sourceBuffer, mimeType: fallbackMimeType };
                 }
             }

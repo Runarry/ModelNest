@@ -177,7 +177,7 @@ async function getCache(libraryId, imageName) {
  * @param {Buffer} sourceBuffer 原始图片 Buffer
  * @param {string} preferredFormat 期望的缓存格式 ('JPEG', 'PNG', 'WebP', 'Original')
  * @param {string | null} originalMimeType 原始图片的 MIME 类型 (必须提供以确定原始扩展名)
- * @returns {Promise<void>}
+ * @returns {Promise<{data: Buffer, mimeType: string} | null>} 包含处理后的 Buffer 和 mimeType 的对象，或在失败时返回 null
  */
 async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'Original', originalMimeType = null) {
     const startTime = Date.now();
@@ -186,7 +186,7 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
 
     if (!sourceBuffer || sourceBuffer.length === 0) {
         log.warn(`[ImageCache] setCache called with empty or invalid sourceBuffer for key: ${libraryId}_${imageName}. Aborting.`);
-        return;
+        return null; // Return null on invalid input
     }
     stats.originalSize += sourceBuffer.length; // 记录原始大小
 
@@ -261,6 +261,11 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
         } else {
              log.info(`[ImageCache] Preferred format is Original, skipping sharp processing for ${libraryId}_${imageName}.`);
              finalMimeType = originalMimeType; // 确认使用原始 MIME 类型
+             // If preferred format is Original, we don't cache, just return the original buffer
+             const totalDuration = Date.now() - startTime;
+             log.info(`[ImageCache] Returning original buffer as preferred format is Original for ${libraryId}_${imageName}. Total Duration: ${totalDuration}ms`);
+             log.debug(`[ImageCache] <<< setCache END (Original) for key: ${libraryId}_${imageName}`);
+             return { data: processedBuffer, mimeType: finalMimeType || 'application/octet-stream' };
         }
 
 
@@ -302,12 +307,19 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
             log.error(`[ImageCache] Background cache cleanup failed:`, cleanError.message, cleanError.stack);
         });
 
+        // Return the processed buffer and mime type
+        return { data: processedBuffer, mimeType: finalMimeType || 'application/octet-stream' };
+
     } catch (error) {
         const totalDuration = Date.now() - startTime;
-        log.error(`[ImageCache] FAILED to process or write cache for key ${libraryId}_${imageName} to ${cacheFilePath}. Total Duration: ${totalDuration}ms`, error.message, error.stack);
-        // 尝试删除可能不完整的缓存文件（现在带扩展名）
-        // 由于写入前会尝试删除旧文件，这里主要处理写入过程中断的情况
-        // finalCachePath 可能未定义如果错误发生在确定扩展名之前，但这种情况很少
+        log.error(`[ImageCache] FAILED to process or write cache for key ${libraryId}_${imageName} to ${baseCachePath}. Total Duration: ${totalDuration}ms`, error.message, error.stack); // Use baseCachePath here as finalCachePath might not be defined
+        // Attempt to delete potentially incomplete cache file (now with extension)
+        // Since old files are attempted to be deleted before writing, this mainly handles interruptions during writing
+        // finalCachePath might be undefined if the error occurs before determining the extension, but this is rare
+        // Determine finalCachePath again in case it wasn't set
+        const finalExtension = mimeToExt[finalMimeType] || defaultExt;
+        const finalCachePath = baseCachePath + finalExtension;
+
         if (finalCachePath) {
             try {
                 log.warn(`[ImageCache] Attempting to delete potentially incomplete cache file: ${finalCachePath}`);
@@ -321,10 +333,10 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
         } else {
              log.warn(`[ImageCache] Cannot determine finalCachePath to delete on failure for key ${libraryId}_${imageName}.`);
         }
-        // 移除删除 meta 文件的尝试
+        // Remove attempt to delete meta file
         log.debug(`[ImageCache] <<< setCache END (Failure) for key: ${libraryId}_${imageName}`);
-        // 重新抛出错误，让 imageService 知道缓存失败
-        throw error; // 保持抛出错误
+        // Do not re-throw the error, return null instead as per the new return type
+        return null;
     }
 }
 
