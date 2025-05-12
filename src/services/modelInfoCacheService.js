@@ -20,6 +20,7 @@ class ModelInfoCacheService {
         this.isEnabled = true; // Default, updated from config
 
         this.l1Cache = new Map();
+        this.l1SourceIndex = new Map(); // Map<sourceId, Set<cacheKey>> for L1 MODEL_LIST/DETAIL
         // L1 maxItems can still be configurable if desired, but TTLs are now internal.
         this.l1MaxItems = 200; // Default, can be loaded from config if needed
 
@@ -389,6 +390,7 @@ class ModelInfoCacheService {
                 const oldestKey = this.l1Cache.keys().next().value;
                 if (oldestKey) {
                     this.l1Cache.delete(oldestKey);
+                    this._removeFromL1SourceIndex(oldestKey); // Remove from index on LRU eviction
                     this.logger.info(`L1 cache full, removed oldest item: ${oldestKey}`);
                 }
             }
@@ -400,7 +402,11 @@ class ModelInfoCacheService {
                 ttlMs: ttlSeconds * 1000,
                 dataType: dataType // Store dataType for validation context
             });
-            this.logger.info(`L1 cache set for key: ${cacheKey} with TTL: ${ttlSeconds}s`);
+            // Update L1 source index
+            const sourceSet = this.l1SourceIndex.get(sourceId) || new Set();
+            sourceSet.add(cacheKey);
+            this.l1SourceIndex.set(sourceId, sourceSet);
+            this.logger.info(`L1 cache set for key: ${cacheKey} with TTL: ${ttlSeconds}s. Updated source index.`);
         }
 
         // L2 Storage (for MODEL_JSON_INFO)
@@ -473,6 +479,7 @@ class ModelInfoCacheService {
         // Delete from L1
         if (this.l1Cache.has(cacheKey)) {
             this.l1Cache.delete(cacheKey);
+            this._removeFromL1SourceIndex(cacheKey); // Remove from index on invalidation
             this.logger.info(`L1 entry deleted for key: ${cacheKey}`);
         }
 
@@ -508,6 +515,29 @@ class ModelInfoCacheService {
 
 
     /**
+     * Helper to remove a key from the L1 source index.
+     * @param {string} cacheKey
+     * @private
+     */
+    _removeFromL1SourceIndex(cacheKey) {
+        // Extract sourceId from the key (assuming format dataType:sourceId:pathIdentifier)
+        const keyParts = cacheKey.split(':');
+        if (keyParts.length > 1) {
+            const sourceId = keyParts[1];
+            const sourceSet = this.l1SourceIndex.get(sourceId);
+            if (sourceSet) {
+                sourceSet.delete(cacheKey);
+                if (sourceSet.size === 0) {
+                    this.l1SourceIndex.delete(sourceId);
+                    this.logger.debug(`Removed sourceId ${sourceId} from L1 index as it became empty.`);
+                }
+            }
+        } else {
+            this.logger.warn(`_removeFromL1SourceIndex: Could not extract sourceId from key: ${cacheKey}`);
+        }
+    }
+
+    /**
      * Clears all cache entries for a specific data source.
      * @param {string} sourceId - The ID of the data source.
      * @returns {Promise<void>}
@@ -519,31 +549,31 @@ class ModelInfoCacheService {
         }
         this.logger.info(`Clearing all cache entries for sourceId: ${sourceId}`);
 
-        // Clear L1 entries for this sourceId
+        // Clear L1 entries using the index
         let l1ClearedCount = 0;
-        const l1Prefix = `:${sourceId}:`; // Common part of the key after dataType
-        for (const key of this.l1Cache.keys()) {
-            if (key.includes(l1Prefix)) { // More general check than startsWith if dataType is variable
-                const keyParts = key.split(':');
-                if (keyParts.length > 1 && keyParts[1] === sourceId) {
-                    this.l1Cache.delete(key);
+        const keysToDelete = this.l1SourceIndex.get(sourceId);
+        if (keysToDelete) {
+            for (const key of keysToDelete) {
+                if (this.l1Cache.delete(key)) {
                     l1ClearedCount++;
                 }
             }
+            this.l1SourceIndex.delete(sourceId); // Remove the sourceId entry from the index
         }
-        this.logger.info(`L1: Cleared ${l1ClearedCount} entries for sourceId: ${sourceId}`);
+        this.logger.info(`L1: Cleared ${l1ClearedCount} entries for sourceId: ${sourceId} using index.`);
 
-        // Clear L2 entries for this sourceId
+        // Clear L2 entries for this sourceId (only MODEL_JSON_INFO)
         if (!this.db) {
             this.logger.warn(`L2 clear for source ${sourceId} skipped: DB not available.`);
-            return;
-        }
-        try {
-            const stmt = this.db.prepare(`DELETE FROM model_json_info_cache WHERE source_id = ?`);
-            const result = stmt.run(sourceId);
-            this.logger.info(`L2: Cleared ${result.changes} entries from model_json_info_cache for sourceId: ${sourceId}`);
-        } catch (error) {
-            this.logger.error(`L2: Error clearing entries by sourceId ${sourceId}: ${error.message}`, error);
+            // Do not return here, L1 might have been cleared
+        } else {
+            try {
+                const stmt = this.db.prepare(`DELETE FROM model_json_info_cache WHERE source_id = ?`);
+                const result = stmt.run(sourceId);
+                this.logger.info(`L2: Cleared ${result.changes} entries from model_json_info_cache for sourceId: ${sourceId}`);
+            } catch (error) {
+                this.logger.error(`L2: Error clearing entries by sourceId ${sourceId}: ${error.message}`, error);
+            }
         }
     }
 
@@ -560,7 +590,8 @@ class ModelInfoCacheService {
 
         // Clear L1
         this.l1Cache.clear();
-        this.logger.info('L1 cache cleared.');
+        this.l1SourceIndex.clear(); // Clear the index as well
+        this.logger.info('L1 cache and source index cleared.');
 
         // Clear L2
         if (!this.db) {
