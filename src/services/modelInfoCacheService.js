@@ -284,9 +284,9 @@ class ModelInfoCacheService {
      * @param {string} sourceId - The ID of the data source.
      * @param {string} pathIdentifier - The path or unique identifier for the data.
      * @param {object} currentMetadata - Current metadata of the source data for validation.
-     * @returns {Promise<any|undefined>} Cached data or undefined if not found/invalid.
+     * @returns {any|undefined} Cached data or undefined if not found/invalid.
      */
-    async getDataFromCache(dataType, sourceId, pathIdentifier, currentMetadata) {
+    getDataFromCache(dataType, sourceId, pathIdentifier, currentMetadata) {
         if (!this.isInitialized || !this.isEnabled) {
             this.logger.debug(`getDataFromCache: Service not initialized or disabled. DataType: ${dataType}`);
             return undefined;
@@ -341,12 +341,12 @@ class ModelInfoCacheService {
                             return data; // BSON.deserialize already returns a new object
                         } catch (bsonError) {
                             this.logger.error(`L2 BSON deserialize error for key ${cacheKey}: ${bsonError.message}. Deleting entry.`, bsonError);
-                            await this._deleteL2Entry(cacheKey);
+                            this._deleteL2Entry(cacheKey); // Removed await
                             return undefined;
                         }
                     } else {
                         this.logger.info(`L2 cache entry invalid or expired for key: ${cacheKey}. Deleting.`);
-                        await this._deleteL2Entry(cacheKey);
+                        this._deleteL2Entry(cacheKey); // Removed await
                     }
                 } else {
                     this.logger.debug(`L2 cache miss for key: ${cacheKey}`);
@@ -367,9 +367,9 @@ class ModelInfoCacheService {
      * @param {any} data - The data to cache.
      * @param {object} metadataForCache - Metadata associated with the data's source.
      * @param {string} [sourceTypeForTTL] - Optional: 'local' or 'webdav', for MODEL_LIST TTL.
-     * @returns {Promise<void>}
+     * @returns {void}
      */
-    async setDataToCache(dataType, sourceId, pathIdentifier, data, metadataForCache, sourceTypeForTTL) {
+    setDataToCache(dataType, sourceId, pathIdentifier, data, metadataForCache, sourceTypeForTTL) {
         if (!this.isInitialized || !this.isEnabled) {
             this.logger.debug(`setDataToCache: Service not initialized or disabled. DataType: ${dataType}`);
             return;
@@ -466,9 +466,9 @@ class ModelInfoCacheService {
      * @param {CacheDataType} dataType - The type of data to invalidate.
      * @param {string} sourceId - The ID of the data source.
      * @param {string} pathIdentifier - The path or unique identifier for the data.
-     * @returns {Promise<void>}
+     * @returns {void}
      */
-    async invalidateCacheEntry(dataType, sourceId, pathIdentifier) {
+    invalidateCacheEntry(dataType, sourceId, pathIdentifier) {
         if (!this.isInitialized || !this.isEnabled) {
             this.logger.debug(`invalidateCacheEntry: Service not initialized or disabled. DataType: ${dataType}`);
             return;
@@ -485,17 +485,17 @@ class ModelInfoCacheService {
 
         // Delete from L2 if applicable
         if (dataType === CacheDataType.MODEL_JSON_INFO) {
-            await this._deleteL2Entry(cacheKey);
+            this._deleteL2Entry(cacheKey); // Removed await
         }
     }
 
     /**
      * Helper to delete a single L2 entry.
      * @param {string} cacheKey
-     * @returns {Promise<void>}
+     * @returns {void}
      * @private
      */
-    async _deleteL2Entry(cacheKey) {
+    _deleteL2Entry(cacheKey) {
         if (!this.db) {
             this.logger.warn(`L2 delete skipped for key ${cacheKey}: DB not available.`);
             return;
@@ -540,9 +540,9 @@ class ModelInfoCacheService {
     /**
      * Clears all cache entries for a specific data source.
      * @param {string} sourceId - The ID of the data source.
-     * @returns {Promise<void>}
+     * @returns {void}
      */
-    async clearCacheForSource(sourceId) {
+    clearCacheForSource(sourceId) {
         if (!this.isInitialized || !this.isEnabled) {
             this.logger.debug(`clearCacheForSource: Service not initialized or disabled. SourceID: ${sourceId}`);
             return;
@@ -579,9 +579,9 @@ class ModelInfoCacheService {
 
     /**
      * Clears all caches (L1 and L2).
-     * @returns {Promise<void>}
+     * @returns {void}
      */
-    async clearAllCache() {
+    clearAllCache() {
         if (!this.isInitialized) { // No need to check isEnabled, clear should work even if temp disabled
             this.logger.warn('clearAllCache called before initialization.');
             // return; // Or proceed to clear what can be cleared
