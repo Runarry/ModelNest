@@ -243,29 +243,46 @@ class ModelInfoCacheService {
     _isL1EntryValid(l1Entry, currentMetadata) {
         if (!l1Entry) return false;
 
-        const { timestamp, ttlMs, metadata: cachedMetadata, dataType } = l1Entry;
+        const { timestamp, ttlMs, metadata: cachedMetadata, dataType, originalKey } = l1Entry;
 
         // Check TTL
         if (Date.now() >= timestamp + ttlMs) {
-            this.logger.debug(`L1 entry TTL expired. Key: ${l1Entry.originalKey}`);
+            this.logger.debug(`L1 entry TTL expired. Key: ${originalKey}`);
             return false;
         }
 
         // Check metadata consistency
+        if (!this._isMetadataValid(cachedMetadata, currentMetadata, dataType, originalKey, 'L1')) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Validates metadata consistency for a cache entry.
+     * @param {object} cachedMetadata - The metadata stored in the cache.
+     * @param {object} currentMetadata - The current metadata of the data source.
+     * @param {CacheDataType} dataType - The type of data being validated.
+     * @param {string} entryKeyForLog - The cache key or identifier for logging purposes.
+     * @param {string} cacheLevelForLog - The cache level ('L1' or 'L2') for logging.
+     * @returns {boolean} True if metadata is valid, false otherwise.
+     * @private
+     */
+    _isMetadataValid(cachedMetadata, currentMetadata, dataType, entryKeyForLog, cacheLevelForLog) {
         if (dataType === CacheDataType.MODEL_LIST) {
             if (!cachedMetadata || !currentMetadata || cachedMetadata.contentHash !== currentMetadata.contentHash) {
-                this.logger.debug(`L1 MODEL_LIST contentHash mismatch. Key: ${l1Entry.originalKey}`, {cached: cachedMetadata, current: currentMetadata });
+                this.logger.debug(`${cacheLevelForLog} ${dataType} contentHash mismatch. Key: ${entryKeyForLog}`, { cached: cachedMetadata, current: currentMetadata });
                 return false;
             }
-        } else if (dataType === CacheDataType.MODEL_DETAIL || dataType === CacheDataType.MODEL_JSON_INFO) { // MODEL_JSON_INFO in L1 is rare but possible if promoting from L2
+        } else if (dataType === CacheDataType.MODEL_DETAIL || dataType === CacheDataType.MODEL_JSON_INFO) {
             if (!cachedMetadata || !currentMetadata) {
-                 this.logger.debug(`L1 ${dataType} metadata missing. Key: ${l1Entry.originalKey}`);
-                 return false;
+                this.logger.debug(`${cacheLevelForLog} ${dataType} metadata missing. Key: ${entryKeyForLog}`);
+                return false;
             }
             if (cachedMetadata.fileSize !== currentMetadata.fileSize ||
                 cachedMetadata.metadata_lastModified_ms !== currentMetadata.metadata_lastModified_ms ||
                 (currentMetadata.etag !== undefined && cachedMetadata.etag !== currentMetadata.etag)) { // Only compare etag if current one is provided
-                this.logger.debug(`L1 ${dataType} metadata mismatch. Key: ${l1Entry.originalKey}`, {cached: cachedMetadata, current: currentMetadata });
+                this.logger.debug(`${cacheLevelForLog} ${dataType} metadata mismatch. Key: ${entryKeyForLog}`, { cached: cachedMetadata, current: currentMetadata });
                 return false;
             }
         }
@@ -282,23 +299,27 @@ class ModelInfoCacheService {
     _isL2EntryValid(dbEntry, currentMetadata) {
         if (!dbEntry) return false;
 
-        const { cached_timestamp_ms, ttl_seconds, metadata_filesize, metadata_lastModified_ms, metadata_etag } = dbEntry;
+        const { cache_key, cached_timestamp_ms, ttl_seconds, metadata_filesize, metadata_lastModified_ms, metadata_etag } = dbEntry;
 
         // Check TTL
         if (Date.now() >= cached_timestamp_ms + (ttl_seconds * 1000)) {
-            this.logger.debug(`L2 entry TTL expired. Key: ${dbEntry.cache_key}`);
+            this.logger.debug(`L2 entry TTL expired. Key: ${cache_key}`);
             return false;
         }
         
         // Check metadata (specific to MODEL_JSON_INFO)
-        if (!currentMetadata) {
-            this.logger.debug(`L2 currentMetadata missing for validation. Key: ${dbEntry.cache_key}`);
-            return false; // Cannot validate without current metadata
+        if (!currentMetadata) { // currentMetadata is essential for validation
+            this.logger.debug(`L2 currentMetadata missing for validation. Key: ${cache_key}`);
+            return false;
         }
-        if (metadata_filesize !== currentMetadata.fileSize ||
-            metadata_lastModified_ms !== currentMetadata.metadata_lastModified_ms ||
-            (currentMetadata.etag !== undefined && metadata_etag !== currentMetadata.etag)) { // Only compare etag if current one is provided
-            this.logger.debug(`L2 MODEL_JSON_INFO metadata mismatch. Key: ${dbEntry.cache_key}`, {cached: {fileSize: metadata_filesize, metadata_lastModified_ms, etag: metadata_etag}, current: currentMetadata });
+
+        const cachedL2Metadata = {
+            fileSize: metadata_filesize,
+            metadata_lastModified_ms: metadata_lastModified_ms,
+            etag: metadata_etag
+        };
+
+        if (!this._isMetadataValid(cachedL2Metadata, currentMetadata, CacheDataType.MODEL_JSON_INFO, cache_key, 'L2')) {
             return false;
         }
         return true;
