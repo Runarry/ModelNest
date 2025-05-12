@@ -218,11 +218,36 @@ document.addEventListener('DOMContentLoaded', async () => {
         const loadingIndicator = document.getElementById('loadingIndicator');
         if (loadingIndicator) loadingIndicator.style.display = 'none'; // Hide loading indicator
         if (mainSection) {
-            mainSection.innerHTML = `<p class="error-message" style="padding: 20px; text-align: center;">${message}<br>Please check the developer console (Ctrl+Shift+I) for more details.</p>`;
+            // Clear existing content
+            while (mainSection.firstChild) {
+                mainSection.removeChild(mainSection.firstChild);
+            }
+            // Create and append new error message element
+            const errorP = document.createElement('p');
+            errorP.className = 'error-message';
+            errorP.style.padding = '20px';
+            errorP.style.textAlign = 'center';
+            // To handle the <br>, we can set innerHTML for this specific, controlled string,
+            // or create text nodes and a br element. Given it's a fixed string structure,
+            // using innerHTML here for simplicity is a smaller risk than broad DOM replacement.
+            // However, to strictly avoid innerHTML as per the request:
+            errorP.appendChild(document.createTextNode(message));
+            errorP.appendChild(document.createElement('br'));
+            errorP.appendChild(document.createTextNode('Please check the developer console (Ctrl+Shift+I) for more details.'));
+            mainSection.appendChild(errorP);
             mainSection.style.display = 'block'; // Ensure the error is visible
         } else {
             // Fallback if even mainSection is missing
-            document.body.innerHTML = `<p style="color: red; padding: 20px;">${message}</p>`;
+            // Clear existing body content
+            while (document.body.firstChild) {
+                document.body.removeChild(document.body.firstChild);
+            }
+            // Create and append new error message element
+            const errorP = document.createElement('p');
+            errorP.style.color = 'red';
+            errorP.style.padding = '20px';
+            errorP.textContent = message;
+            document.body.appendChild(errorP);
         }
    }
 
