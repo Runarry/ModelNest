@@ -4,62 +4,13 @@ const fs = require('fs-extra');
 const log = require('electron-log');
 const Database = require('better-sqlite3');
 const BSON = require('bson');
+const { 
+    DEFAULT_DB_DIR_NAME,
+    DEFAULT_DB_FILE_NAME,
+    CacheDataType,
+    TTL_STRATEGIES 
+} = require("./constants/cacheConstants")
 
-const DEFAULT_DB_DIR_NAME = 'ModelNestCache';
-const DEFAULT_DB_FILE_NAME = 'model_cache.sqlite';
-
-/**
- * @readonly
- * @enum {string}
- * @description Defines the types of data that can be cached.
- * This enum guides the cache service in handling data, including TTL and storage location.
- */
-const CacheDataType = {
-  /**
-   * Represents an array of ModelObjects returned by listModels.
-   * Storage: L1 Cache.
-   * currentMetadata: { contentHash: string } (Directory content digest)
-   */
-  MODEL_LIST: 'MODEL_LIST',
-
-  /**
-   * Represents a single complete ModelObject returned by readModelDetail.
-   * Storage: L1 Cache.
-   * currentMetadata: { fileSize: number, metadata_lastModified_ms: number, etag: string | null }
-   *   (For its primary info source file, usually the associated .json or model main file)
-   */
-  MODEL_DETAIL: 'MODEL_DETAIL',
-
-  /**
-   * Represents raw JSON content (JavaScript object) parsed from a model's associated .json file.
-   * Storage: L2 Cache (SQLite table model_json_info_cache).
-   * currentMetadata: { fileSize: number, metadata_lastModified_ms: number, etag: string | null }
-   *   (For the original .json file)
-   */
-  MODEL_JSON_INFO: 'MODEL_JSON_INFO',
-};
-
-// Internal TTL Strategies (in seconds)
-const TTL_STRATEGIES = {
-  [CacheDataType.MODEL_LIST]: {
-    // Differentiated by source type, but for simplicity in this service,
-    // we might use a single L1 TTL or pass it from DataSource if needed.
-    // For now, using a generic L1 TTL for MODEL_LIST.
-    // Specific TTLs per source type (local vs webdav) can be managed by DataSource
-    // when calling setDataToCache, or this service can be enhanced.
-    // As per doc: LocalDataSource: 5 mins (300s), WebdavDataSource: 15 mins (900s)
-    // We'll use a placeholder here and expect DataSource to provide specific TTLs if needed,
-    // or apply a general one. For this implementation, we'll define them here.
-    L1_LOCAL: 300, // 5 minutes
-    L1_WEBDAV: 900, // 15 minutes
-  },
-  [CacheDataType.MODEL_DETAIL]: {
-    L1: 3600, // 1 hour
-  },
-  [CacheDataType.MODEL_JSON_INFO]: {
-    L2: 604800, // 7 days
-  },
-};
 
 
 class ModelInfoCacheService {
@@ -98,7 +49,7 @@ class ModelInfoCacheService {
                     this.logger.info('Service initialized (globally disabled).');
                     return;
                 }
-                
+
                 const l1MaxItemsValue = await this.configService.getSetting('cache.l1.maxItems');
                 this.l1MaxItems = (l1MaxItemsValue !== undefined && l1MaxItemsValue !== null) ? l1MaxItemsValue : 200;
 
@@ -134,7 +85,7 @@ class ModelInfoCacheService {
 
         try {
             if (!this.dbPath) {
-                 throw new Error('SQLite database path is not defined after configuration loading.');
+                throw new Error('SQLite database path is not defined after configuration loading.');
             }
             await fs.ensureDir(path.dirname(this.dbPath));
             this.logger.info(`Ensured directory for SQLite DB: ${path.dirname(this.dbPath)}`);
@@ -150,7 +101,7 @@ class ModelInfoCacheService {
 
         this.isInitialized = true;
         this.logger.info(`Service initialized. Status: ${this.isEnabled ? 'Enabled' : 'Disabled'}. L1 Max Items: ${this.l1MaxItems}. DB Path: '${this.dbPath || 'N/A'}'`);
-        
+
         // Start periodic L2 cleanup
         this._scheduleL2Cleanup();
     }
@@ -306,7 +257,7 @@ class ModelInfoCacheService {
             this.logger.debug(`L2 entry TTL expired. Key: ${cache_key}`);
             return false;
         }
-        
+
         // Check metadata (specific to MODEL_JSON_INFO)
         if (!currentMetadata) { // currentMetadata is essential for validation
             this.logger.debug(`L2 currentMetadata missing for validation. Key: ${cache_key}`);
@@ -382,7 +333,7 @@ class ModelInfoCacheService {
                             // Update last_accessed_timestamp_ms
                             const updateStmt = this.db.prepare(`UPDATE model_json_info_cache SET last_accessed_timestamp_ms = ? WHERE cache_key = ?`);
                             updateStmt.run(Date.now(), cacheKey);
-                            
+
                             // Optionally, promote to L1 (though design doc doesn't explicitly require this step here,
                             // it's a common pattern. For now, just return from L2).
                             // If promoting, use setDataToCache with L1 target.
@@ -495,7 +446,7 @@ class ModelInfoCacheService {
                     last_accessed_timestamp_ms
                 );
                 this.logger.info(`L2 cache set for key: ${cacheKey}. Changes: ${runInfo.changes}. TTL: ${ttlSeconds}s`);
-                 if (runInfo.changes === 0) {
+                if (runInfo.changes === 0) {
                     this.logger.warn(`L2: stmt.run for key ${cacheKey} reported 0 changes. Data might not have been written as expected.`);
                 }
             } catch (error) {
@@ -530,7 +481,7 @@ class ModelInfoCacheService {
             await this._deleteL2Entry(cacheKey);
         }
     }
-    
+
     /**
      * Helper to delete a single L2 entry.
      * @param {string} cacheKey
@@ -573,11 +524,11 @@ class ModelInfoCacheService {
         const l1Prefix = `:${sourceId}:`; // Common part of the key after dataType
         for (const key of this.l1Cache.keys()) {
             if (key.includes(l1Prefix)) { // More general check than startsWith if dataType is variable
-                 const keyParts = key.split(':');
-                 if (keyParts.length > 1 && keyParts[1] === sourceId) {
+                const keyParts = key.split(':');
+                if (keyParts.length > 1 && keyParts[1] === sourceId) {
                     this.l1Cache.delete(key);
                     l1ClearedCount++;
-                 }
+                }
             }
         }
         this.logger.info(`L1: Cleared ${l1ClearedCount} entries for sourceId: ${sourceId}`);
@@ -627,7 +578,7 @@ class ModelInfoCacheService {
             this.logger.error(`L2: Error clearing all entries from model_json_info_cache: ${error.message}`, error);
         }
     }
-    
+
     _scheduleL2Cleanup() {
         // Run cleanup periodically (e.g., every hour)
         // For simplicity, a basic interval. More robust scheduling might use a library or main process events.
@@ -639,12 +590,12 @@ class ModelInfoCacheService {
             }
         }, cleanupIntervalMs);
         this.logger.info(`Scheduled periodic L2 cleanup every ${cleanupIntervalMs / 1000 / 60} minutes.`);
-        
+
         // Initial cleanup shortly after startup
         this._initialCleanupTimeoutId = setTimeout(async () => {
             if (this.isEnabled && this.db) {
-                 this.logger.info('Initial L2 cleanup task started...');
-                 await this._runL2Cleanup();
+                this.logger.info('Initial L2 cleanup task started...');
+                await this._runL2Cleanup();
             }
         }, 5 * 60 * 1000); // 5 minutes after init
     }
@@ -672,14 +623,14 @@ class ModelInfoCacheService {
         } catch (error) {
             this.logger.error(`L2 Cleanup: Error cleaning expired entries from model_json_info_cache: ${error.message}`, error);
         }
-        
+
         // LRU Cleanup for model_json_info_cache (if maxItems configured)
         let l2MaxItemsModelInfo = 5000; // Default
         if (this.configService) {
             const l2ModelInfoMaxItemsValue = await this.configService.getSetting('cache.l2.maxItems.modelInfo'); // Assuming this config key exists
             l2MaxItemsModelInfo = (l2ModelInfoMaxItemsValue !== undefined && l2ModelInfoMaxItemsValue !== null) ? l2ModelInfoMaxItemsValue : 5000;
         }
-        
+
         if (l2MaxItemsModelInfo > 0) {
             try {
                 const countStmt = this.db.prepare(`SELECT COUNT(*) as count FROM model_json_info_cache`);
@@ -736,7 +687,7 @@ class ModelInfoCacheService {
         try {
             const stat = await fs.stat(this.dbPath); // Use async stat
             totalSize = stat.size;
-            
+
             const tableName = 'model_json_info_cache';
             try {
                 const stmt = this.db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`);
@@ -773,7 +724,7 @@ class ModelInfoCacheService {
             initialized: this.isInitialized,
         };
     }
-    
+
     close() {
         if (this.db) {
             try {
@@ -790,12 +741,11 @@ class ModelInfoCacheService {
             clearInterval(this._cleanupIntervalId);
             this._cleanupIntervalId = null;
         }
-         if (this._initialCleanupTimeoutId) {
+        if (this._initialCleanupTimeoutId) {
             clearTimeout(this._initialCleanupTimeoutId);
             this._initialCleanupTimeoutId = null;
         }
     }
 }
 
-// Export CacheDataType along with the service
 module.exports = { ModelInfoCacheService, CacheDataType };
