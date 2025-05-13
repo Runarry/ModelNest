@@ -189,26 +189,10 @@ class LocalDataSource extends DataSource {
    * @returns {Promise<string[]>} A promise that resolves to an array of subdirectory names.
    */
   async listSubdirectories() {
-    const startTime = Date.now();
-    const root = this.config.path;
-    log.info(`[LocalDataSource] 开始列出子目录: ${root}`);
-    try {
-      await fs.promises.access(root);
-      const entries = await fs.promises.readdir(root, { withFileTypes: true });
-      const duration = Date.now() - startTime;
-      log.info(`[LocalDataSource] 列出子目录完成: ${root}, 耗时: ${duration}ms, 找到 ${entries.filter(e => e.isDirectory()).length} 个子目录`);
-      return entries
-        .filter(entry => entry.isDirectory())
-        .map(entry => entry.name);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource] 列出子目录失败 (目录不存在): ${root}, 耗时: ${duration}ms`);
-        return [];
-      }
-      log.error(`[LocalDataSource] 列出子目录时出错: ${root}, 耗时: ${duration}ms`, error.message, error.stack);
-      return [];
-    }
+    const keys = [...this.directoryStructureCache];
+    log.debug(`[LocalDataSource] listSubdirectories: keys=${this.directoryStructureCache}`);
+
+    return keys;
   }
 
   /**
@@ -269,7 +253,7 @@ class LocalDataSource extends DataSource {
     log.info(`[LocalDataSource listModels] 根路径: ${rootPath}, 目录: ${normalizedDirectory}, 数据源ID: ${sourceId}, 路径标识符: ${pathIdentifier}`);
 
     // 检查内存缓存是否已初始化
-    if (!this.allModelsCache || this.allModelsCache.length === 0) {
+    if (!this.allModelsCache || this.allModelsCache.length === 0 ) {
       log.info(`[LocalDataSource listModels] 内存缓存未初始化，正在调用 InitAllSource 初始化缓存`);
       const cacheResult = await this.InitAllSource();
       this.allModelsCache = cacheResult.allModels;
