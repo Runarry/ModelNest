@@ -38,6 +38,133 @@ class WebDavDataSource extends DataSource {
   }
 
 
+  async InitAllSource() {
+    const startTime = Date.now();
+    await this.ensureInitialized();
+    const sourceId = this.config.id;
+    this.logger.info(`[WebDavDataSource InitAllSource] 开始初始化所有数据源: ${sourceId}`);
+
+    // 确定支持的文件扩展名
+    let effectiveSupportedExts;
+    if (this.config && this.config.supportedExts && this.config.supportedExts.length > 0) {
+      effectiveSupportedExts = this.config.supportedExts;
+    } else {
+      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
+      this.logger.warn(`[WebDavDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`);
+    }
+
+    // 初始化返回数据
+    let allModels = [];
+    let directoryStructure = []; // 完整目录结构（只包含文件夹）
+    let modelsByDirectory = new Map(); // 目录与模型名称的映射
+
+    // 获取根路径
+    const resolvedRootOfSource = this._resolvePath('/');
+    this.logger.info(`[WebDavDataSource InitAllSource] 解析后的根路径: ${resolvedRootOfSource}`);
+
+    // 确保 _allItemsCache 已填充
+    await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource);
+    
+    // 收集所有目录
+    const dirSet = new Set();
+    dirSet.add('/'); // 添加根目录
+    
+    // 从 _allItemsCache 中提取所有目录路径
+    for (const item of this._allItemsCache) {
+      if (item.relativePath) {
+        const dirPath = path.posix.dirname(item.relativePath);
+        if (dirPath !== '/') {
+          // 添加当前目录及其所有父目录到目录结构中
+          let currentPath = dirPath;
+          while (currentPath && currentPath !== '/' && !dirSet.has(currentPath)) {
+            dirSet.add(currentPath);
+            currentPath = path.posix.dirname(currentPath);
+          }
+        }
+      }
+    }
+    
+    // 将目录集合转换为数组（排除根目录'/'，因为它是隐含的）
+    directoryStructure = Array.from(dirSet).filter(dir => dir !== '/').sort();
+    
+    // 设置并发限制
+    const limit = pLimit(8);
+    
+    // 过滤出所有模型文件
+    const modelFileItems = this._allItemsCache.filter(item =>
+      item.type === 'file' && effectiveSupportedExts.some(ext =>
+        item.filename.toLowerCase().endsWith(ext.toLowerCase())
+      )
+    );
+    
+    this.logger.info(`[WebDavDataSource InitAllSource] 找到 ${modelFileItems.length} 个潜在模型文件`);
+    
+    // 预获取所有可能的 JSON 文件内容
+    const potentialJsonFileFullPaths = new Set();
+    for (const modelFile of modelFileItems) {
+      const modelFileDirRelative = path.posix.dirname(modelFile.relativePath);
+      const modelFileBase = path.posix.basename(modelFile.relativePath, path.posix.extname(modelFile.relativePath));
+      
+      for (const cachedItem of this._allItemsCache) {
+        const cachedItemDirRelative = path.posix.dirname(cachedItem.relativePath);
+        if (cachedItemDirRelative === modelFileDirRelative) {
+          const itemBase = path.posix.basename(cachedItem.relativePath, path.posix.extname(cachedItem.relativePath));
+          const itemExt = path.posix.extname(cachedItem.relativePath).toLowerCase();
+          if (itemBase === modelFileBase && itemExt === '.json') {
+            potentialJsonFileFullPaths.add(cachedItem.filename);
+            break;
+          }
+        }
+      }
+    }
+    
+    const uniqueJsonFilePaths = Array.from(potentialJsonFileFullPaths);
+    let preFetchedJsonContentsMap = new Map();
+    
+    if (uniqueJsonFilePaths.length > 0) {
+      this.logger.info(`[WebDavDataSource InitAllSource] 预获取 ${uniqueJsonFilePaths.length} 个 JSON 文件`);
+      preFetchedJsonContentsMap = await this._batchFetchJsonContents(uniqueJsonFilePaths);
+    }
+    
+    // 并发构建模型条目
+    const modelBuildPromises = [];
+    
+    for (const modelFile of modelFileItems) {
+      modelBuildPromises.push(limit(() =>
+        this._buildModelEntry(modelFile, sourceId, resolvedRootOfSource, preFetchedJsonContentsMap)
+      ));
+    }
+    
+    const settledModelEntries = await Promise.allSettled(modelBuildPromises);
+    
+    // 处理模型构建结果
+    for (const result of settledModelEntries) {
+      if (result.status === 'fulfilled' && result.value) {
+        const modelObj = result.value;
+        allModels.push(modelObj);
+        
+        // 获取模型所在的目录
+        const modelDir = path.posix.dirname(modelObj.relativePath || modelObj.fileName);
+        const dirKey = modelDir === '.' ? '/' : modelDir;
+        
+        // 将模型添加到对应目录的映射中
+        if (!modelsByDirectory.has(dirKey)) {
+          modelsByDirectory.set(dirKey, []);
+        }
+        modelsByDirectory.get(dirKey).push(modelObj.name);
+      }
+    }
+    
+    const duration = Date.now() - startTime;
+    this.logger.info(`[WebDavDataSource InitAllSource] 完成. 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${directoryStructure.length} 个目录`);
+    
+    return {
+      allModels,
+      directoryStructure,
+      modelsByDirectory
+    };
+  }
+
   async initClient(config) {
     const { createClient } = await import('webdav');
     this.client = createClient(
