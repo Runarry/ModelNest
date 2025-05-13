@@ -24,9 +24,14 @@ class LocalDataSource extends DataSource {
   constructor(config, modelInfoCacheService) {
     super(config);
     this.modelInfoCacheService = modelInfoCacheService;
+    // 缓存
+    this.allModelsCache = [];
+    this.directoryStructureCache = [];
+    this.modelsByDirectoryMap = new Map();
     if (!this.config || !this.config.id) {
       log.error('[LocalDataSource] Constructor: config.id is missing. Cache functionality might be impaired.');
     }
+
   }
 
   async InitAllSource(){
@@ -148,6 +153,9 @@ class LocalDataSource extends DataSource {
     const duration = Date.now() - startTime;
     log.info(`[LocalDataSource InitAllSource] 完成. 路径: ${rootPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${directoryStructure.length} 个目录`);
     
+    this.allModelsCache = allModels;
+    this.directoryStructureCache = directoryStructure;
+    this.modelsByDirectoryCache = modelsByDirectory;
     return {
       allModels,
       directoryStructure,
