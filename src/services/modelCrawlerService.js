@@ -1,28 +1,11 @@
 const log = require('electron-log');
 const path = require('path');
-const fs = require('fs'); // Needed for potential hash calculation if crawler requires it
-const crypto = require('crypto'); // Needed for hash calculation
-// Corrected import name to match the exported function
-// Import calcFileHash as well
 const { getCivitaiModelInfoWithTagsAndVersions, calcFileHash } = require('../utils/civitai-model-info-crawler');
 const { downloadAndSaveImage } = require('../utils/imageDownloader');
 const { LocalDataSource } = require('../data/localDataSource'); // Import LocalDataSource for type checking
 const { CRAWL_STATUS } = require('../common/constants'); // Assuming constants for status
 
-// Helper function to calculate SHA256 hash (if needed by crawler)
-// Note: Civitai crawler might handle this internally or accept path. Assuming path for now based on docs.
-// If hash is needed, uncomment and use this.
-/*
-async function calculateFileHash(filePath) {
-  return new Promise((resolve, reject) => {
-    const hash = crypto.createHash('sha256');
-    const stream = fs.createReadStream(filePath);
-    stream.on('data', (data) => hash.update(data));
-    stream.on('end', () => resolve(hash.digest('hex')));
-    stream.on('error', (err) => reject(err));
-  });
-}
-*/
+
 
 class ModelCrawlerService {
   constructor(dataSourceService) {
