@@ -191,11 +191,11 @@ class LocalDataSource extends DataSource {
     // 缓存结果
     this.allModelsCache = allModels;
     this.directoryStructureCache = directoryStructure;
-    this.modelsByDirectoryCache = modelsByDirectory;
+    this.modelsByDirectoryMap = modelsByDirectory;
     
     // 返回初始化结果
     const dirCacheCount = this._getAllPathsFromTree(this.directoryStructureCache).length;
-    log.info(`[LocalDataSource InitAllSource] Caching complete. allModelsCache.length=${this.allModelsCache.length}, directoryStructureCache.dirCount=${dirCacheCount}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache.size}`);
+    log.info(`[LocalDataSource InitAllSource] Caching complete. allModelsCache.length=${this.allModelsCache.length}, directoryStructureCache.dirCount=${dirCacheCount}, modelsByDirectory.size=${this.modelsByDirectoryMap.size}`);
     return {
       allModels,
       directoryStructure,
@@ -292,6 +292,7 @@ class LocalDataSource extends DataSource {
     return currentNode;
   }
 
+
   async listSubdirectories() {
     const paths = this._getAllPathsFromTree();
     log.debug(`[LocalDataSource] listSubdirectories: paths=${paths}`);
@@ -312,6 +313,7 @@ class LocalDataSource extends DataSource {
     if (dirPath.endsWith('/') && dirPath.length > 1) {
         dirPath = dirPath.slice(0, -1);
     }
+
     const params = new URLSearchParams();
     params.append('showSubDir', String(showSubdirectory));
     params.append('exts', supportedExts.slice().sort().join(',')); // Sort exts for consistency
@@ -327,154 +329,36 @@ class LocalDataSource extends DataSource {
    * @returns {Promise<Array<object>>} A promise that resolves to an array of model objects.
    */
   async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
-    const startTime = Date.now();
-    const rootPath = this.config.path;
-    const sourceId = this.config.id;
-    let normalizedDirectory = directory ? path.normalize(directory) : '';
-    // 统一路径分隔符为 /，与 InitAllSource 中的 relativePath 保持一致
-    normalizedDirectory = normalizedDirectory.replace(/\\/g, '/');
-    if (normalizedDirectory.endsWith('/') && normalizedDirectory.length > 1) {
-      normalizedDirectory = normalizedDirectory.slice(0, -1);
+    if (!this.allModelsCache ||this.allModelsCache.length === 0) {
+      await this.InitAllSource();
     }
-    // 将 '.' 视作根目录，与 InitAllSource 中 relativePath='' 的处理保持一致
-    if (normalizedDirectory === '.') {
-      normalizedDirectory = '';
+    if (!directory || directory === ""){
+      directory = "/";
+    }
+    const normalizedDirectory = directory.replace(/\\/g, '/');
+
+    if (normalizedDirectory === '/' && showSubdirectory === true) {
+      return [...this.allModelsCache];
     }
 
-    // 确定有效的支持扩展名
-    let effectiveSupportedExts;
-    if (supportedExts && supportedExts.length > 0) {
-      effectiveSupportedExts = supportedExts;
-    } else if (this.config && this.config.supportedExts && this.config.supportedExts.length > 0) {
-      effectiveSupportedExts = this.config.supportedExts;
-    } else {
-      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
-      log.warn(`[LocalDataSource listModels] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`);
-    }
 
-    const pathIdentifier = this._generateListModelsPathIdentifier(normalizedDirectory, showSubdirectory, effectiveSupportedExts);
-    log.info(`[LocalDataSource listModels] 根路径: ${rootPath}, 目录: ${normalizedDirectory}, 数据源ID: ${sourceId}, 路径标识符: ${pathIdentifier}`);
+    const rootNams = this.modelsByDirectoryMap.get(normalizedDirectory) || [];
+    log.info(`[LocalDataSource] [listModels] Listing models from directory: ${normalizedDirectory}`);
 
-    // 检查内存缓存是否已初始化
-    if (!this.allModelsCache || this.allModelsCache.length === 0 ) {
-      log.info(`[LocalDataSource listModels] 内存缓存未初始化，正在调用 InitAllSource 初始化缓存`);
-      const cacheResult = await this.InitAllSource();
-      this.allModelsCache = cacheResult.allModels;
-      this.directoryStructureCache = cacheResult.directoryStructure;
-      this.modelsByDirectoryCache = cacheResult.modelsByDirectory;
-      
-      if (!this.allModelsCache || this.allModelsCache.length === 0) {
-        log.warn(`[LocalDataSource listModels] 初始化缓存失败或未找到模型，返回空数组`);
-        return [];
+    const uniqueNames = new Set([...rootNams]);
+    if (showSubdirectory === true){
+      for (const [key, names] of this.modelsByDirectoryMap) {
+        if (key.startsWith(normalizedDirectory + "/")) {
+          names.forEach(name => uniqueNames.add(name));
+        }
       }
-      // 在所有筛选逻辑开始前，打印缓存的实际状态
-      log.debug(`[LocalDataSource listModels] After cache init check. allModelsCache.length=${this.allModelsCache?.length || 0}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache?.size || 0}`);
+
     }
 
-    // 检查目录是否存在
-    const startPath = directory ? path.join(rootPath, normalizedDirectory) : rootPath;
-    try {
-      await fs.promises.access(startPath);
-    } catch (error) {
-      const duration = Date.now() - startTime;
-      if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource listModels] 目录不存在: ${startPath}. 耗时: ${duration}ms`);
-        return [];
-      }
-      log.error(`[LocalDataSource listModels] 访问模型目录时出错: ${startPath}. 耗时: ${duration}ms`, error.message, error.stack);
-      return [];
-    }
+    const result = this.allModelsCache.filter(model =>
+      model && model.name && uniqueNames.has(model.name));
 
-    // 从内存缓存中筛选模型
-    let result = [];
-    const dirKey = normalizedDirectory || '/'; // 根目录用 '/' 表示, normalizedDirectory 已经处理过分隔符
-
-    // 打印缓存信息，帮助调试
-    const dirCacheCount = this._getAllPathsFromTree().length;
-    log.debug(`[LocalDataSource listModels] 缓存信息: allModelsCache.length=${this.allModelsCache?.length || 0}, directoryStructureCache.dirCount=${dirCacheCount}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache?.size || 0}`);
-    if (this.modelsByDirectoryCache) {
-      const keys = Array.from(this.modelsByDirectoryCache.keys());
-      log.debug(`[LocalDataSource listModels] modelsByDirectoryCache 目录键 (${keys.length}个): ${keys.slice(0, 10).join('; ')}${keys.length > 10 ? '...' : ''}`);
-    }
-    log.debug(`[LocalDataSource listModels] 查询目录键: '${dirKey}', 在缓存中是否存在: ${this.modelsByDirectoryCache?.has(dirKey)}`);
-    
-    if (showSubdirectory) {
-      // 如果包含子目录，则需要从所有模型中筛选
-      if (normalizedDirectory === '' || normalizedDirectory === null || normalizedDirectory=== "./") {
-        // 如果是根目录，直接返回所有模型
-        result = [...this.allModelsCache];
-      } else {
-        // 筛选出指定目录及其子目录下的所有模型
-        // 使用与 InitAllSource 相同的路径处理逻辑
-        const dirPrefix = normalizedDirectory + '/';
-        result = this.allModelsCache.filter(model => {
-          // model.relativePath 是在 InitAllSource 中计算的，已经使用了 / 分隔符
-          const modelRelativePath = model.relativePath || '';
-          
-          const isMatch = (normalizedDirectory === '') ? true : (modelRelativePath === normalizedDirectory || modelRelativePath.startsWith(dirPrefix));
-          log.debug(`[listModels filter SBD=true] Model: ${model.name}, modelRelPath: '${modelRelativePath}', normDir: '${normalizedDirectory}', dirPrefix: '${dirPrefix}', Match: ${isMatch}`);
-          
-          if (normalizedDirectory === '') { // 根目录，包含所有子目录
-            return true; // allModelsCache 已经是该数据源下的所有模型
-          }
-          return modelRelativePath === normalizedDirectory || modelRelativePath.startsWith(dirPrefix);
-        });
-      }
-    } else {
-      // 如果不包含子目录，则只返回当前目录下的模型
-      if (this.modelsByDirectoryCache && this.modelsByDirectoryCache.has(dirKey)) {
-        // 从目录映射中获取当前目录下的模型名称
-        const modelNames = this.modelsByDirectoryCache.get(dirKey);
-        // 根据名称从所有模型中筛选出对应的模型对象
-        result = this.allModelsCache.filter(model => {
-          // 确保模型不仅名称匹配，其相对路径也与当前查询的目录键匹配
-          // dirKey 已经是用 / 分隔的 normalizedDirectory
-          const modelRelPathNormalized = (model.relativePath || '').replace(/\\/g, '/');
-          const isMatch = modelNames.includes(model.name) && modelRelPathNormalized === dirKey;
-          log.debug(`[listModels filter SBD=false] Model: ${model.name}, modelRelPathNorm: '${modelRelPathNormalized}', dirKey: '${dirKey}', NameMatch: ${modelNames.includes(model.name)}, PathMatch: ${modelRelPathNormalized === dirKey}, OverallMatch: ${isMatch}`);
-          return isMatch;
-        });
-      }
-    }
-
-    // 根据支持的扩展名筛选
-    log.debug(`[listModels] Before extension filter, result.length: ${result.length}`);
-    if (result.length > 0 && result[0]) {
-      log.debug(`[listModels] First model before ext filter: Name: ${result[0].name}, Filename: ${result[0].filename}`);
-    }
-
-    if (effectiveSupportedExts && effectiveSupportedExts.length > 0) {
-      log.debug(`[listModels] Applying extension filter. effectiveSupportedExts: ${effectiveSupportedExts.join(',')}`);
-      result = result.filter(model => {
-        const modelFileFullPath = model.file || ''; // 使用 model.file 获取完整路径
-        const modelFilenameForLog = path.basename(modelFileFullPath); // 用于日志记录
-        const ext = path.extname(modelFileFullPath).toLowerCase(); // 从完整路径获取扩展名
-        const isSupported = effectiveSupportedExts.some(supportedExt => supportedExt.toLowerCase() === ext);
-        log.debug(`[listModels ext_filter] Model: ${model.name}, FileFullPath: '${modelFileFullPath}', FilenameForLog: '${modelFilenameForLog}', Ext: '${ext}', Supported: ${isSupported}`);
-        return isSupported;
-      });
-      log.debug(`[listModels] After extension filter, result.length: ${result.length}`);
-    }
-
-    const duration = Date.now() - startTime;
-    log.info(`[LocalDataSource listModels] 完成。路径: ${normalizedDirectory}, 耗时: ${duration}ms, 找到 ${result.length} 个模型`);
-    
-    // 如果启用了外部缓存服务，也将结果存入外部缓存
-    if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled && sourceId) {
-      const currentContentHash = await this.getDirectoryContentMetadataDigest(normalizedDirectory, effectiveSupportedExts, showSubdirectory);
-      if (currentContentHash) {
-        log.info(`[LocalDataSource listModels] 将 MODEL_LIST 存入外部缓存。路径标识符: ${pathIdentifier}, 哈希: ${currentContentHash}`);
-        await this.modelInfoCacheService.setDataToCache(
-          CacheDataType.MODEL_LIST,
-          sourceId,
-          pathIdentifier,
-          result,
-          { contentHash: currentContentHash },
-          'local' // sourceTypeForTTL
-        );
-      }
-    }
-
+    if (!result) return [];
     return result;
   }
 
