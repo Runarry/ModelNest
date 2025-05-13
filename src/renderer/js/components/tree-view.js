@@ -1,4 +1,78 @@
 // src/renderer/js/components/tree-view.js
+/**
+ * 使用示例
+ *    <div id="myTreeViewContainer" style="height: 100%; overflow: auto;"></div>
+ *  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const sampleData = [
+        {
+          name: "AIGC",
+          children: [
+            { name: "生成图", count: 16 },
+            { name: "工作流" },
+            { name: "美图秀秀", count: 127 },
+            {
+              name: "角色参考",
+              count: 96,
+              children: [
+                { name: "战士" },
+                { name: "法师", count: 30 },
+                { name: "牧师", children: [{name: "光明牧师"}, {name: "暗影牧师", count: 5}]}
+              ],
+            },
+            { name: "物品参考", count: 6},
+            { name: "场景参考", count: 84},
+            { name: "配色参考", count: 30},
+          ],
+        },
+        {
+          name: "项目",
+          children: [
+            {
+              name: "仙侠、武侠",
+              count: 19,
+              children: [
+                { name: "表情包", count: 9 },
+                { name: "角色", count: 8 },
+              ],
+            },
+            {
+              name: "大侠立志传",
+              children: [
+                { name: "特效", count: 4295 },
+                { name: "Portrait", count: 1378 },
+                { name: "角色", count: 28019 },
+              ]
+            },
+            { name: "仙侠地图", count: 15 },
+            { name: "训练", count: 42 },
+            { name: "三国", count: 24 },
+          ],
+        },
+        { name: "UI/UX", count: 18 },
+        { name: "游戏设计参考", count: 19 },
+        { name: "服饰", count: 17 },
+        { name: "README.md" }
+      ];
+
+      const treeContainer = document.getElementById('myTreeViewContainer');
+      if (treeContainer) {
+        createTreeView(treeContainer, sampleData, {
+            onNodeClick: (nodeEl) => {
+                const nameSpan = nodeEl.querySelector('.tree-node-name');
+                if (nameSpan) console.log('Node clicked:', nameSpan.textContent);
+            },
+            onNodeToggle: (nodeEl, isExpanded) => {
+                const nameSpan = nodeEl.querySelector('.tree-node-name');
+                if (nameSpan) console.log('Node toggled:', nameSpan.textContent, 'Expanded:', isExpanded);
+            }
+        });
+      } else {
+        console.error("Tree container #myTreeViewContainer not found.");
+      }
+    });
+  </script>
+ */
 
 /**
  * Creates a tree view component.
