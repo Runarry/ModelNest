@@ -29,6 +29,15 @@ class LocalDataSource extends DataSource {
     }
   }
 
+  async InitAllSource(){
+
+    // 参考listModels，但是不要使用listModels，而是完全重新实现，因为listModels之后我可能会进行修改
+    // 此方法，会遍历所有目录和子目录
+    // 返回数据：1. allModels（与listModels一致）2.完整目录结构（只包含文件夹，不包含文件） 3. map {key: 拼接后的目录结构，list: 目录结构下，所有模型的模型名称列表}
+    // 请仅实现此方法，不要修改其他地方的任何代码。
+
+  }
+
   /**
    * Lists subdirectories in the root path of the data source.
    * @returns {Promise<string[]>} A promise that resolves to an array of subdirectory names.
