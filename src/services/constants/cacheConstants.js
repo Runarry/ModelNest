@@ -8,27 +8,6 @@ const DEFAULT_DB_FILE_NAME = 'model_cache.sqlite';
  * This enum guides the cache service in handling data, including TTL and storage location.
  */
 const CacheDataType = {
-  /**
-   * Represents an array of ModelObjects returned by listModels.
-   * Storage: L1 Cache.
-   * currentMetadata: { contentHash: string } (Directory content digest)
-   */
-  MODEL_LIST: 'MODEL_LIST',
-
-  /**
-   * Represents a single complete ModelObject returned by readModelDetail.
-   * Storage: L1 Cache.
-   * currentMetadata: { fileSize: number, metadata_lastModified_ms: number, etag: string | null }
-   *   (For its primary info source file, usually the associated .json or model main file)
-   */
-  MODEL_DETAIL: 'MODEL_DETAIL',
-
-  /**
-   * Represents raw JSON content (JavaScript object) parsed from a model's associated .json file.
-   * Storage: L2 Cache (SQLite table model_json_info_cache).
-   * currentMetadata: { fileSize: number, metadata_lastModified_ms: number, etag: string | null }
-   *   (For the original .json file)
-   */
   MODEL_JSON_INFO: 'MODEL_JSON_INFO',
 };
 

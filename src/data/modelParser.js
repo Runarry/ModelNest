@@ -136,6 +136,7 @@ async function findImageForModel(dir, modelNameWithoutExt, filesInDir) {
 // 新增 preloadedFilesInDir 参数以避免重复读取目录
 async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceConfig = {}, ignorExtSupport = false, preloadedModelJsonInfo = null, preloadedJsonFileStats = null, preloadedFilesInDir = null) {
   const sourceId = sourceConfig.id || 'local';
+  
   log.debug(`[modelParser] 解析单个模型文件: ${modelFullPath}, 支持扩展名: ${supportedExtensions}, sourceId: ${sourceId}, preloadedModelJsonInfo: ${!!preloadedModelJsonInfo}, preloadedFilesInDir: ${!!preloadedFilesInDir}`);
 
   try {
@@ -157,7 +158,7 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
   if (!filesInDir) {
     try {
       filesInDir = await fs.readdir(dir); // 异步读取目录
-      log.debug(`[modelParser] 读取模型所在目录文件:`, filesInDir);
+     // log.debug(`[modelParser] 读取模型所在目录文件:`, filesInDir);
     } catch (readError) {
       log.error(`[modelParser] 读取模型所在目录失败: ${dir}`, readError.message, readError.stack);
       return null; // 如果目录无法读取，则返回 null
@@ -200,8 +201,8 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
   
   const modelFileInfo = {
     name: modelNameWithoutExt,
-    file: modelFullPath,
-    jsonPath: jsonFullPath,
+    file: modelFullPath.replace(/\\/g, '/'),
+    jsonPath: jsonFullPath.replace(/\\/g, '/'),
     ext: modelFileExt // 传递模型文件扩展名用于 modelType 推断
   };
 
@@ -229,10 +230,10 @@ function _parseJsonContentToRawInfo(jsonContentString) {
 // 修改：从已解析的 JSON 对象和文件信息解析模型详情
 // modelFileInfo: { name: string (不含扩展名), file: string (完整路径), jsonPath: string (完整路径), ext: string (模型文件扩展名) }
 function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, modelFileInfo) {
-  log.debug(`[ModelParser parseModelDetailFromJsonContent] Entry. parsedJsonInfo (keys: ${parsedJsonInfo ? Object.keys(parsedJsonInfo).join(', ') : 'null/undefined'}), sourceIdentifier: ${sourceIdentifier}, modelFileInfo:`, JSON.stringify(modelFileInfo));
+  //log.debug(`[ModelParser parseModelDetailFromJsonContent] Entry. parsedJsonInfo (keys: ${parsedJsonInfo ? Object.keys(parsedJsonInfo).join(', ') : 'null/undefined'}), sourceIdentifier: ${sourceIdentifier}, modelFileInfo:`, JSON.stringify(modelFileInfo));
   // const modelJsonInfo = _parseJsonContentToRawInfo(jsonContentString); // No longer needed, parsedJsonInfo is the object
   const modelJsonInfo = parsedJsonInfo || {}; // Ensure modelJsonInfo is an object
-  log.debug('[ModelParser parseModelDetailFromJsonContent] Using provided parsedJsonInfo:', modelJsonInfo ? Object.keys(modelJsonInfo) : 'null/undefined');
+  //log.debug('[ModelParser parseModelDetailFromJsonContent] Using provided parsedJsonInfo:', modelJsonInfo ? Object.keys(modelJsonInfo) : 'null/undefined');
 
   const modelBaseInfo = {
     name: modelFileInfo.name,
@@ -282,7 +283,7 @@ function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, model
     ...modelBaseInfo,
     modelJsonInfo: modelJsonInfo, // 嵌套原始 JSON 数据
   };
-  log.debug('[ModelParser parseModelDetailFromJsonContent] Returning modelObj:', JSON.stringify(modelObj, null, 2));
+ // log.debug('[ModelParser parseModelDetailFromJsonContent] Returning modelObj:', JSON.stringify(modelObj, null, 2));
   return modelObj;
 }
 
