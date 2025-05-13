@@ -26,7 +26,11 @@ class LocalDataSource extends DataSource {
     this.modelInfoCacheService = modelInfoCacheService;
     // 缓存
     this.allModelsCache = [];
-    this.directoryStructureCache = [];
+    this.directoryStructureCache = {
+      name: "root",
+      path: "",
+      children: []
+    };
     this.modelsByDirectoryMap = new Map();
     if (!this.config || !this.config.id) {
       log.error('[LocalDataSource] Constructor: config.id is missing. Cache functionality might be impaired.');
@@ -60,7 +64,11 @@ class LocalDataSource extends DataSource {
 
     // 初始化用于存储结果的数据结构
     let allModels = []; // 存储所有找到的模型对象
-    let directoryStructure = []; // 存储完整的目录结构（只包含文件夹的相对路径）
+    let directoryStructure = {
+      name: "root",
+      path: "",
+      children: []
+    }; // 存储完整的目录结构（树形结构）
     let modelsByDirectory = new Map(); // 存储目录与其中模型名称列表的映射关系
 
     // 检查根目录是否存在且可访问
@@ -142,10 +150,19 @@ class LocalDataSource extends DataSource {
         // 过滤出当前目录下的子目录
         const subDirs = files.filter(f => f.isDirectory());
         
-        // 将子目录的相对路径添加到目录结构中
+        // 将子目录添加到目录结构树中
         for (const subDir of subDirs) {
           const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name; // 构建子目录的相对路径
-          directoryStructure.push(subDirRelativePath); // 添加到目录结构列表
+          
+          // 创建子目录节点
+          const subDirNode = {
+            name: subDir.name,
+            path: subDirRelativePath,
+            children: []
+          };
+          
+          // 将子目录节点添加到当前目录的children中
+          this._addNodeToDirectoryTree(directoryStructure, relativePath, subDirNode);
         }
 
         // 使用并发限制递归处理子目录
@@ -168,7 +185,8 @@ class LocalDataSource extends DataSource {
     await walk(rootPath);
 
     const duration = Date.now() - startTime; // 计算总耗时
-    log.info(`[LocalDataSource InitAllSource] 完成. 路径: ${rootPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${directoryStructure.length} 个目录`); // 记录完成日志，包括耗时、模型数量和目录数量
+    const dirCount = this._getAllPathsFromTree(directoryStructure).length;
+    log.info(`[LocalDataSource InitAllSource] 完成. 路径: ${rootPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${dirCount} 个目录`); // 记录完成日志，包括耗时、模型数量和目录数量
     
     // 缓存结果
     this.allModelsCache = allModels;
@@ -176,7 +194,8 @@ class LocalDataSource extends DataSource {
     this.modelsByDirectoryCache = modelsByDirectory;
     
     // 返回初始化结果
-    log.info(`[LocalDataSource InitAllSource] Caching complete. allModelsCache.length=${this.allModelsCache.length}, directoryStructureCache.length=${this.directoryStructureCache.length}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache.size}`);
+    const dirCacheCount = this._getAllPathsFromTree(this.directoryStructureCache).length;
+    log.info(`[LocalDataSource InitAllSource] Caching complete. allModelsCache.length=${this.allModelsCache.length}, directoryStructureCache.dirCount=${dirCacheCount}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache.size}`);
     return {
       allModels,
       directoryStructure,
@@ -184,15 +203,99 @@ class LocalDataSource extends DataSource {
     };
   }
 
-  /**
-   * Lists subdirectories in the root path of the data source.
-   * @returns {Promise<string[]>} A promise that resolves to an array of subdirectory names.
-   */
-  async listSubdirectories() {
-    const keys = [...this.directoryStructureCache];
-    log.debug(`[LocalDataSource] listSubdirectories: keys=${this.directoryStructureCache}`);
 
-    return keys;
+  /**
+   * 将节点添加到目录树的正确位置
+   * @param {object} tree - 目录树
+   * @param {string} parentPath - 父目录路径
+   * @param {object} node - 要添加的节点
+   * @private
+   */
+  _addNodeToDirectoryTree(tree, parentPath, node) {
+    if (!parentPath || parentPath === '') {
+      // 如果父路径为空，直接添加到根节点的children
+      tree.children.push(node);
+      return;
+    }
+    
+    // 分割父路径，找到正确的父节点
+    const pathParts = parentPath.split('/');
+    let currentNode = tree;
+    
+    // 遍历路径部分，找到父节点
+    for (const part of pathParts) {
+      const found = currentNode.children.find(child => child.name === part);
+      if (found) {
+        currentNode = found;
+      } else {
+        // 如果找不到父节点，说明树结构有问题
+        log.warn(`[LocalDataSource] 在目录树中找不到父节点: ${part} in ${parentPath}`);
+        return;
+      }
+    }
+    
+    // 将节点添加到找到的父节点的children中
+    currentNode.children.push(node);
+  }
+  
+  /**
+   * 从目录树中获取所有路径（扁平化）
+   * @param {object} node - 当前节点
+   * @param {Array} result - 结果数组
+   * @private
+   */
+  _getAllPathsFromTree(node = null, result = []) {
+    if (!node) {
+      node = this.directoryStructureCache;
+    }
+    
+    if (node.path !== '') {
+      result.push(node.path);
+    }
+    
+    if (node.children && node.children.length > 0) {
+      for (const child of node.children) {
+        this._getAllPathsFromTree(child, result);
+      }
+    }
+    
+    return result;
+  }
+  
+  /**
+   * 根据路径从目录树中获取节点
+   * @param {string} path - 要查找的路径
+   * @returns {object|null} 找到的节点或null
+   * @private
+   */
+  _getNodeByPath(path) {
+    if (!path || path === '' || path === '/') {
+      return this.directoryStructureCache;
+    }
+    
+    const pathParts = path.split('/');
+    let currentNode = this.directoryStructureCache;
+    
+    for (const part of pathParts) {
+      if (!currentNode.children) {
+        return null;
+      }
+      
+      const found = currentNode.children.find(child => child.name === part);
+      if (!found) {
+        return null;
+      }
+      
+      currentNode = found;
+    }
+    
+    return currentNode;
+  }
+
+  async listSubdirectories() {
+    const paths = this._getAllPathsFromTree();
+    log.debug(`[LocalDataSource] listSubdirectories: paths=${paths}`);
+    return paths;
   }
 
   /**
@@ -287,7 +390,8 @@ class LocalDataSource extends DataSource {
     const dirKey = normalizedDirectory || '/'; // 根目录用 '/' 表示, normalizedDirectory 已经处理过分隔符
 
     // 打印缓存信息，帮助调试
-    log.debug(`[LocalDataSource listModels] 缓存信息: allModelsCache.length=${this.allModelsCache?.length || 0}, directoryStructureCache.length=${this.directoryStructureCache?.length || 0}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache?.size || 0}`);
+    const dirCacheCount = this._getAllPathsFromTree().length;
+    log.debug(`[LocalDataSource listModels] 缓存信息: allModelsCache.length=${this.allModelsCache?.length || 0}, directoryStructureCache.dirCount=${dirCacheCount}, modelsByDirectoryCache.size=${this.modelsByDirectoryCache?.size || 0}`);
     if (this.modelsByDirectoryCache) {
       const keys = Array.from(this.modelsByDirectoryCache.keys());
       log.debug(`[LocalDataSource listModels] modelsByDirectoryCache 目录键 (${keys.length}个): ${keys.slice(0, 10).join('; ')}${keys.length > 10 ? '...' : ''}`);
