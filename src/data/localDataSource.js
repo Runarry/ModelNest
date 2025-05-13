@@ -34,115 +34,128 @@ class LocalDataSource extends DataSource {
 
   }
 
+  /**
+   * 初始化所有本地数据源。
+   * 遍历配置的根目录，查找支持的模型文件，并解析其信息。
+   * 同时构建目录结构和目录与模型的映射关系。
+   * @returns {Promise<{allModels: Array, directoryStructure: Array, modelsByDirectory: Map}>} 包含所有模型、目录结构和目录与模型映射的对象。
+   */
   async InitAllSource(){
-    const startTime = Date.now();
-    const rootPath = this.config.path;
-    const sourceId = this.config.id;
-    log.info(`[LocalDataSource InitAllSource] 开始初始化所有数据源: ${rootPath}, SourceId: ${sourceId}`);
+    const startTime = Date.now(); // 记录开始时间
+    const rootPath = this.config.path; // 获取配置的根目录路径
+    const sourceId = this.config.id; // 获取数据源ID
+    log.info(`[LocalDataSource InitAllSource] 开始初始化所有数据源: ${rootPath}, SourceId: ${sourceId}`); // 记录初始化开始日志
 
     // 确定支持的文件扩展名
     let effectiveSupportedExts;
     if (this.config && this.config.supportedExts && this.config.supportedExts.length > 0) {
-      effectiveSupportedExts = this.config.supportedExts;
+      effectiveSupportedExts = this.config.supportedExts; // 使用配置中指定的支持扩展名
     } else {
-      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
-      log.warn(`[LocalDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`);
+      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin']; // 如果未配置，使用默认扩展名
+      log.warn(`[LocalDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`); // 记录使用默认值的警告
     }
 
-    // 设置并发限制
+    // 设置并发限制，限制同时处理的文件或目录数量
     const limit = pLimit(8);
 
-    // 初始化返回数据
-    let allModels = [];
-    let directoryStructure = []; // 完整目录结构（只包含文件夹）
-    let modelsByDirectory = new Map(); // 目录与模型名称的映射
+    // 初始化用于存储结果的数据结构
+    let allModels = []; // 存储所有找到的模型对象
+    let directoryStructure = []; // 存储完整的目录结构（只包含文件夹的相对路径）
+    let modelsByDirectory = new Map(); // 存储目录与其中模型名称列表的映射关系
 
+    // 检查根目录是否存在且可访问
     try {
       await fs.promises.access(rootPath);
     } catch (error) {
-      const duration = Date.now() - startTime;
+      const duration = Date.now() - startTime; // 计算耗时
       if (error.code === 'ENOENT') {
-        log.warn(`[LocalDataSource InitAllSource] 目录不存在: ${rootPath}. 耗时: ${duration}ms`);
+        log.warn(`[LocalDataSource InitAllSource] 目录不存在: ${rootPath}. 耗时: ${duration}ms`); // 目录不存在，记录警告并返回空结果
         return { allModels: [], directoryStructure: [], modelsByDirectory: new Map() };
       }
-      log.error(`[LocalDataSource InitAllSource] 访问模型目录时出错: ${rootPath}. 耗时: ${duration}ms`, error.message, error.stack);
+      log.error(`[LocalDataSource InitAllSource] 访问模型目录时出错: ${rootPath}. 耗时: ${duration}ms`, error.message, error.stack); // 访问目录出错，记录错误并返回空结果
       return { allModels: [], directoryStructure: [], modelsByDirectory: new Map() };
     }
 
-    // 递归遍历目录
+    // 定义递归遍历目录的异步函数
     const walk = async (currentDir, relativePath = '') => {
       try {
+        // 读取当前目录下的文件和子目录
         const files = await fs.promises.readdir(currentDir, { withFileTypes: true });
         
-        // 处理当前目录中的模型文件
+        // 过滤出当前目录中支持的模型文件
         const modelFiles = files.filter(f => f.isFile() && effectiveSupportedExts.some(ext => f.name.toLowerCase().endsWith(ext.toLowerCase())));
         
-        // 当前目录的模型名称列表
+        // 存储当前目录中的模型名称
         const modelsInCurrentDir = [];
 
-        // 并发处理模型文件
+        // 使用并发限制处理模型文件
         await Promise.all(modelFiles.map(modelFile => limit(async () => {
-          const modelFilePath = path.join(currentDir, modelFile.name);
-          const relativeModelFilePath = path.relative(rootPath, modelFilePath);
-          const associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json';
+          const modelFilePath = path.join(currentDir, modelFile.name); // 构建模型文件的完整路径
+          const relativeModelFilePath = path.relative(rootPath, modelFilePath); // 构建模型文件的相对路径
+          const associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json'; // 构建关联JSON文件的路径
           
-          let modelJsonInfo;
-          let jsonFileStats;
+          let modelJsonInfo; // 存储从JSON文件解析的模型信息
+          let jsonFileStats; // 存储关联JSON文件的统计信息
 
+          // 尝试获取关联JSON文件的统计信息
           try {
             jsonFileStats = await this.getFileStats(associatedJsonPath);
           } catch (e) {
-            log.warn(`[LocalDataSource InitAllSource] 无法获取关联JSON的统计信息: ${associatedJsonPath}`, e.message);
+            log.warn(`[LocalDataSource InitAllSource] 无法获取关联JSON的统计信息: ${associatedJsonPath}`, e.message); // 获取统计信息失败，记录警告
             jsonFileStats = null;
           }
 
+          // 如果成功获取到JSON文件统计信息，则尝试读取和解析JSON文件
           if (jsonFileStats) {
             try {
-              const jsonContent = await fs.promises.readFile(associatedJsonPath, 'utf-8');
-              modelJsonInfo = JSON.parse(jsonContent);
+              const jsonContent = await fs.promises.readFile(associatedJsonPath, 'utf-8'); // 读取JSON文件内容
+              modelJsonInfo = JSON.parse(jsonContent); // 解析JSON内容
             } catch (e) {
               if (e.code !== 'ENOENT') {
-                log.warn(`[LocalDataSource InitAllSource] 读取/解析JSON时出错 ${associatedJsonPath}: ${e.message}`);
+                log.warn(`[LocalDataSource InitAllSource] 读取/解析JSON时出错 ${associatedJsonPath}: ${e.message}`); // 读取或解析JSON出错（非文件不存在错误），记录警告
               }
-              modelJsonInfo = null;
+              modelJsonInfo = null; // 解析失败，模型信息设为null
             }
           }
           
-          const sourceConfig = { id: sourceId };
+          const sourceConfig = { id: sourceId }; // 构建数据源配置对象
+          // 解析单个模型文件，获取模型对象
           const modelObj = await parseSingleModelFile(modelFilePath, effectiveSupportedExts, sourceConfig, true, modelJsonInfo, jsonFileStats);
           
+          // 如果成功解析出模型对象，则添加到结果列表中
           if (modelObj) {
-            allModels.push(modelObj);
-            modelsInCurrentDir.push(modelObj.name);
+            allModels.push(modelObj); // 添加到所有模型列表
+            modelsInCurrentDir.push(modelObj.name); // 添加到当前目录的模型名称列表
           }
         })));
 
-        // 如果当前目录有模型，添加到映射中
+        // 如果当前目录有模型，添加到目录与模型名称的映射中
         if (modelsInCurrentDir.length > 0) {
-          const dirKey = relativePath || '/'; // 根目录用 '/' 表示
-          modelsByDirectory.set(dirKey, modelsInCurrentDir);
+          const dirKey = relativePath || '/'; // 根目录用 '/' 表示作为key
+          modelsByDirectory.set(dirKey, modelsInCurrentDir); // 设置目录与模型名称列表的映射
         }
 
-        // 处理子目录
+        // 过滤出当前目录下的子目录
         const subDirs = files.filter(f => f.isDirectory());
         
-        // 将子目录添加到目录结构中
+        // 将子目录的相对路径添加到目录结构中
         for (const subDir of subDirs) {
-          const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name;
-          directoryStructure.push(subDirRelativePath);
+          const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name; // 构建子目录的相对路径
+          directoryStructure.push(subDirRelativePath); // 添加到目录结构列表
         }
 
-        // 并发递归处理子目录
+        // 使用并发限制递归处理子目录
         await Promise.all(subDirs.map(subDir => limit(async () => {
-          const subDirPath = path.join(currentDir, subDir.name);
-          const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name;
-          await walk(subDirPath, subDirRelativePath);
+          const subDirPath = path.join(currentDir, subDir.name); // 构建子目录的完整路径
+          const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name; // 构建子目录的相对路径
+          await walk(subDirPath, subDirRelativePath); // 递归调用walk函数处理子目录
         })));
       } catch (error) {
+        // 遍历目录时出错处理
         if (error.code === 'ENOENT') {
-          log.warn(`[LocalDataSource InitAllSource] 遍历过程中目录不存在: ${currentDir}`);
+          log.warn(`[LocalDataSource InitAllSource] 遍历过程中目录不存在: ${currentDir}`); // 遍历过程中目录不存在，记录警告
         } else {
-          log.error(`[LocalDataSource InitAllSource] 遍历目录时出错: ${currentDir}`, error.message, error.stack);
+          log.error(`[LocalDataSource InitAllSource] 遍历目录时出错: ${currentDir}`, error.message, error.stack); // 其他遍历目录错误，记录错误
         }
       }
     };
@@ -150,12 +163,15 @@ class LocalDataSource extends DataSource {
     // 从根目录开始遍历
     await walk(rootPath);
 
-    const duration = Date.now() - startTime;
-    log.info(`[LocalDataSource InitAllSource] 完成. 路径: ${rootPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${directoryStructure.length} 个目录`);
+    const duration = Date.now() - startTime; // 计算总耗时
+    log.info(`[LocalDataSource InitAllSource] 完成. 路径: ${rootPath}, 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${directoryStructure.length} 个目录`); // 记录完成日志，包括耗时、模型数量和目录数量
     
+    // 缓存结果
     this.allModelsCache = allModels;
     this.directoryStructureCache = directoryStructure;
     this.modelsByDirectoryCache = modelsByDirectory;
+    
+    // 返回初始化结果
     return {
       allModels,
       directoryStructure,
