@@ -1,0 +1,224 @@
+/* src/renderer/styles/tree-view.css - Light Theme */
+
+:root {
+  --tree-font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+  --tree-font-size: 13px;
+  --tree-item-height: 22px;
+  --tree-indent-size: 10px;
+
+  --tree-text-color: #333;
+  --tree-icon-color: #666;
+  --tree-count-color: #888;
+
+  --tree-hover-bg-color: #f0f0f0; /* Lighter hover, less blue */
+  --tree-selected-bg-color: #0078D4; /* VSCode-like blue for selection */
+  --tree-selected-text-color: #ffffff; /* White text on selection */
+
+  --tree-border-color: #d1d1d1; /* Slightly darker border, for potential lines */
+}
+
+.tree-view-container {
+  font-family: var(--tree-font-family);
+  font-size: var(--tree-font-size);
+  color: var(--tree-text-color);
+  padding: 5px;
+  user-select: none; /* Prevent text selection during interaction */
+}
+
+.tree-node {
+  display: flex;
+  align-items: center;
+  height: var(--tree-item-height);
+  line-height: var(--tree-item-height);
+  cursor: pointer;
+  padding-right: 8px; /* Space for count or other elements */
+  white-space: nowrap; /* Prevent text wrapping */
+  overflow: hidden; /* Hide overflow */
+  text-overflow: ellipsis; /* Show ellipsis for long names */
+  font-weight: 400;
+  font-size: 13px;
+  letter-spacing: 0.1px;
+}
+
+.tree-node:hover {
+  background-color: var(--tree-hover-bg-color);
+}
+
+.tree-node.selected {
+  background-color: var(--tree-selected-bg-color);
+  color: var(--tree-selected-text-color);
+}
+
+.tree-node.selected .tree-node-arrow,
+.tree-node.selected .tree-node-icon,
+.tree-node.selected .tree-node-count {
+  color: var(--tree-selected-text-color); /* Ensure icons/count also change color */
+}
+
+.tree-node-indent {
+  display: inline-block;
+  width: var(--tree-indent-size);
+  height: 100%;
+  flex-shrink: 0; /* Prevent shrinking */
+}
+
+.tree-node-arrow {
+  display: inline-block;
+  width: 16px; /* Fixed width for arrow */
+  height: 100%;
+  text-align: center;
+  color: var(--tree-icon-color);
+  flex-shrink: 0;
+  transition: transform 0.1s ease-in-out;
+  font-size: 10px; /* Make unicode arrows a bit smaller */
+}
+
+.tree-node-arrow.expanded {
+  transform: rotate(90deg);
+}
+
+.tree-node-icon {
+  display: inline-block;
+  width: 16px; /* Fixed width for icon */
+  height: 100%;
+  margin-right: 4px;
+  text-align: center;
+  color: var(--tree-icon-color);
+  flex-shrink: 0;
+}
+
+/* 线性风格文件夹/文件图标（用纯CSS模拟） */
+.tree-node-icon.folder {
+  width: 14px;
+  height: 14px;
+  margin-right: 3px;
+  display: inline-block;
+  position: relative;
+}
+.tree-node-icon.folder::before {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 2px; top: 5px;
+  width: 12px; height: 8px;
+  border: 1.5px solid var(--tree-icon-color);
+  border-radius: 2px 2px 2px 2px;
+  background: none;
+}
+.tree-node-icon.folder::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 4px; top: 2px;
+  width: 6px; height: 4px;
+  border: 1.5px solid var(--tree-icon-color);
+  border-bottom: none;
+  border-radius: 2px 2px 0 0;
+  background: none;
+}
+
+.tree-node-icon.file {
+  width: 14px;
+  height: 14px;
+  margin-right: 3px;
+  display: inline-block;
+  position: relative;
+}
+.tree-node-icon.file::before {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 3px; top: 3px;
+  width: 10px; height: 12px;
+  border: 1.5px solid var(--tree-icon-color);
+  border-radius: 2px;
+  background: none;
+}
+.tree-node-icon.file::after {
+  content: "";
+  display: block;
+  position: absolute;
+  left: 8px; top: 3px;
+  width: 4px; height: 4px;
+  border-top: 1.5px solid var(--tree-icon-color);
+  border-right: 1.5px solid var(--tree-icon-color);
+  border-radius: 0 2px 0 0;
+  background: none;
+}
+
+.tree-node-name {
+  flex-grow: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tree-node-count {
+  margin-left: 16px; /* 更大间距 */
+  min-width: 40px;
+  text-align: right;
+  color: var(--tree-count-color);
+  font-size: 0.9em;
+  letter-spacing: 0.5px;
+}
+
+/* 树状连接线优化 */
+.tree-children {
+  margin-left: 0;
+  padding-left: 0;
+  border-left: none;
+  position: relative;
+}
+.tree-children > .tree-node-li {
+  position: relative;
+  padding-left: 10px; /* 更小的缩进 */
+}
+.tree-children > .tree-node-li::before {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  width: 10px;
+  height: 1px;
+  background: var(--tree-border-color);
+  z-index: 1;
+}
+.tree-children > .tree-node-li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  width: 1px;
+  height: 100%;
+  background: var(--tree-border-color);
+  z-index: 1;
+}
+.tree-children > .tree-node-li:last-child::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 0;
+  width: 1px;
+  height: calc(50%);
+  background: var(--tree-border-color);
+  z-index: 1;
+}
+
+/* 根节点不画线 */
+.tree-view-container > ul > .tree-node-li {
+  padding-left: 0;
+}
+.tree-view-container > ul > .tree-node-li::before,
+.tree-view-container > ul > .tree-node-li::after {
+  display: none;
+}
+
+.tree-children.collapsed {
+  display: none;
+}
+
+/* Add some styling for the LI elements themselves if needed */
+.tree-node-li {
+  list-style-type: none; /* Ensure no bullets */
+  padding: 0;
+  margin: 0;
+}
