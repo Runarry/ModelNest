@@ -239,6 +239,7 @@
   "filterPanel": {
     "baseModelTitle": "基础模型",
     "modelTypeTitle": "模型类型",
+    "tagsTitle": "标签",
     "clearFilters": "清空筛选条件",
     "noOptionsAvailable": "无可用选项"
   },

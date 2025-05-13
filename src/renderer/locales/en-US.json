@@ -238,6 +238,7 @@
   "filterPanel": {
     "baseModelTitle": "Base Model",
     "modelTypeTitle": "Model Type",
+    "tagsTitle": "Tags",
     "clearFilters": "Clear Filters",
     "noOptionsAvailable": "No options available"
   },

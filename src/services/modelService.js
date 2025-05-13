@@ -278,6 +278,7 @@ class ModelService {
 
       const baseModels = new Set();
       const modelTypes = new Set();
+      const tags = new Set();
 
       modelObjsToProcess.forEach(modelObj => {
         if (modelObj.baseModel && typeof modelObj.baseModel === 'string' && modelObj.baseModel.trim() !== '') {
@@ -286,14 +287,24 @@ class ModelService {
         if (modelObj.modelType && typeof modelObj.modelType === 'string' && modelObj.modelType.trim() !== '') {
           modelTypes.add(modelObj.modelType.trim().toLowerCase());
         }
+        if (modelObj.tags && Array.isArray(modelObj.tags)) {
+          if (typeof tag === 'string' && tag.trim() !== '') {
+            tags.add(tag.trim());
+          }
+        }
+        
+
       });
       
       const sortedBaseModels = Array.from(baseModels).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
       const sortedModelTypes = Array.from(modelTypes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-
+      const sortedTags = Array.from(tags).sort((a, b) =>
+        a.localeCompare(b, undefined, { sensitivity: 'base' })
+      );
       const options = {
         baseModels: sortedBaseModels,
         modelTypes: sortedModelTypes,
+        tags: sortedTags,
       };
       
       this.filterOptionsCache.set(sourceId, options);
@@ -301,7 +312,7 @@ class ModelService {
       return options;
     } catch (error) {
       log.error('[ModelService] Error in getAvailableFilterOptions:', error.message, error.stack);
-      return { baseModels: [], modelTypes: [] };
+      return { baseModels: [], modelTypes: [], tags:[] };
     }
   }
 }

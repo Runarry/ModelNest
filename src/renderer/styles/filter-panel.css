@@ -12,7 +12,10 @@
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
   padding: 15px;
   min-width: 280px; /* 根据内容调整 */
-  max-width: 350px;
+  max-width: 80%;
+  max-height: 80%;
+  overflow-y:auto;
+
   /* display: none; /* 由 JS 控制显隐 */
 }
 

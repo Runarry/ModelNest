@@ -19,7 +19,7 @@ let sourceReadonlyIndicator;
 
 // ===== Module State =====
 let models = [];
-let currentAppliedFilters = { baseModel: [], modelType: [] };
+let currentAppliedFilters = { baseModel: [], modelType: [], tags: [] };
 let filterPanelInstance = null;
 let displayMode = 'card'; // 'card' or 'list'
 let currentDirectory = null;
@@ -102,7 +102,10 @@ export async function initMainView(config, showDetailCallback) { // Make init as
 
     // Load blocked tags on initialization
     await _loadBlockedTags();
+
 }
+
+
 
 let _showDetail = (model) => logMessage('warn', "showDetailCallback not initialized.");
 
@@ -196,7 +199,7 @@ function setupGlobalTagsTooltip() {
 
 function handleFiltersApplied(newFilters) {
     logMessage('info', '[MainView] Filters applied:', newFilters);
-    currentAppliedFilters = newFilters || { baseModel: [], modelType: [] };
+    currentAppliedFilters = newFilters || { baseModel: [], modelType: [], tags: [] };
     if (currentSourceId) loadModels(currentSourceId, currentDirectory);
 }
 
@@ -225,10 +228,14 @@ export async function loadModels(sourceId, directory = null) {
 
     try {
         models = await listModels(sourceId, directory, currentAppliedFilters);
+
+
         if (directory === null) {
             subdirectories = await listSubdirectories(sourceId);
             renderDirectoryTabs();
         }
+
+
         // Setup or update virtual scroll regardless of mode, as it handles both now
         if (typeof VirtualScroll !== 'undefined') {
             setupOrUpdateVirtualScroll();

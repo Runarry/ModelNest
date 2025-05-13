@@ -14,10 +14,12 @@ class FilterPanel {
     this.availableFilters = {
       baseModels: [],
       modelTypes: [],
+      tags: [],
     };
     this.selectedFilters = {
       baseModel: [],
       modelType: [],
+      tags: [],
     };
 
     if (!this.container) {
@@ -50,6 +52,7 @@ class FilterPanel {
       const options = await getFilterOptions();
       this.availableFilters.baseModels = options.baseModels || [];
       this.availableFilters.modelTypes = options.modelTypes || [];
+      this.availableFilters.tags = options.tags || [];
       // Re-render with the fetched options
       this.render();
     } catch (error) {
@@ -68,6 +71,7 @@ class FilterPanel {
     // Use i18n for titles and texts
     const baseModelTitle = t('filterPanel.baseModelTitle', 'Base Models');
     const modelTypeTitle = t('filterPanel.modelTypeTitle', 'Model Types');
+    const tagsTitle = t('filterPanel.tagsTitle', 'Tags');
     const clearFiltersText = t('filterPanel.clearFilters', 'Clear Filters');
     const noOptionsText = t('filterPanel.noOptionsAvailable', 'No options available');
 
@@ -83,6 +87,12 @@ class FilterPanel {
           <h4>${modelTypeTitle}</h4>
           <div class="filter-options-group" data-filter-key="modelType">
             ${this.renderOptions(this.availableFilters.modelTypes, 'modelType', noOptionsText)}
+          </div>
+        </div>
+        <div class="filter-section">
+          <h4>${tagsTitle}</h4>
+          <div class="filter-options-group" data-filter-key="tags">
+            ${this.renderOptions(this.availableFilters.tags, 'tags', noOptionsText)}
           </div>
         </div>
         <div class="filter-actions">
@@ -148,6 +158,7 @@ class FilterPanel {
   clearFilters() {
     this.selectedFilters.baseModel = [];
     this.selectedFilters.modelType = [];
+    this.selectedFilters.tags = [];
     logMessage('info', '[FilterPanel] Filters cleared.');
     this.render(); // Re-render to uncheck checkboxes
     this.triggerFilterChange();
@@ -195,6 +206,7 @@ class FilterPanel {
     const options = await getFilterOptions(sourceIdToFetch);
     this.availableFilters.baseModels = options.baseModels || [];
     this.availableFilters.modelTypes = options.modelTypes || [];
+    this.availableFilters.tags = options.tags || [];
     this.render();
   }
 }
