@@ -660,6 +660,8 @@ class WebDavDataSource extends DataSource {
         currentSourceId,
         currentResolvedBasePath
       );
+
+      this.addfilterOptionsByModelObj(modelObj);
       // 注意：不再覆盖 jsonPath，使用 createWebDavModelObject 设置的相对路径
       // 原代码：
       // if (jsonFileToUse && jsonFileToUse.filename) {

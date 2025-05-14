@@ -235,6 +235,13 @@ async function listSubdirectories(sourceConfig, modelInfoCacheService) {
     }
 }
 
+async function getFilterOptions(sourceConfig, modelInfoCacheService) {
+    const ds = getDataSourceInstance(sourceConfig, modelInfoCacheService);
+    return ds.getFilterOptions();
+
+    
+}
+
 /**
  * Reads model detail using the appropriate data source instance.
  *
@@ -368,7 +375,6 @@ module.exports = {
     listSubdirectories,
     readModelDetail,
     getImageData,
-    getFileStats, // Export the new function
-    // 可以选择性地导出 getDataSourceInstance 如果其他模块需要直接访问实例
-    // getDataSourceInstance
+    getFileStats, 
+    getFilterOptions
 };

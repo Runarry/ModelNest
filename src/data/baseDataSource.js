@@ -1,6 +1,15 @@
+const { log } = require("electron-builder");
+
 class DataSource {
   constructor(config) {
     this.config = config;
+    this.filterOptions = 
+    {
+      baseModels: new Set(),
+      modelTypes: new Set(),
+      tags: new Set()
+    };
+    
   }
 
   /**
@@ -13,6 +22,28 @@ class DataSource {
   async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
     throw new Error(`'listModels' method must be implemented by subclass. Received directory: ${directory}, supportedExts: ${supportedExts}`);
   }
+
+
+  getFilterOptions(){
+    return this.filterOptions;
+
+  }
+
+  addfilterOptionsByModelObj(modelObj){
+    const tags = modelObj.tags;
+    const baseModel = modelObj.baseModel;
+    const modelType = modelObj.modelType;
+    // log.info(`[baseDataSource] Adding filter options for tags: ${tags}, baseModel: ${baseModel}, modelType: ${modelType}`);
+    // log.debug(`[baseDataSource] modelObj : ${JSON.stringify(modelObj, null, 2)}}`)
+
+    this.filterOptions.baseModels.add(baseModel);
+    this.filterOptions.modelTypes.add(modelType);  
+    this.filterOptions.tags.add(...tags);
+  }
+
+  
+
+
 
   /**
    * 读取并解析指定路径的模型详情 JSON 文件。

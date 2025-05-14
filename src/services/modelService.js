@@ -33,7 +33,6 @@ class ModelService {
     this.dataSourceService = dataSourceService;
     this.modelInfoCacheService = modelInfoCacheService;
     this.configService = configService;
-    this.filterOptionsCache = new Map(); // Cache for filter options by sourceId
     log.info('[Service] ModelService initialized with DataSourceService, ModelInfoCacheService, and ConfigService.');
   }
 
@@ -141,6 +140,7 @@ class ModelService {
       if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) )) {
         const baseModelFilter = (filters.baseModel && Array.isArray(filters.baseModel)) ? filters.baseModel.map(bm => bm.toLowerCase()) : [];
         const modelTypeFilter = (filters.modelType && Array.isArray(filters.modelType)) ? filters.modelType.map(mt => mt.toLowerCase()) : [];
+        
 
         modelObjs = modelObjs.filter(modelObj => {
           let passesBaseModel = true;
@@ -152,6 +152,8 @@ class ModelService {
           if (modelTypeFilter.length > 0) {
             passesModelType = modelObj.modelType && typeof modelObj.modelType === 'string' && modelTypeFilter.includes(modelObj.modelType.toLowerCase());
           }
+
+
           
           return passesBaseModel && passesModelType;
         });
@@ -188,10 +190,7 @@ class ModelService {
           }
         });
 
-        this.filterOptionsCache.set(sourceId, {
-          baseModels: Array.from(baseModels).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })),
-          modelTypes: Array.from(modelTypes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-        });
+
         log.debug(`[ModelService listModels] Updated filter options cache for source ${sourceId}`);
       }
 
@@ -246,75 +245,26 @@ class ModelService {
   }
 
   async getAvailableFilterOptions(sourceId = null, directory = '', supportedExtensions = null) {
-    log.info(`[ModelService] getAvailableFilterOptions called. sourceId: ${sourceId || 'all'}, directory: ${directory}`);
+    // 如果sourceId 为null，使用默认的
     if (!sourceId) {
       log.debug('[ModelService getAvailableFilterOptions] sourceId is null or undefined, returning empty options immediately.');
-      return { baseModels: [], modelTypes: [] };
+      return { baseModels: [], modelTypes: [],tags:[] };
+    }
+    const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
+    if (!sourceConfig) {
+      log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
+      return { baseModels: [], modelTypes: [], tags:[]  };
     }
 
-    if (this.filterOptionsCache.has(sourceId)) {
-      log.debug(`[ModelService getAvailableFilterOptions] Using cached filter options for source ${sourceId}`);
-      return this.filterOptionsCache.get(sourceId);
+    const filterOptions = await dataSourceInterface.getFilterOptions(sourceConfig, this.modelInfoCacheService);
+    if (!filterOptions) {
+      log.error(`[ModelService getAvailableFilterOptions] Failed to retrieve filter options for sourceId: ${sourceId}. Returning empty options.`);
+      return { baseModels: [], modelTypes: [],tags:[] };
     }
-
-    try {
-      let modelObjsToProcess = [];
-
-      const sourceConfig = await this.dataSourceService.getSourceConfig(sourceId);
-      if (!sourceConfig) {
-        log.warn(`[ModelService getAvailableFilterOptions] No configuration found for sourceId: ${sourceId}. Returning empty options.`);
-        return { baseModels: [], modelTypes: [] };
-      }
-
-      const extsToUse = supportedExtensions || await this.dataSourceService.getSupportedExtensions();
-
-      try {
-        modelObjsToProcess = await this.listModels(sourceId, '', {}, extsToUse, true); 
-        log.debug(`[ModelService getAvailableFilterOptions] Fetched ${modelObjsToProcess.length} modelObjs for source ${sourceId} to build filter options.`);
-      } catch (error) {
-        log.error(`[ModelService getAvailableFilterOptions] Error listing modelObjs for source ${sourceId}: ${error.message}`);
-        return { baseModels: [], modelTypes: [] };
-      }
-
-      const baseModels = new Set();
-      const modelTypes = new Set();
-      const tags = new Set();
-
-      modelObjsToProcess.forEach(modelObj => {
-        if (modelObj.baseModel && typeof modelObj.baseModel === 'string' && modelObj.baseModel.trim() !== '') {
-          baseModels.add(modelObj.baseModel.trim());
-        }
-        if (modelObj.modelType && typeof modelObj.modelType === 'string' && modelObj.modelType.trim() !== '') {
-          modelTypes.add(modelObj.modelType.trim().toLowerCase());
-        }
-        if (modelObj.tags && Array.isArray(modelObj.tags)) {
-          if (typeof tag === 'string' && tag.trim() !== '') {
-            tags.add(tag.trim());
-          }
-        }
-        
-
-      });
-      
-      const sortedBaseModels = Array.from(baseModels).sort((a, b) => a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' }));
-      const sortedModelTypes = Array.from(modelTypes).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }));
-      const sortedTags = Array.from(tags).sort((a, b) =>
-        a.localeCompare(b, undefined, { sensitivity: 'base' })
-      );
-      const options = {
-        baseModels: sortedBaseModels,
-        modelTypes: sortedModelTypes,
-        tags: sortedTags,
-      };
-      
-      this.filterOptionsCache.set(sourceId, options);
-      log.info(`[ModelService getAvailableFilterOptions] Options generated and cached for source ${sourceId} - BaseModels: ${sortedBaseModels.length}, ModelTypes: ${sortedModelTypes.length}`);
-      return options;
-    } catch (error) {
-      log.error('[ModelService] Error in getAvailableFilterOptions:', error.message, error.stack);
-      return { baseModels: [], modelTypes: [], tags:[] };
-    }
+    log.debug(`[ModelService getAvailableFilterOptions] Successfully retrieved filter options for sourceId: ${sourceId}. Options:`, filterOptions);
+    return filterOptions;
   }
+  
 }
 
 module.exports = ModelService;

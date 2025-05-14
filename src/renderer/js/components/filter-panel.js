@@ -49,11 +49,11 @@ class FilterPanel {
    */
   async init() {
     try {
-      const options = await getFilterOptions();
-      this.availableFilters.baseModels = options.baseModels || [];
-      this.availableFilters.modelTypes = options.modelTypes || [];
-      this.availableFilters.tags = options.tags || [];
-      // Re-render with the fetched options
+      // const options = await getFilterOptions();
+      // this.availableFilters.baseModels = options.baseModels || [];
+      // this.availableFilters.modelTypes = options.modelTypes || [];
+      // this.availableFilters.tags = options.tags || [];
+      // // Re-render with the fetched options
       this.render();
     } catch (error) {
       logMessage('error', '[FilterPanel] init() - Error fetching filter options:', error.message, error.stack);
@@ -204,9 +204,14 @@ class FilterPanel {
    */
   async updateOptions(sourceIdToFetch) {
     const options = await getFilterOptions(sourceIdToFetch);
-    this.availableFilters.baseModels = options.baseModels || [];
-    this.availableFilters.modelTypes = options.modelTypes || [];
-    this.availableFilters.tags = options.tags || [];
+    const baseModelsArray = Array.from(options.baseModels ||[]);
+    const modelTypesArray = Array.from(options.modelTypes ||[]);
+    const tagsArray = Array.from(options.tags ||[]);
+
+
+    this.availableFilters.baseModels = baseModelsArray;
+    this.availableFilters.modelTypes = modelTypesArray;
+    this.availableFilters.tags = tagsArray;
     this.render();
   }
 }
