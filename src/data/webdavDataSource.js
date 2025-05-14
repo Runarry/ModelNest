@@ -857,7 +857,7 @@ class WebDavDataSource extends DataSource {
       throw new Error('Data to write must be a string for WebDAV model JSON.');
     }
 
-    const resolvedPath = this._resolvePath(jsonFilePath);
+    const resolvedPath = jsonFilePath;
     this.logger.info(`Attempting to write model JSON to WebDAV: ${resolvedPath} (relative: ${jsonFilePath})`);
 
     try {
