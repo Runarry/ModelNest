@@ -3,18 +3,74 @@ const __DEV__ = process.env.IS_DEV_MODE === 'true';
 const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dialog here
 const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
+const fs = require('fs-extra'); // Add fs-extra for file operations
 
 const imageCache = require('./src/common/imageCache');
 const os = require('os');
 const crypto = require('crypto');
 const log = require('electron-log'); // electron-log is still used for direct logging in main.js if needed, and by logger.js
 const { initializeLogger } = require('./src/utils/logger'); // Import the logger initializer
+const { cleanupUserData } = require('./scripts/cleanup-handler'); // Import cleanup handler
 
 const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); // Import the model library IPC initializer
 const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app IPC initializer
 const { initializeModelCrawlerIPC } = require('./src/ipc/modelCrawlerIPC.js'); // Import the model crawler IPC initializer
 const { createWindow, getMainWindow } = require('./src/utils/windowManager'); // Import window manager
 let services = null; // Declare services globally
+
+// 监听应用卸载前的退出事件，用于清理用户数据
+app.on('will-quit', async (event) => {
+  // 检查是否是卸载过程
+  // 由于Electron没有直接的方法判断应用是否正在被卸载，我们使用日志记录作为安全措施
+  log.info('[Lifecycle] 应用将要退出，检查是否需要清理用户数据');
+  
+  // 检测临时标记文件是否存在（卸载进程可能创建此文件）
+  try {
+    const userDataPath = app.getPath('userData');
+    const flagFile = path.join(userDataPath, '.uninstall_cleanup_required');
+    
+    // 如果标记文件存在，执行清理
+    let performCleanup = false;
+    try {
+      await fs.promises.access(flagFile);
+      performCleanup = true;
+      log.info('[Cleanup] 检测到卸载标记文件，将执行清理');
+    } catch (flagError) {
+      // 文件不存在，这可能是正常退出而不是卸载
+      log.info('[Cleanup] 未检测到卸载标记，跳过清理');
+    }
+    
+    if (performCleanup) {
+      event.preventDefault(); // 暂停退出过程，直到清理完成
+      
+      log.info('[Cleanup] 开始清理用户数据...');
+      // 执行清理
+      try {
+        const result = await cleanupUserData(userDataPath, true, true);
+        if (result.success) {
+          log.info('[Cleanup] 用户数据清理成功');
+        } else {
+          log.warn('[Cleanup] 用户数据清理部分失败:', result.errors);
+        }
+        
+        // 清理完成后，删除标记文件
+        try {
+          await fs.promises.unlink(flagFile);
+          log.info('[Cleanup] 卸载标记文件已删除');
+        } catch (unlinkError) {
+          log.warn('[Cleanup] 无法删除卸载标记文件:', unlinkError.message);
+        }
+      } catch (cleanupError) {
+        log.error('[Cleanup] 清理用户数据时出错:', cleanupError.message);
+      }
+      
+      // 继续退出应用
+      app.quit();
+    }
+  } catch (error) {
+    log.error('[Cleanup] 处理卸载清理时遇到错误:', error.message);
+  }
+});
 
 app.whenReady().then(async () => { // 改为 async 回调
   log.info('[Lifecycle] 应用启动，准备初始化主进程');
@@ -98,7 +154,6 @@ ipcMain.handle('updater.downloadUpdate', async () => {
       // Optionally send an error status back if needed
     }
   });
-
 
 
 app.on('activate', function () {
