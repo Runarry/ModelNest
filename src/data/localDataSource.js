@@ -321,26 +321,7 @@ class LocalDataSource extends DataSource {
     return paths;
   }
 
-  /**
-   * Generates a path identifier for listModels cache.
-   * @param {string} normalizedDirectory - Normalized directory path.
-   * @param {boolean} showSubdirectory - Whether subdirectories are included.
-   * @param {string[]} supportedExts - Array of supported extensions.
-   * @returns {string} The path identifier.
-   * @private
-   */
-  _generateListModelsPathIdentifier(normalizedDirectory, showSubdirectory, supportedExts) {
-    // Ensure directoryPath is normalized (e.g., forward slashes, no trailing slash unless root)
-    let dirPath = normalizedDirectory.replace(/\\/g, '/');
-    if (dirPath.endsWith('/') && dirPath.length > 1) {
-        dirPath = dirPath.slice(0, -1);
-    }
 
-    const params = new URLSearchParams();
-    params.append('showSubDir', String(showSubdirectory));
-    params.append('exts', supportedExts.slice().sort().join(',')); // Sort exts for consistency
-    return `${dirPath}?${params.toString()}`;
-  }
 
   /**
    * Lists models from the local file system.
@@ -371,7 +352,10 @@ class LocalDataSource extends DataSource {
     if (showSubdirectory === true){
       for (const [key, names] of this.modelsByDirectoryMap) {
         if (key.startsWith(normalizedDirectory + "/")) {
-          names.forEach(name => uniqueNames.add(name));
+          const subPath = key.slice((normalizedDirectory + "/").length);
+          if (subPath && !subPath.includes("/")) {
+            names.forEach(name => uniqueNames.add(name));
+          }
         }
       }
 
