@@ -166,3 +166,5 @@ ipcMain.handle('open-folder-dialog', async (event) => {
     return result.filePaths[0];
   }
 });
+
+// The duplicate handlers are removed, as they're already defined in appIPC.js

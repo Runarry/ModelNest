@@ -56,6 +56,7 @@ downloadUpdate: () => ipcRenderer.invoke('updater.downloadUpdate'), // <-- 添�
 
 clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片缓存清理接口
   getImageCacheSize: () => ipcRenderer.invoke('get-image-cache-size'), // 添加获取缓存大小的接口
+  getCacheStats: () => ipcRenderer.invoke('get-cache-stats'), // 添加获取图片缓存统计的接口
   getPackageInfo: () => ipcRenderer.invoke('get-package-info'), // 添加获取 package.json 信息的接口
   getProcessVersions: () => ipcRenderer.invoke('get-process-versions'), // 添加获取 process.versions 的接口
   sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo),
@@ -68,4 +69,11 @@ clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片�
   // Add API to get blocked tags from config
   getBlockedTags: () => ipcRenderer.invoke('get-blocked-tags'),
 });
+
+// 也将API暴露给window.electronAPI，便于在更多地方使用
+contextBridge.exposeInMainWorld('electronAPI', {
+  clearImageCache: () => ipcRenderer.invoke('clear-image-cache'),
+  getCacheStats: () => ipcRenderer.invoke('get-cache-stats')
+});
+
 console.log('[Preload] API exposed successfully.');

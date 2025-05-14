@@ -165,6 +165,34 @@ function initializeAppIPC(services) {
     }
   });
 
+  // 获取图片缓存统计信息
+  ipcMain.handle('get-cache-stats', async () => {
+    log.info('[IPC] get-cache-stats 请求');
+    try {
+      // 获取缓存基本统计
+      const stats = imageCache.getStats();
+      
+      // 获取当前缓存大小
+      const currentCacheSize = await imageCache.getCurrentCacheSizeBytes();
+      
+      // 获取最大缓存限制
+      const maxCacheSizeMB = imageCache.config.maxCacheSizeMB;
+      
+      // 合并统计结果
+      const fullStats = {
+        ...stats,
+        currentCacheSize,
+        maxCacheSizeMB
+      };
+      
+      log.info(`[IPC] 返回图片缓存统计: ${JSON.stringify(fullStats, null, 2)}`);
+      return fullStats;
+    } catch (error) {
+      log.error('[IPC] 获取图片缓存统计失败:', error.message, error.stack);
+      throw error;
+    }
+  });
+
   // 获取 process.versions 信息
   ipcMain.handle('get-process-versions', () => {
     log.info('[IPC] get-process-versions 请求');

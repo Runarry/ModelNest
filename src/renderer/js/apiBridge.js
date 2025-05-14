@@ -140,3 +140,16 @@ export const getImageCacheSize = api.getImageCacheSize;
 export const getProcessVersions = api.getProcessVersions; // 添加 getProcessVersions
 export const getFilterOptions = api.getFilterOptions;
 export const getBlockedTags = api.getBlockedTags; // Add getBlockedTags API
+
+/**
+ * 获取图片缓存统计信息
+ * @returns {Promise<Object>} 缓存统计数据
+ */
+export async function getCacheStats() {
+  try {
+    return await window.electronAPI.getCacheStats();
+  } catch (error) {
+    logMessage('error', '获取缓存统计失败:', error);
+    throw error;
+  }
+}

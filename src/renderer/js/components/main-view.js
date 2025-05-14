@@ -5,6 +5,7 @@ import { CrawlStatusModal } from './crawl-status-modal.js';
 import FilterPanel from './filter-panel.js';
 import { BlobUrlCache } from '../core/blobUrlCache.js';
 import { VirtualScroll } from '../../vendor/js-booster/js-booster.js'; // Assuming js-booster is available
+import debugCacheStats from './debug-cache-stats.js'; // 引入缓存统计面板
 
 // ===== DOM Element References =====
 let sourceSelect;
