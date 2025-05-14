@@ -31,7 +31,7 @@ const DEFAULT_CONFIG = {
       ttlSeconds: {
          modelJsonInfo: 604800 // 7 days TTL for model_json_info_cache items in L2
       },
-      dbPath: "", // User configurable, if empty, defaults to app.getPath('userData')/ModelNestCache/model_cache.sqlite
+      dbPath: "", // User configurable, if empty, defaults to app.getPath('userData')/cache/model_cache.sqlite
       maxItems: { // Max items for L2 tables (relevant for cleanup)
           modelJsonInfo: 5000 // Max items for the model_json_info_cache table
       }

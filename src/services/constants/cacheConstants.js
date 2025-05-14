@@ -1,4 +1,4 @@
-const DEFAULT_DB_DIR_NAME = 'ModelNestCache';
+const DEFAULT_DB_DIR_NAME = 'cache';
 const DEFAULT_DB_FILE_NAME = 'model_cache.sqlite';
 
 /**

@@ -58,6 +58,7 @@ clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片�
   getImageCacheSize: () => ipcRenderer.invoke('get-image-cache-size'), // 添加获取缓存大小的接口
   getCacheStats: () => ipcRenderer.invoke('get-cache-stats'), // 添加获取图片缓存统计的接口
   migrateImageCache: () => ipcRenderer.invoke('migrate-image-cache'), // 添加图片缓存迁移的接口
+  migrateModelCache: () => ipcRenderer.invoke('migrate-model-cache'), // 添加模型缓存迁移的接口
   getPackageInfo: () => ipcRenderer.invoke('get-package-info'), // 添加获取 package.json 信息的接口
   getProcessVersions: () => ipcRenderer.invoke('get-process-versions'), // 添加获取 process.versions 的接口
   sendRendererError: (errorInfo) => ipcRenderer.send('renderer-error', errorInfo),

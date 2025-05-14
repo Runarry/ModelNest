@@ -4,6 +4,7 @@
  */
 
 import { getCacheStats, logMessage } from '../apiBridge.js';
+import { migrateImageCache, migrateModelCache } from '../apiBridge.js';
 
 class DebugCacheStats {
   constructor() {
@@ -108,9 +109,53 @@ class DebugCacheStats {
     `;
     clearCacheBtn.onclick = () => this.clearCache();
     
+    // 添加缓存迁移按钮容器
+    const migrationContainer = document.createElement('div');
+    migrationContainer.style.cssText = `
+      width: 100%;
+      margin-top: 5px;
+      display: flex;
+      justify-content: space-between;
+    `;
+    
+    // 图片缓存迁移按钮
+    const migrateImgCacheBtn = document.createElement('button');
+    migrateImgCacheBtn.textContent = '迁移图片缓存';
+    migrateImgCacheBtn.style.cssText = `
+      background: #474;
+      border: none;
+      color: #fff;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    migrateImgCacheBtn.onclick = () => this.migrateImageCache();
+    
+    // 模型缓存迁移按钮
+    const migrateModelCacheBtn = document.createElement('button');
+    migrateModelCacheBtn.textContent = '迁移模型缓存';
+    migrateModelCacheBtn.style.cssText = `
+      background: #447;
+      border: none;
+      color: #fff;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    migrateModelCacheBtn.onclick = () => this.migrateModelCache();
+    
+    // 添加按钮到容器
+    migrationContainer.appendChild(migrateImgCacheBtn);
+    migrationContainer.appendChild(migrateModelCacheBtn);
+    
     footer.appendChild(refreshBtn);
     footer.appendChild(clearCacheBtn);
     panel.appendChild(footer);
+    
+    // 添加迁移按钮容器
+    panel.appendChild(migrationContainer);
 
     document.body.appendChild(panel);
     this.container = panel;
@@ -302,6 +347,44 @@ class DebugCacheStats {
     } catch (error) {
       logMessage('error', '清除缓存失败:', error);
       alert(`清除缓存失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 迁移图片缓存
+   */
+  async migrateImageCache() {
+    try {
+      const statsContainer = document.getElementById('cacheStatsContent');
+      statsContainer.innerHTML = '<p>正在迁移图片缓存...</p>';
+      
+      await migrateImageCache();
+      logMessage('info', '图片缓存迁移成功');
+      
+      // 刷新统计信息
+      setTimeout(() => this.updateStats(), 500);
+    } catch (error) {
+      logMessage('error', '迁移图片缓存失败:', error);
+      alert(`迁移图片缓存失败: ${error.message}`);
+    }
+  }
+
+  /**
+   * 迁移模型缓存
+   */
+  async migrateModelCache() {
+    try {
+      const statsContainer = document.getElementById('cacheStatsContent');
+      statsContainer.innerHTML = '<p>正在迁移模型缓存...</p>';
+      
+      await migrateModelCache();
+      logMessage('info', '模型缓存迁移成功');
+      
+      // 刷新统计信息
+      setTimeout(() => this.updateStats(), 500);
+    } catch (error) {
+      logMessage('error', '迁移模型缓存失败:', error);
+      alert(`迁移模型缓存失败: ${error.message}`);
     }
   }
 }

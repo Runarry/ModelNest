@@ -219,6 +219,22 @@ function initializeAppIPC(services) {
     }
   });
 
+  // 手动触发模型信息缓存迁移
+  ipcMain.handle('migrate-model-cache', async () => {
+    log.info('[IPC] migrate-model-cache 请求');
+    try {
+      if (!services.modelInfoCacheService) {
+        throw new Error('ModelInfoCacheService 未初始化');
+      }
+      const result = await services.modelInfoCacheService.manualMigrateFromOldLocation();
+      log.info('[IPC] 模型信息缓存迁移完成:', result);
+      return result;
+    } catch (error) {
+      log.error('[IPC] 模型信息缓存迁移失败:', error.message, error.stack);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 获取 process.versions 信息
   ipcMain.handle('get-process-versions', () => {
     log.info('[IPC] get-process-versions 请求');

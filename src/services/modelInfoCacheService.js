@@ -81,6 +81,9 @@ class ModelInfoCacheService {
             await fs.ensureDir(path.dirname(this.dbPath));
             this.logger.info(`Ensured directory for SQLite DB: ${path.dirname(this.dbPath)}`);
 
+            // 检查并尝试从旧位置迁移数据库
+            await this._migrateFromOldDbLocation();
+
             this.db = new Database(this.dbPath, { verbose: this.logger.debug.bind(this.logger) });
             this.logger.info(`SQLite database connected at: ${this.dbPath}`);
 
@@ -711,6 +714,120 @@ class ModelInfoCacheService {
         if (this._initialCleanupTimeoutId) {
             clearTimeout(this._initialCleanupTimeoutId);
             this._initialCleanupTimeoutId = null;
+        }
+    }
+
+    /**
+     * 检查并迁移旧位置的数据库文件到新位置
+     * @returns {Promise<void>}
+     * @private
+     */
+    async _migrateFromOldDbLocation() {
+        // 构建旧目录和文件路径
+        const userDataPath = app.getPath('userData');
+        const oldDirName = 'ModelNestCache';
+        const oldDbPath = path.join(userDataPath, oldDirName, DEFAULT_DB_FILE_NAME);
+        
+        // 判断新旧路径是否相同
+        if (this.dbPath === oldDbPath) {
+            this.logger.debug('Old and new database paths are identical, no migration needed.');
+            return;
+        }
+        
+        // 检查新文件是否已存在
+        try {
+            await fs.access(this.dbPath);
+            this.logger.debug(`Database file already exists at the new location: ${this.dbPath}`);
+            // 新位置已有文件，无需迁移
+            return;
+        } catch (err) {
+            // 新位置没有文件，继续迁移
+        }
+        
+        // 检查旧文件是否存在
+        try {
+            await fs.access(oldDbPath);
+            this.logger.info(`Found database file at old location: ${oldDbPath}`);
+        } catch (err) {
+            // 旧文件不存在，没有什么可迁移的
+            this.logger.debug('No database file found at old location. Fresh start.');
+            return;
+        }
+        
+        // 迁移文件
+        try {
+            this.logger.info(`Migrating database from ${oldDbPath} to ${this.dbPath}`);
+            
+            // 确保目标目录存在
+            await fs.ensureDir(path.dirname(this.dbPath));
+            
+            // 复制数据库文件（包括可能存在的WAL和SHM文件）
+            await fs.copy(oldDbPath, this.dbPath);
+            
+            // 复制WAL和SHM文件（如果存在）
+            const walFile = `${oldDbPath}-wal`;
+            const shmFile = `${oldDbPath}-shm`;
+            
+            try {
+                await fs.access(walFile);
+                await fs.copy(walFile, `${this.dbPath}-wal`);
+                this.logger.debug(`Copied WAL file to new location`);
+            } catch (walErr) {
+                // WAL文件不存在，不需要复制
+            }
+            
+            try {
+                await fs.access(shmFile);
+                await fs.copy(shmFile, `${this.dbPath}-shm`);
+                this.logger.debug(`Copied SHM file to new location`);
+            } catch (shmErr) {
+                // SHM文件不存在，不需要复制
+            }
+            
+            this.logger.info(`Database migration completed successfully`);
+        } catch (copyError) {
+            this.logger.error(`Failed to migrate database: ${copyError.message}`, copyError);
+            // 迁移失败，但不阻止服务继续初始化
+        }
+    }
+
+    /**
+     * 手动执行从旧路径的迁移（用于通过IPC调用）
+     * @returns {Promise<{success: boolean, message: string}>}
+     */
+    async manualMigrateFromOldLocation() {
+        this.logger.info('Manual migration from old database location requested');
+        
+        try {
+            await this._migrateFromOldDbLocation();
+            
+            // 迁移完成后尝试重新连接数据库（如果当前未连接）
+            if (!this.db && this.isEnabled) {
+                try {
+                    this.db = new Database(this.dbPath, { verbose: this.logger.debug.bind(this.logger) });
+                    this.db.pragma('journal_mode = WAL');
+                    this.db.pragma('synchronous = NORMAL');
+                    this._createTables();
+                    this.logger.info('Successfully reconnected to database after migration');
+                } catch (dbError) {
+                    this.logger.error(`Failed to reconnect to database after migration: ${dbError.message}`);
+                    return { 
+                        success: false, 
+                        message: `Migration completed but failed to reconnect: ${dbError.message}` 
+                    };
+                }
+            }
+            
+            return { 
+                success: true, 
+                message: 'Migration from old database location completed successfully' 
+            };
+        } catch (error) {
+            this.logger.error(`Manual migration failed: ${error.message}`, error);
+            return { 
+                success: false, 
+                message: `Migration failed: ${error.message}` 
+            };
         }
     }
 }
