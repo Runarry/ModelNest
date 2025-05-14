@@ -653,13 +653,17 @@ class WebDavDataSource extends DataSource {
 
     try {
       const modelObj = createWebDavModelObject(
-        modelFile, 
-        imageFileToUse, 
-        jsonFileToUse,  
+        modelFile,
+        imageFileToUse,
+        jsonFileToUse,
         modelJsonInfo,
         currentSourceId,
-        currentResolvedBasePath 
+        currentResolvedBasePath
       );
+      // 修复点：补充 jsonPath 字段，便于后续查找
+      if (jsonFileToUse && jsonFileToUse.filename) {
+        modelObj.jsonPath = jsonFileToUse.filename;
+      }
       const duration = Date.now() - startTime;
       this.logger.debug(`_buildModelEntry: Model object created for ${modelFile.filename}, Duration: ${duration}ms`);
       return modelObj;
@@ -900,54 +904,64 @@ class WebDavDataSource extends DataSource {
           );
           
           // 2. Find and update the model in allModelsCache
-          const modelFileBaseName = path.posix.basename(jsonFilePath, '.json');
-          const dirName = path.posix.dirname(jsonFilePath);
-          
-          // Ensure _allItemsCache is fresh
-          await this._populateAllItemsCacheIfNeeded(this._resolvePath('/'));
-          
-          const potentialModelFile = this._allItemsCache.find(item =>
-            item.type === 'file' &&
-            path.posix.dirname(item.relativePath) === dirName &&
-            path.posix.basename(item.relativePath, path.posix.extname(item.relativePath)) === modelFileBaseName &&
-            !item.relativePath.endsWith('.json')
+          // 优先用 jsonPath 精确查找
+          let modelIndex = this.allModelsCache.findIndex(model =>
+            model.jsonPath === jsonFilePath
           );
-          
-          if (potentialModelFile) {
-            // Find the model in allModelsCache
-            const modelIndex = this.allModelsCache.findIndex(model =>
-              model.file === potentialModelFile.filename ||
-              model.relativePath === potentialModelFile.relativePath
-            );
-            
-            if (modelIndex !== -1) {
-              const modelToUpdate = this.allModelsCache[modelIndex];
-              this.logger.info(`Updating model in allModelsCache: ${modelToUpdate.file || modelToUpdate.relativePath}`);
-              
-              // Re-build the model object with new JSON data
-              const updatedModelObj = await this._buildModelEntry(
-                potentialModelFile,
-                sourceId,
-                this._resolvePath('/'),
-                new Map([[potentialModelFile.filename, dataToWrite]])
+          let modelToUpdate = null;
+          let potentialModelFile = null;
+
+          if (modelIndex !== -1) {
+            modelToUpdate = this.allModelsCache[modelIndex];
+            // 通过 jsonPath 找到的模型，反查其文件
+            if (modelToUpdate.file) {
+              potentialModelFile = this._allItemsCache.find(item =>
+                item.type === 'file' &&
+                item.filename === modelToUpdate.file
               );
-              
-              if (updatedModelObj) {
-                // Preserve the relativePath
-                if (modelToUpdate.relativePath) {
-                  updatedModelObj.relativePath = modelToUpdate.relativePath;
-                }
-                
-                // Update the model in allModelsCache
-                this.allModelsCache[modelIndex] = updatedModelObj;
-                this.logger.info(`Successfully updated model in allModelsCache`);
-              } else {
-                this.logger.warn(`Re-building model after JSON update returned null. Cache might be inconsistent until next InitAllSource.`);
-              }
-            } else {
-              this.logger.info(`Model for JSON ${jsonFilePath} not found in allModelsCache. It will be processed by the next InitAllSource.`);
             }
-            
+          } else {
+            // 兼容旧逻辑兜底
+            const modelFileBaseName = path.posix.basename(jsonFilePath, '.json');
+            const dirName = path.posix.dirname(jsonFilePath);
+            await this._populateAllItemsCacheIfNeeded(this._resolvePath('/'));
+            potentialModelFile = this._allItemsCache.find(item =>
+              item.type === 'file' &&
+              path.posix.dirname(item.relativePath) === dirName &&
+              path.posix.basename(item.relativePath, path.posix.extname(item.relativePath)) === modelFileBaseName &&
+              !item.relativePath.endsWith('.json')
+            );
+            if (potentialModelFile) {
+              modelIndex = this.allModelsCache.findIndex(model =>
+                model.file === potentialModelFile.filename ||
+                model.relativePath === potentialModelFile.relativePath
+              );
+              if (modelIndex !== -1) {
+                modelToUpdate = this.allModelsCache[modelIndex];
+              }
+            }
+          }
+
+          if (modelToUpdate && potentialModelFile) {
+            this.logger.info(`Updating model in allModelsCache: ${modelToUpdate.file || modelToUpdate.relativePath}`);
+            // Re-build the model object with new JSON data
+            const updatedModelObj = await this._buildModelEntry(
+              potentialModelFile,
+              sourceId,
+              this._resolvePath('/'),
+              new Map([[potentialModelFile.filename, dataToWrite]])
+            );
+            if (updatedModelObj) {
+              // Preserve the relativePath
+              if (modelToUpdate.relativePath) {
+                updatedModelObj.relativePath = modelToUpdate.relativePath;
+              }
+              // Update the model in allModelsCache
+              this.allModelsCache[modelIndex] = updatedModelObj;
+              this.logger.info(`Successfully updated model in allModelsCache`);
+            } else {
+              this.logger.warn(`Re-building model after JSON update returned null. Cache might be inconsistent until next InitAllSource.`);
+            }
             // Invalidate MODEL_DETAIL cache
             await this.modelInfoCacheService.invalidateCacheEntry(
               CacheDataType.MODEL_DETAIL,
@@ -955,7 +969,7 @@ class WebDavDataSource extends DataSource {
               potentialModelFile.relativePath
             );
           } else {
-            this.logger.warn(`Could not determine associated model file for JSON: ${jsonFilePath}. Manual cache clear might be needed.`);
+            this.logger.warn(`Model for JSON ${jsonFilePath} not found in allModelsCache. It will be processed by the next InitAllSource.`);
           }
         }
       } catch (cacheUpdateError) {
