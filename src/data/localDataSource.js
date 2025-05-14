@@ -125,7 +125,7 @@ class LocalDataSource extends DataSource {
             modelObj.relativePath = relativePath.replace(/\\/g, '/');
             log.debug(`[InitAllSource walk] Model: ${modelObj.name}, Assigned relativePath: '${modelObj.relativePath}' (from walk's current relativePath: '${relativePath}')`);
             allModels.push(modelObj); // 添加到所有模型列表
-            modelsInCurrentDir.push(modelObj.name); // 添加到当前目录的模型名称列表
+            modelsInCurrentDir.push(modelObj.file); 
           }
         })));
 
@@ -362,7 +362,7 @@ class LocalDataSource extends DataSource {
     }
 
     const result = this.allModelsCache.filter(model =>
-      model && model.name && uniqueNames.has(model.name));
+      model && model.file && uniqueNames.has(model.file));
 
     if (!result) return [];
     return result;

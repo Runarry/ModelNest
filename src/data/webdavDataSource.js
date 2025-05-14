@@ -250,7 +250,7 @@ class WebDavDataSource extends DataSource {
           if (!modelsByDirectory.has(dirKey)) {
             modelsByDirectory.set(dirKey, []);
           }
-          modelsByDirectory.get(dirKey).push(modelObj.name);
+          modelsByDirectory.get(dirKey).push(modelObj.file);
         }
       }
     } catch (error) {
@@ -739,7 +739,7 @@ class WebDavDataSource extends DataSource {
     }
 
     const result = this.allModelsCache.filter(model =>
-      model && model.name && uniqueNames.has(model.name));
+      model && model.file && uniqueNames.has(model.file));
 
     if (!result) return [];
     return result;
