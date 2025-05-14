@@ -1,4 +1,4 @@
-const { log } = require("electron-builder");
+const log = require("electron-log");
 
 class DataSource {
   constructor(config) {

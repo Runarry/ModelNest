@@ -7,6 +7,8 @@ files:
   - package.json
   # Assets
   - assets/**
+  # Scripts directory needed for cleanup-handler
+  - scripts/**
   # Bundled renderer code
   - from: dist/renderer
     to: dist/renderer
