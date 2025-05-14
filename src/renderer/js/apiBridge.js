@@ -41,6 +41,7 @@ export const clearImageCache = api.clearImageCache;
 export const getAppVersion = api.getAppVersion;
 export const getPackageInfo = api.getPackageInfo; // 导出 getPackageInfo
 export const getAllSourceConfigs = api.getAllSourceConfigs;
+export const migrateImageCache = api.migrateImageCache; // 导出缓存迁移函数
 // You might also export the entire api object if needed,
 // but exporting individual functions is generally preferred for clarity.
 // export default api;

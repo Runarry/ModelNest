@@ -18,6 +18,23 @@ const sharp = require('sharp');
 const crypto = require('crypto'); // 添加加密模块用于生成hash
 const log = require('electron-log'); // 导入 electron-log
 const Database = require('better-sqlite3'); // 替换为 better-sqlite3
+const { app } = require('electron'); // 引入app模块用于获取用户数据目录
+
+// 获取用户数据目录
+const getUserDataPath = () => {
+    try {
+        // 在主进程中，app对象是可用的
+        if (app && typeof app.getPath === 'function') {
+            return app.getPath('userData');
+        }
+    } catch (error) {
+        log.warn('[ImageCache] 无法获取Electron userData路径:', error.message);
+        // 发生错误，回退到备选方案
+    }
+    
+    // 在渲染进程或测试中使用，提供一个合理的备选方案
+    return path.join(os.homedir(), '.modelnest');
+};
 
 // MIME 类型与扩展名映射
 const mimeToExt = {
@@ -36,12 +53,12 @@ const defaultExt = '.bin'; // 未知或不支持的类型的默认扩展名
 
 // 默认配置
 const defaultConfig = {
-    cacheDir: path.join(process.cwd(), 'cache', 'images'),
+    cacheDir: path.join(getUserDataPath(), 'cache', 'images'),
     maxCacheSizeMB: 200,
     compressQuality: 50, // 0-100
     debug: false, // 是否输出调试日志
     logStats: true, // 是否记录统计信息
-    dbPath: path.join(process.cwd(), 'cache', 'cache_metadata.db') // 添加数据库路径
+    dbPath: path.join(getUserDataPath(), 'cache', 'cache_metadata.db') // 使用用户数据目录存储数据库
 };
 
 // 统计信息
@@ -101,6 +118,13 @@ function initDatabase() {
         `);
 
         log.info('[ImageCache] Database tables initialized');
+        
+        // 尝试执行迁移（只在第一次初始化时）
+        // 注意这是异步的，但我们不等待它完成
+        migrateFromOldCacheLocation().catch(err => {
+            log.error('[ImageCache] 迁移过程中出错:', err);
+        });
+        
         return db;
     } catch (error) {
         log.error('[ImageCache] Database initialization error:', error.message, error.stack);
@@ -114,6 +138,10 @@ function initDatabase() {
  */
 function setConfig(options = {}) {
     config = { ...config, ...options };
+    
+    // 记录缓存目录位置
+    log.info(`[ImageCache] 图片缓存目录设置为: ${config.cacheDir}`);
+    log.info(`[ImageCache] 缓存数据库位置: ${config.dbPath}`);
     
     // 初始化数据库
     try {
@@ -713,6 +741,194 @@ async function checkAndCleanCache() {
     }
 }
 
+/**
+ * 从旧的缓存位置迁移数据到新的用户数据目录
+ * @returns {Promise<void>}
+ */
+async function migrateFromOldCacheLocation() {
+    const oldCacheDir = path.join(process.cwd(), 'cache', 'images');
+    const oldDbPath = path.join(process.cwd(), 'cache', 'cache_metadata.db');
+    
+    // 检查旧目录是否存在
+    try {
+        await fs.promises.access(oldCacheDir);
+        log.info(`[ImageCache] 检测到旧缓存目录: ${oldCacheDir}`);
+    } catch (error) {
+        // 旧目录不存在，无需迁移
+        log.info('[ImageCache] 未找到旧缓存目录，无需迁移。');
+        return;
+    }
+    
+    // 检查旧数据库是否存在
+    let hasOldDb = false;
+    try {
+        await fs.promises.access(oldDbPath);
+        hasOldDb = true;
+        log.info(`[ImageCache] 检测到旧数据库: ${oldDbPath}`);
+    } catch (error) {
+        log.info('[ImageCache] 未找到旧数据库，将只迁移文件。');
+    }
+    
+    // 创建新缓存目录（如果不存在）
+    try {
+        await fs.promises.access(config.cacheDir);
+    } catch (error) {
+        if (error.code === 'ENOENT') {
+            await fs.promises.mkdir(config.cacheDir, { recursive: true });
+            log.info(`[ImageCache] 已创建新缓存目录: ${config.cacheDir}`);
+        }
+    }
+    
+    // 如果旧数据库存在，尝试迁移数据
+    if (hasOldDb) {
+        try {
+            log.info('[ImageCache] 开始从旧数据库迁移数据...');
+            
+            // 打开旧数据库
+            const oldDb = new Database(oldDbPath);
+            
+            // 查询所有旧记录
+            const oldRecords = oldDb.prepare('SELECT * FROM image_cache_metadata').all();
+            log.info(`[ImageCache] 找到 ${oldRecords.length} 条旧记录`);
+            
+            if (oldRecords.length > 0) {
+                // 初始化新数据库
+                const newDb = initDatabase();
+                
+                // 开始事务
+                newDb.transaction(() => {
+                    // 准备插入语句
+                    const insertStmt = newDb.prepare(`
+                        INSERT OR REPLACE INTO image_cache_metadata
+                        (cache_key, library_id, image_path, file_path, mime_type, format, 
+                         size_bytes, original_size_bytes, created_at, last_accessed, access_count)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    `);
+                    
+                    let successCount = 0;
+                    let errorCount = 0;
+                    
+                    // 为每条记录迁移文件和元数据
+                    for (const record of oldRecords) {
+                        try {
+                            const oldFilePath = record.file_path;
+                            
+                            // 检查文件是否存在
+                            if (!fs.existsSync(oldFilePath)) {
+                                log.warn(`[ImageCache] 旧文件不存在，跳过: ${oldFilePath}`);
+                                errorCount++;
+                                continue;
+                            }
+                            
+                            // 确定新文件路径
+                            // 从旧路径中提取文件名部分
+                            const fileName = path.basename(oldFilePath);
+                            const subDirName = path.basename(path.dirname(oldFilePath));
+                            
+                            // 创建目标子目录（如果需要）
+                            const newSubDirPath = path.join(config.cacheDir, subDirName);
+                            if (!fs.existsSync(newSubDirPath)) {
+                                fs.mkdirSync(newSubDirPath, { recursive: true });
+                            }
+                            
+                            // 新文件路径
+                            const newFilePath = path.join(newSubDirPath, fileName);
+                            
+                            // 复制文件
+                            fs.copyFileSync(oldFilePath, newFilePath);
+                            
+                            // 更新数据库记录
+                            insertStmt.run(
+                                record.cache_key,
+                                record.library_id,
+                                record.image_path,
+                                newFilePath, // 使用新路径
+                                record.mime_type,
+                                record.format,
+                                record.size_bytes,
+                                record.original_size_bytes,
+                                record.created_at,
+                                record.last_accessed,
+                                record.access_count
+                            );
+                            
+                            successCount++;
+                        } catch (error) {
+                            log.error(`[ImageCache] 迁移记录失败: ${error.message}`, error.stack);
+                            errorCount++;
+                        }
+                    }
+                    
+                    log.info(`[ImageCache] 迁移完成: 成功 ${successCount}, 失败 ${errorCount}`);
+                })();
+                
+                // 关闭旧数据库
+                oldDb.close();
+            }
+        } catch (error) {
+            log.error('[ImageCache] 数据库迁移失败:', error.message, error.stack);
+        }
+    } else {
+        // 只复制文件
+        log.info('[ImageCache] 开始复制缓存文件...');
+        await copyFilesRecursively(oldCacheDir, config.cacheDir);
+    }
+    
+    log.info('[ImageCache] 迁移操作完成');
+}
+
+/**
+ * 递归复制目录中的文件
+ * @param {string} sourceDir - 源目录
+ * @param {string} targetDir - 目标目录
+ * @returns {Promise<{success: number, errors: number}>} - 成功和失败的计数
+ */
+async function copyFilesRecursively(sourceDir, targetDir) {
+    let successCount = 0;
+    let errorCount = 0;
+    
+    try {
+        // 读取源目录内容
+        const entries = await fs.promises.readdir(sourceDir, { withFileTypes: true });
+        
+        // 确保目标目录存在
+        try {
+            await fs.promises.access(targetDir);
+        } catch (error) {
+            if (error.code === 'ENOENT') {
+                await fs.promises.mkdir(targetDir, { recursive: true });
+            }
+        }
+        
+        // 处理每个条目
+        for (const entry of entries) {
+            const sourcePath = path.join(sourceDir, entry.name);
+            const targetPath = path.join(targetDir, entry.name);
+            
+            if (entry.isDirectory()) {
+                // 递归处理子目录
+                const result = await copyFilesRecursively(sourcePath, targetPath);
+                successCount += result.success;
+                errorCount += result.errors;
+            } else if (entry.isFile()) {
+                // 复制文件
+                try {
+                    await fs.promises.copyFile(sourcePath, targetPath);
+                    successCount++;
+                } catch (error) {
+                    log.error(`[ImageCache] 复制文件失败: ${sourcePath} -> ${targetPath}`, error.message);
+                    errorCount++;
+                }
+            }
+        }
+    } catch (error) {
+        log.error(`[ImageCache] 读取目录失败: ${sourceDir}`, error.message);
+        errorCount++;
+    }
+    
+    return { success: successCount, errors: errorCount };
+}
+
 module.exports = {
     setConfig,
     initDatabase,
@@ -721,6 +937,7 @@ module.exports = {
     clearCache,
     checkAndCleanCache,
     cleanOrphanedFiles,
+    migrateFromOldCacheLocation,
     config,
     getStats: () => ({ // 确保 getStats 导出
         ...stats,

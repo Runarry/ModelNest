@@ -206,6 +206,19 @@ function initializeAppIPC(services) {
     }
   });
 
+  // 手动触发从旧缓存位置迁移
+  ipcMain.handle('migrate-image-cache', async () => {
+    log.info('[IPC] migrate-image-cache 请求');
+    try {
+      await imageCache.migrateFromOldCacheLocation();
+      log.info('[IPC] 图片缓存迁移完成');
+      return { success: true, message: '缓存迁移完成' };
+    } catch (error) {
+      log.error('[IPC] 图片缓存迁移失败:', error.message, error.stack);
+      return { success: false, error: error.message };
+    }
+  });
+
   // 获取 process.versions 信息
   ipcMain.handle('get-process-versions', () => {
     log.info('[IPC] get-process-versions 请求');
