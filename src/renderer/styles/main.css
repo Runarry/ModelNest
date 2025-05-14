@@ -1114,3 +1114,12 @@ select:hover {
 
 
 
+.search-container{
+  display:flex;
+}
+input#search-input{
+  border-color: #5d5d5d0d;
+  text-align: center;
+  color: #4d4d4d;
+  width: 200px;
+}
