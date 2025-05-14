@@ -161,7 +161,8 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
      // log.debug(`[modelParser] 读取模型所在目录文件:`, filesInDir);
     } catch (readError) {
       log.error(`[modelParser] 读取模型所在目录失败: ${dir}`, readError.message, readError.stack);
-      return null; // 如果目录无法读取，则返回 null
+      // Even if we can't read directory, still attempt to create a basic model object
+      filesInDir = [modelFileName];
     }
   } else {
     log.debug(`[modelParser] 使用预加载的模型所在目录文件:`, filesInDir);
@@ -180,6 +181,7 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
   // 使用新的辅助函数查找图片
   const imageFullPath = await findImageForModel(dir, modelNameWithoutExt, filesInDir);
   
+  // Try to find JSON file but don't fail if it doesn't exist
   const jsonFileName = filesInDir.find(f => f === `${modelNameWithoutExt}.json`) || '';
   const jsonFullPath = jsonFileName ? path.join(dir, jsonFileName) : '';
 
@@ -188,15 +190,19 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
 
   if (preloadedModelJsonInfo) {
     log.debug(`[modelParser] 使用预加载的 modelJsonInfo for ${modelFullPath}`);
-    parsedJsonData = preloadedModelJsonInfo;
+    parsedJsonData = preloadedModelJsonInfo || {}; // Ensure it's at least an empty object
   } else if (jsonFullPath) {
     try {
       const jsonFileContentString = await fs.readFile(jsonFullPath, 'utf-8');
       parsedJsonData = _parseJsonContentToRawInfo(jsonFileContentString);
     } catch (e) {
       log.error(`[modelParser] 读取或解析模型 JSON 文件失败: ${jsonFullPath}`, e.message, e.stack);
-      // parsedJsonData 保持 {}
+      // Continue with empty parsedJsonData if JSON read/parse fails
+      log.debug(`[modelParser] 继续处理模型，但 JSON 数据为空: ${modelFullPath}`);
     }
+  } else {
+    log.debug(`[modelParser] 模型没有关联的 JSON 文件，使用空数据: ${modelFullPath}`);
+    // Continue with empty parsedJsonData if no JSON file exists
   }
   
   const modelFileInfo = {
@@ -206,15 +212,42 @@ async function parseSingleModelFile(modelFullPath, supportedExtensions, sourceCo
     ext: modelFileExt // 传递模型文件扩展名用于 modelType 推断
   };
 
-  // 调用 parseModelDetailFromJsonContent，传递已解析的 JSON 对象
-  // sourceId 用于填充 modelBaseInfo.sourceId
-  modelObj = parseModelDetailFromJsonContent(parsedJsonData, sourceId, modelFileInfo);
-  
-  // 确保顶层 image 路径被正确设置
-  modelObj.image = imageFullPath;
-  
-  log.debug(`[modelParser] 单个模型文件解析完成: ${modelFullPath}`);
-  return modelObj;
+  try {
+    // 调用 parseModelDetailFromJsonContent，传递已解析的 JSON 对象
+    // sourceId 用于填充 modelBaseInfo.sourceId
+    modelObj = parseModelDetailFromJsonContent(parsedJsonData, sourceId, modelFileInfo);
+    
+    // 确保顶层 image 路径被正确设置
+    modelObj.image = imageFullPath;
+    
+    log.debug(`[modelParser] 单个模型文件解析完成: ${modelFullPath}`);
+    return modelObj;
+  } catch (error) {
+    log.error(`[modelParser] 解析模型详情时出错: ${modelFullPath}`, error.message, error.stack);
+    
+    // If normal parsing fails, create a minimal valid model object
+    try {
+      const fallbackModelObj = {
+        name: modelNameWithoutExt,
+        file: modelFullPath.replace(/\\/g, '/'),
+        jsonPath: jsonFullPath.replace(/\\/g, '/'),
+        image: imageFullPath,
+        sourceId: sourceId,
+        modelType: modelFileExt.replace('.', '').toUpperCase() || 'UNKNOWN',
+        baseModel: '',
+        description: '',
+        triggerWord: '',
+        tags: [],
+        modelJsonInfo: {}
+      };
+      
+      log.debug(`[modelParser] 创建了基本的模型对象作为备选: ${modelFullPath}`);
+      return fallbackModelObj;
+    } catch (fallbackError) {
+      log.error(`[modelParser] 创建基本模型对象失败: ${modelFullPath}`, fallbackError.message, fallbackError.stack);
+      return null;
+    }
+  }
 }
 
 // 步骤 A: 解析原始 JSON 内容 (modelJsonInfo)
@@ -232,14 +265,28 @@ function _parseJsonContentToRawInfo(jsonContentString) {
 function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, modelFileInfo) {
   //log.debug(`[ModelParser parseModelDetailFromJsonContent] Entry. parsedJsonInfo (keys: ${parsedJsonInfo ? Object.keys(parsedJsonInfo).join(', ') : 'null/undefined'}), sourceIdentifier: ${sourceIdentifier}, modelFileInfo:`, JSON.stringify(modelFileInfo));
   // const modelJsonInfo = _parseJsonContentToRawInfo(jsonContentString); // No longer needed, parsedJsonInfo is the object
+  
+  // Ensure we have valid inputs to prevent errors
+  if (!modelFileInfo || typeof modelFileInfo !== 'object') {
+    log.error('[ModelParser parseModelDetailFromJsonContent] Invalid modelFileInfo provided:', modelFileInfo);
+    modelFileInfo = {
+      name: 'unknown',
+      file: '',
+      jsonPath: '',
+      ext: ''
+    };
+  }
+  
   const modelJsonInfo = parsedJsonInfo || {}; // Ensure modelJsonInfo is an object
+  const safeSourceId = sourceIdentifier || 'unknown';
+  
   //log.debug('[ModelParser parseModelDetailFromJsonContent] Using provided parsedJsonInfo:', modelJsonInfo ? Object.keys(modelJsonInfo) : 'null/undefined');
 
   const modelBaseInfo = {
-    name: modelFileInfo.name,
-    file: modelFileInfo.file,
-    jsonPath: modelFileInfo.jsonPath,
-    sourceId: sourceIdentifier, // 假设 sourceIdentifier 是 sourceId
+    name: modelFileInfo.name || 'unknown',
+    file: modelFileInfo.file || '',
+    jsonPath: modelFileInfo.jsonPath || '',
+    sourceId: safeSourceId,
     // image 的生成需要依赖文件列表，这里暂时留空或基于约定
     // 例如: image: modelFileInfo.file.replace(path.extname(modelFileInfo.file), '.png')
     // 但更可靠的做法是在调用处根据实际存在的图片文件来确定
@@ -253,7 +300,7 @@ function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, model
   log.debug('[ModelParser parseModelDetailFromJsonContent] modelFileInfo.ext (for modelType inference):', modelFileInfo.ext);
 
 
-  // 处理 modelType
+  // 处理 modelType - safely handle missing or invalid values
   if (modelJsonInfo.modelType && typeof modelJsonInfo.modelType === 'string') {
     modelBaseInfo.modelType = modelJsonInfo.modelType.trim();
   } else if (modelFileInfo.ext) { // 从文件扩展名推断
@@ -263,7 +310,7 @@ function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, model
   }
   log.debug('[ModelParser parseModelDetailFromJsonContent] modelBaseInfo.modelType (after processing):', modelBaseInfo.modelType);
 
-  // 处理 baseModel (兼容 basic)
+  // 处理 baseModel (兼容 basic) - safely handle missing or invalid values
   let rawBaseModel = modelJsonInfo.baseModel || modelJsonInfo.basic;
   if (rawBaseModel && typeof rawBaseModel === 'string') {
     modelBaseInfo.baseModel = rawBaseModel.trim();
@@ -275,9 +322,28 @@ function parseModelDetailFromJsonContent(parsedJsonInfo, sourceIdentifier, model
   // 其他可能从 modelJsonInfo 提取并处理后放入 modelBaseInfo 的字段
   // 例如：description, triggerWord, tags (如果它们也需要 trim 或其他处理)
   // 为了保持 modelJsonInfo 的原始性，这些字段如果顶层需要，也应在这里处理
-  modelBaseInfo.description = (modelJsonInfo.description || '').toString(); // 确保是字符串
-  modelBaseInfo.triggerWord = (modelJsonInfo.triggerWord || '').toString();
-  modelBaseInfo.tags = Array.isArray(modelJsonInfo.tags) ? modelJsonInfo.tags : [];
+  
+  // Safely handle all fields to prevent errors if any field is missing or has wrong type
+  try {
+    modelBaseInfo.description = (modelJsonInfo.description || '').toString(); // 确保是字符串
+  } catch (e) {
+    modelBaseInfo.description = '';
+    log.debug(`[ModelParser] Error processing description: ${e.message}`);
+  }
+  
+  try {
+    modelBaseInfo.triggerWord = (modelJsonInfo.triggerWord || '').toString();
+  } catch (e) {
+    modelBaseInfo.triggerWord = '';
+    log.debug(`[ModelParser] Error processing triggerWord: ${e.message}`);
+  }
+  
+  try {
+    modelBaseInfo.tags = Array.isArray(modelJsonInfo.tags) ? modelJsonInfo.tags : [];
+  } catch (e) {
+    modelBaseInfo.tags = [];
+    log.debug(`[ModelParser] Error processing tags: ${e.message}`);
+  }
 
   const modelObj = {
     ...modelBaseInfo,
@@ -328,13 +394,24 @@ function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, par
   // sourceId: string
   // resolvedBasePath: string (用于计算相对路径)
 
+  if (!modelFileItem || !modelFileItem.filename) {
+    log.error('[modelParser] createWebDavModelObject: modelFileItem or modelFileItem.filename is missing.');
+    return null;
+  }
+
   const modelFileFullPath = modelFileItem.filename;
   const modelFileRelativePath = _getRelativePath(modelFileFullPath, resolvedBasePath);
   const modelFileExt = path.posix.extname(modelFileRelativePath).toLowerCase();
   const modelNameWithoutExt = path.posix.basename(modelFileRelativePath, modelFileExt);
 
-  const imageFileRelativePath = imageFileItem ? _getRelativePath(imageFileItem.filename, resolvedBasePath) : '';
-  const jsonFileRelativePath = jsonFileItem ? _getRelativePath(jsonFileItem.filename, resolvedBasePath) : '';
+  // Handle optional items - use empty strings for paths if items are missing
+  const imageFileRelativePath = imageFileItem && imageFileItem.filename 
+    ? _getRelativePath(imageFileItem.filename, resolvedBasePath) 
+    : '';
+    
+  const jsonFileRelativePath = jsonFileItem && jsonFileItem.filename 
+    ? _getRelativePath(jsonFileItem.filename, resolvedBasePath) 
+    : '';
   
   const modelFileInfoForDetail = {
       name: modelNameWithoutExt,
@@ -343,21 +420,45 @@ function createWebDavModelObject(modelFileItem, imageFileItem, jsonFileItem, par
       ext: modelFileExt
   };
 
-  // 调用已修改的 parseModelDetailFromJsonContent
-  // 它现在期望第一个参数是已解析的 JSON 对象
-  const modelObjFromDetail = parseModelDetailFromJsonContent(parsedJsonInfo, sourceId, modelFileInfoForDetail);
+  try {
+    // Ensure parsedJsonInfo is an object
+    const safeJsonInfo = parsedJsonInfo && typeof parsedJsonInfo === 'object' ? parsedJsonInfo : {};
+    
+    // 调用已修改的 parseModelDetailFromJsonContent
+    // 它现在期望第一个参数是已解析的 JSON 对象
+    const modelObjFromDetail = parseModelDetailFromJsonContent(safeJsonInfo, sourceId, modelFileInfoForDetail);
 
-  // 补充或覆盖 parseModelDetailFromJsonContent 返回对象中的字段
-  // (parseModelDetailFromJsonContent 已经处理了 name, file, jsonPath, sourceId, modelType, baseModel, description, triggerWord, tags)
-  // 我们需要确保 image, size, lastModified 被正确设置或覆盖
-  modelObjFromDetail.image = imageFileRelativePath; // 确保 image 被设置
-  modelObjFromDetail.size = modelFileItem.size;
-  modelObjFromDetail.lastModified = modelFileItem.lastmod ? new Date(modelFileItem.lastmod) : undefined;
-  
-  // modelJsonInfo 已经由 parseModelDetailFromJsonContent 嵌套
-  // modelObjFromDetail.modelJsonInfo = parsedJsonInfo; // This is already handled inside parseModelDetailFromJsonContent
-
-  return modelObjFromDetail;
+    // 补充或覆盖 parseModelDetailFromJsonContent 返回对象中的字段
+    // (parseModelDetailFromJsonContent 已经处理了 name, file, jsonPath, sourceId, modelType, baseModel, description, triggerWord, tags)
+    // 我们需要确保 image, size, lastModified 被正确设置或覆盖
+    modelObjFromDetail.image = imageFileRelativePath; // 确保 image 被设置
+    modelObjFromDetail.size = modelFileItem.size;
+    modelObjFromDetail.lastModified = modelFileItem.lastmod ? new Date(modelFileItem.lastmod) : undefined;
+    
+    return modelObjFromDetail;
+  } catch (error) {
+    log.error('[modelParser] createWebDavModelObject: Error creating model object', error.message, error.stack);
+    
+    // Create a fallback object with essential properties if normal creation fails
+    const fallbackModelObj = {
+      name: modelNameWithoutExt,
+      file: modelFileRelativePath,
+      jsonPath: jsonFileRelativePath,
+      image: imageFileRelativePath,
+      sourceId: sourceId,
+      modelType: modelFileExt.replace('.', '').toUpperCase() || 'UNKNOWN',
+      baseModel: '',
+      description: '',
+      triggerWord: '',
+      tags: [],
+      size: modelFileItem.size,
+      lastModified: modelFileItem.lastmod ? new Date(modelFileItem.lastmod) : undefined,
+      modelJsonInfo: {}
+    };
+    
+    log.debug(`[modelParser] Created fallback WebDAV model object for ${modelFileRelativePath}`);
+    return fallbackModelObj;
+  }
 }
 
 

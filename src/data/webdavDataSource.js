@@ -636,6 +636,7 @@ class WebDavDataSource extends DataSource {
               );
             } catch (parseError) {
               this.logger.error(`_buildModelEntry: Error parsing pre-fetched JSON for ${associatedJsonPath}:`, parseError.message);
+              // Even if parsing fails, we'll still create the model object below with an empty modelJsonInfo
             }
           }
         }
@@ -646,33 +647,60 @@ class WebDavDataSource extends DataSource {
         }
       } catch (error) {
         this.logger.error(`_buildModelEntry: Error getting JSON info for ${associatedJsonPath}:`, error.message);
+        // If getting JSON info fails, we'll create the model with an empty modelJsonInfo
       }
     } else {
       this.logger.debug(`_buildModelEntry: Model ${modelFile.filename} has no associated JSON file.`);
+      // No JSON file is associated with this model
     }
 
     try {
+      // Create model object whether or not we have JSON or image files
       const modelObj = createWebDavModelObject(
         modelFile,
         imageFileToUse,
         jsonFileToUse,
-        modelJsonInfo,
+        modelJsonInfo || {}, // Use empty object as fallback if modelJsonInfo is null
         currentSourceId,
         currentResolvedBasePath
       );
 
       this.addfilterOptionsByModelObj(modelObj);
-      // 注意：不再覆盖 jsonPath，使用 createWebDavModelObject 设置的相对路径
-      // 原代码：
-      // if (jsonFileToUse && jsonFileToUse.filename) {
-      //   modelObj.jsonPath = jsonFileToUse.filename;
-      // }
+      
       const duration = Date.now() - startTime;
       this.logger.debug(`_buildModelEntry: Model object created for ${modelFile.filename}, Duration: ${duration}ms`);
       return modelObj;
     } catch (error) {
       this.logger.error(`_buildModelEntry: 调用 createWebDavModelObject 时出错 for ${modelFile.filename}:`, error.message, error.stack);
-      return null;
+      // Even in case of error, try to create a minimal valid model object for rendering
+      try {
+        const modelFileRelativePath = modelFile.relativePath;
+        const modelFileExt = path.posix.extname(modelFileRelativePath).toLowerCase();
+        const modelNameWithoutExt = path.posix.basename(modelFileRelativePath, modelFileExt);
+        
+        const fallbackModelObj = {
+          name: modelNameWithoutExt,
+          file: modelFileRelativePath,
+          jsonPath: jsonFileToUse ? jsonFileToUse.relativePath : '',
+          image: imageFileToUse ? imageFileToUse.relativePath : '',
+          sourceId: currentSourceId,
+          modelType: modelFileExt.replace('.', '').toUpperCase() || 'UNKNOWN',
+          baseModel: '',
+          description: '',
+          triggerWord: '',
+          tags: [],
+          size: modelFile.size,
+          lastModified: modelFile.lastmod ? new Date(modelFile.lastmod) : undefined,
+          modelJsonInfo: {}
+        };
+        
+        this.logger.debug(`_buildModelEntry: Created fallback model object for ${modelFile.filename} after error.`);
+        this.addfilterOptionsByModelObj(fallbackModelObj);
+        return fallbackModelObj;
+      } catch (fallbackError) {
+        this.logger.error(`_buildModelEntry: Failed to create fallback model object for ${modelFile.filename}:`, fallbackError.message, fallbackError.stack);
+        return null;
+      }
     }
   }
 

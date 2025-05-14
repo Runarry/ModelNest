@@ -30,15 +30,35 @@ class DataSource {
   }
 
   addfilterOptionsByModelObj(modelObj){
-    const tags = modelObj.tags;
-    const baseModel = modelObj.baseModel;
-    const modelType = modelObj.modelType;
+    if (!modelObj) {
+      log.warn(`[baseDataSource] addfilterOptionsByModelObj called with null or undefined modelObj`);
+      return;
+    }
+    
+    // Safely extract properties, using default values if missing
+    const tags = Array.isArray(modelObj.tags) ? modelObj.tags : [];
+    const baseModel = modelObj.baseModel || '';
+    const modelType = modelObj.modelType || 'UNKNOWN';
+    
     // log.info(`[baseDataSource] Adding filter options for tags: ${tags}, baseModel: ${baseModel}, modelType: ${modelType}`);
     // log.debug(`[baseDataSource] modelObj : ${JSON.stringify(modelObj, null, 2)}}`)
 
-    this.filterOptions.baseModels.add(baseModel);
-    this.filterOptions.modelTypes.add(modelType);  
-    this.filterOptions.tags.add(...tags);
+    // Only add non-empty values to filter options
+    if (baseModel) this.filterOptions.baseModels.add(baseModel);
+    if (modelType) this.filterOptions.modelTypes.add(modelType);
+    
+    // Safely add tags - spread operator with empty array can cause issues
+    if (tags.length > 0) {
+      try {
+        tags.forEach(tag => {
+          if (tag && typeof tag === 'string') {
+            this.filterOptions.tags.add(tag);
+          }
+        });
+      } catch (error) {
+        log.error(`[baseDataSource] Error adding tags to filter options: ${error.message}`);
+      }
+    }
   }
 
   
