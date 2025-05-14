@@ -43,6 +43,8 @@ export const getPackageInfo = api.getPackageInfo; // 导出 getPackageInfo
 export const getAllSourceConfigs = api.getAllSourceConfigs;
 export const migrateImageCache = api.migrateImageCache; // 导出图片缓存迁移函数
 export const migrateModelCache = api.migrateModelCache; // 导出模型缓存迁移函数
+export const cleanupUserData = api.cleanupUserData; // 导出用户数据清理函数
+
 // You might also export the entire api object if needed,
 // but exporting individual functions is generally preferred for clarity.
 // export default api;

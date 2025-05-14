@@ -4,7 +4,7 @@
  */
 
 import { getCacheStats, logMessage } from '../apiBridge.js';
-import { migrateImageCache, migrateModelCache } from '../apiBridge.js';
+import { migrateImageCache, migrateModelCache, cleanupUserData } from '../apiBridge.js';
 
 class DebugCacheStats {
   constructor() {
@@ -146,9 +146,47 @@ class DebugCacheStats {
     `;
     migrateModelCacheBtn.onclick = () => this.migrateModelCache();
     
+    // 添加清理用户数据按钮
+    const cleanupContainer = document.createElement('div');
+    cleanupContainer.style.cssText = `
+      width: 100%;
+      margin-top: 5px;
+      display: flex;
+      justify-content: space-between;
+    `;
+    
+    const cleanupCacheBtn = document.createElement('button');
+    cleanupCacheBtn.textContent = '清理缓存目录';
+    cleanupCacheBtn.style.cssText = `
+      background: #853;
+      border: none;
+      color: #fff;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    cleanupCacheBtn.onclick = () => this.cleanupUserDataCache();
+    
+    const cleanupLogsBtn = document.createElement('button');
+    cleanupLogsBtn.textContent = '清理日志目录';
+    cleanupLogsBtn.style.cssText = `
+      background: #835;
+      border: none;
+      color: #fff;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    cleanupLogsBtn.onclick = () => this.cleanupUserDataLogs();
+    
     // 添加按钮到容器
     migrationContainer.appendChild(migrateImgCacheBtn);
     migrationContainer.appendChild(migrateModelCacheBtn);
+    
+    cleanupContainer.appendChild(cleanupCacheBtn);
+    cleanupContainer.appendChild(cleanupLogsBtn);
     
     footer.appendChild(refreshBtn);
     footer.appendChild(clearCacheBtn);
@@ -156,6 +194,9 @@ class DebugCacheStats {
     
     // 添加迁移按钮容器
     panel.appendChild(migrationContainer);
+    
+    // 添加清理按钮容器
+    panel.appendChild(cleanupContainer);
 
     document.body.appendChild(panel);
     this.container = panel;
@@ -386,6 +427,88 @@ class DebugCacheStats {
       logMessage('error', '迁移模型缓存失败:', error);
       alert(`迁移模型缓存失败: ${error.message}`);
     }
+  }
+
+  /**
+   * 清理用户数据的缓存目录
+   */
+  async cleanupUserDataCache() {
+    if (!confirm('确定要清理用户数据中的缓存目录吗？这将删除缓存的图片和模型信息。')) {
+      return;
+    }
+    
+    try {
+      this.setStatusMessage('正在清理缓存目录...');
+      const result = await cleanupUserData({ cleanCache: true, cleanLogs: false });
+      
+      if (result.success) {
+        this.setStatusMessage('缓存目录清理成功！');
+      } else {
+        this.setStatusMessage(`缓存目录清理失败：${result.errors.join(', ')}`);
+      }
+      
+      // 更新统计
+      this.updateStats();
+    } catch (error) {
+      logMessage('error', '清理缓存目录时出错:', error);
+      this.setStatusMessage(`清理缓存目录时出错: ${error.message}`);
+    }
+  }
+  
+  /**
+   * 清理用户数据的日志目录
+   */
+  async cleanupUserDataLogs() {
+    if (!confirm('确定要清理用户数据中的日志目录吗？这将删除所有应用日志文件。')) {
+      return;
+    }
+    
+    try {
+      this.setStatusMessage('正在清理日志目录...');
+      const result = await cleanupUserData({ cleanCache: false, cleanLogs: true });
+      
+      if (result.success) {
+        this.setStatusMessage('日志目录清理成功！');
+      } else {
+        this.setStatusMessage(`日志目录清理失败：${result.errors.join(', ')}`);
+      }
+    } catch (error) {
+      logMessage('error', '清理日志目录时出错:', error);
+      this.setStatusMessage(`清理日志目录时出错: ${error.message}`);
+    }
+  }
+
+  /**
+   * 设置状态消息
+   * @param {string} message 状态消息
+   */
+  setStatusMessage(message) {
+    const statusContainer = document.createElement('div');
+    statusContainer.style.cssText = `
+      margin-top: 10px;
+      padding: 5px;
+      background-color: rgba(0, 0, 0, 0.5);
+      border-radius: 3px;
+      text-align: center;
+      color: #fff;
+    `;
+    statusContainer.textContent = message;
+    
+    // 移除之前的状态消息
+    const oldStatus = this.container.querySelector('.status-message');
+    if (oldStatus) {
+      oldStatus.remove();
+    }
+    
+    statusContainer.className = 'status-message';
+    this.container.appendChild(statusContainer);
+    
+    // 5秒后自动移除
+    setTimeout(() => {
+      if (statusContainer && statusContainer.parentNode) {
+        statusContainer.remove();
+      }
+    }, 5000);
   }
 }
 
