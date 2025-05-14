@@ -269,6 +269,18 @@ class ModelService {
       return { baseModels: [], modelTypes: [],tags:[] };
     }
     log.debug(`[ModelService getAvailableFilterOptions] Successfully retrieved filter options for sourceId: ${sourceId}. Options:`, filterOptions);
+
+    // 移除filterOptions.tags里所有的blockTags
+    const blockTags = this.configService.getBlockedTags();
+    if (filterOptions && Array.isArray(filterOptions.tags) && Array.isArray(blockTags)) {
+      const lowerCaseBlockTags = blockTags.map(tag => tag.toLowerCase());
+      filterOptions.tags = filterOptions.tags.filter(tag => {
+        // 确保tag是字符串且非空，然后进行比较
+        return typeof tag === 'string' && tag.trim() !== '' && !lowerCaseBlockTags.includes(tag.toLowerCase());
+      });
+      log.debug(`[ModelService getAvailableFilterOptions] Filtered out blocked tags. Remaining tags count: ${filterOptions.tags.length}`);
+    }
+
     return filterOptions;
   }
   
