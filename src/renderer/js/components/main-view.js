@@ -814,8 +814,6 @@ async function handleSearchButtonClick() {
 
     if(searchTerm === currentAppliedFilters.searchValue) return;
 
-
-
     if (searchTerm) {
         currentAppliedFilters.searchValue = searchTerm;
     }
