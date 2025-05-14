@@ -110,7 +110,20 @@ function initializeAppIPC(services) {
       if (!services.imageService) {
         throw new Error('ImageService 未初始化');
       }
+      
+      // 调用主清理函数
       await services.imageService.clearCache();
+      
+      // 尝试再次调用孤立文件清理函数
+      try {
+        log.info('[IPC] 执行额外的孤立文件清理...');
+        await imageCache.cleanOrphanedFiles();
+        log.info('[IPC] 孤立文件清理完成');
+      } catch (orphanError) {
+        log.warn('[IPC] 清理孤立文件时出错:', orphanError);
+        // 不中断主流程，继续返回成功
+      }
+      
       log.info('[IPC] Image cache cleared successfully via ImageService.');
       return { success: true };
     } catch (error) {

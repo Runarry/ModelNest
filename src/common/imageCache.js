@@ -472,11 +472,12 @@ async function setCache(libraryId, imageName, sourceBuffer, preferredFormat = 'O
 async function clearCache() {
     try {
         const database = initDatabase();
+        log.info('[ImageCache] Starting cache clear operation...');
         
         // 使用事务包装所有操作
         database.transaction(() => {
             // 1. 获取所有缓存文件路径
-            const allFilesStmt = database.prepare('SELECT file_path FROM image_cache_metadata');
+            const allFilesStmt = database.prepare('SELECT id, file_path FROM image_cache_metadata');
             const allFiles = allFilesStmt.all();
             
             if (allFiles.length === 0) {
@@ -484,31 +485,49 @@ async function clearCache() {
                 return;
             }
             
+            // 记录找到的文件总数
+            log.info(`[ImageCache] Found ${allFiles.length} cache files to delete.`);
+            
             // 2. 删除所有文件（尽量同步删除以确保事务一致性）
             let successCount = 0;
             let errorCount = 0;
+            let notFoundCount = 0;
             
             for (const file of allFiles) {
                 try {
-                    fs.unlinkSync(file.file_path);
-                    successCount++;
-                } catch (error) {
-                    // 忽略 ENOENT 错误（文件不存在）
-                    if (error.code !== 'ENOENT') {
-                        errorCount++;
-                        log.warn(`[ImageCache] Failed to delete cache file: ${file.file_path}`, error.message);
+                    // 检查文件是否存在
+                    if (fs.existsSync(file.file_path)) {
+                        fs.unlinkSync(file.file_path);
+                        log.debug(`[ImageCache] Deleted file: ${file.file_path}`);
+                        successCount++;
+                    } else {
+                        log.debug(`[ImageCache] File not found (already deleted or never existed): ${file.file_path}`);
+                        notFoundCount++;
                     }
+                } catch (error) {
+                    // 记录详细错误信息
+                    errorCount++;
+                    log.warn(`[ImageCache] Failed to delete cache file (ID: ${file.id}): ${file.file_path}`, error.message, error.stack);
                 }
             }
             
             // 3. 清空元数据表
             const deleteStmt = database.prepare('DELETE FROM image_cache_metadata');
-            deleteStmt.run();
+            const deleteResult = deleteStmt.run();
+            const deletedRows = deleteResult.changes;
+            
+            log.info(`[ImageCache] Deleted ${deletedRows} records from database.`);
             
             // 4. 重置序列（可选，但有助于保持ID小）
-            database.prepare('DELETE FROM sqlite_sequence WHERE name = "image_cache_metadata"').run();
+            try {
+                database.prepare("DELETE FROM sqlite_sequence WHERE name = 'image_cache_metadata'").run();
+                log.debug('[ImageCache] Reset sqlite_sequence for image_cache_metadata table.');
+            } catch (seqError) {
+                log.warn('[ImageCache] Failed to reset sqlite_sequence:', seqError.message);
+                // 继续执行，这不是关键错误
+            }
             
-            log.info(`[ImageCache] Cache cleared successfully. Deleted ${successCount} files (${errorCount} errors).`);
+            log.info(`[ImageCache] Cache cleared successfully. Found ${allFiles.length} files, deleted ${successCount} files, ${notFoundCount} not found, ${errorCount} errors.`);
         })();
         
         // 重置统计
@@ -517,8 +536,87 @@ async function clearCache() {
         stats.originalSize = 0;
         stats.compressedSize = 0;
         stats.lastCleanTime = new Date();
+        
+        // 额外检查：清除所有子目录中的孤立文件
+        try {
+            await cleanOrphanedFiles();
+        } catch (orphanError) {
+            log.warn('[ImageCache] Failed to clean orphaned files:', orphanError.message);
+        }
     } catch (error) {
         log.error('[ImageCache] Failed to clear cache:', error.message, error.stack);
+        throw error;
+    }
+}
+
+/**
+ * 清理可能存在的孤立文件（数据库中没有记录但文件系统中存在的文件）
+ * @returns {Promise<void>}
+ */
+async function cleanOrphanedFiles() {
+    try {
+        log.info('[ImageCache] Checking for orphaned cache files...');
+        
+        // 确保缓存根目录存在
+        if (!fs.existsSync(config.cacheDir)) {
+            log.info('[ImageCache] Cache directory does not exist, no orphaned files to clean.');
+            return;
+        }
+        
+        // 读取缓存目录下的所有子目录（2字符哈希目录）
+        const entries = fs.readdirSync(config.cacheDir, { withFileTypes: true });
+        const subDirs = entries.filter(entry => entry.isDirectory() && entry.name.length === 2);
+        
+        if (subDirs.length === 0) {
+            log.info('[ImageCache] No subdirectories found in cache directory.');
+            return;
+        }
+        
+        log.info(`[ImageCache] Found ${subDirs.length} cache subdirectories to check.`);
+        
+        let totalDeleted = 0;
+        let totalErrored = 0;
+        
+        // 遍历每个子目录并删除所有文件
+        for (const subDir of subDirs) {
+            const fullSubDirPath = path.join(config.cacheDir, subDir.name);
+            try {
+                const files = fs.readdirSync(fullSubDirPath, { withFileTypes: true });
+                const fileEntries = files.filter(f => f.isFile());
+                
+                log.debug(`[ImageCache] Subdirectory ${subDir.name} contains ${fileEntries.length} files.`);
+                
+                for (const file of fileEntries) {
+                    const fullPath = path.join(fullSubDirPath, file.name);
+                    try {
+                        fs.unlinkSync(fullPath);
+                        log.debug(`[ImageCache] Deleted orphaned file: ${fullPath}`);
+                        totalDeleted++;
+                    } catch (error) {
+                        log.warn(`[ImageCache] Failed to delete orphaned file: ${fullPath}`, error.message);
+                        totalErrored++;
+                    }
+                }
+                
+                // 尝试删除空子目录（如果已经没有文件了）
+                try {
+                    // 再次检查目录是否为空
+                    const remainingFiles = fs.readdirSync(fullSubDirPath);
+                    if (remainingFiles.length === 0) {
+                        fs.rmdirSync(fullSubDirPath);
+                        log.debug(`[ImageCache] Removed empty subdirectory: ${fullSubDirPath}`);
+                    }
+                } catch (rmDirError) {
+                    log.warn(`[ImageCache] Failed to remove subdirectory: ${fullSubDirPath}`, rmDirError.message);
+                }
+            } catch (error) {
+                log.error(`[ImageCache] Error processing subdirectory: ${fullSubDirPath}`, error.message);
+            }
+        }
+        
+        log.info(`[ImageCache] Orphaned file cleanup complete. Deleted ${totalDeleted} files with ${totalErrored} errors.`);
+    } catch (error) {
+        log.error('[ImageCache] Failed to clean orphaned files:', error.message, error.stack);
         throw error;
     }
 }
@@ -622,6 +720,7 @@ module.exports = {
     setCache,
     clearCache,
     checkAndCleanCache,
+    cleanOrphanedFiles,
     config,
     getStats: () => ({ // 确保 getStats 导出
         ...stats,
