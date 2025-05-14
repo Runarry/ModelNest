@@ -1,3 +1,4 @@
+; This is the custom uninstall macro that will be called by the NSIS uninstaller
 !macro customUnInstall
   ; Create a flag file that tells the app to clean up when it quits
   FileOpen $0 "$APPDATA\model-nest\.uninstall_cleanup_required" w
@@ -21,4 +22,9 @@
     
     ; Note: We're not deleting the entire model-nest directory to preserve user settings
   ${endif}
+!macroend
+
+; This is the custom install macro that will be called by the NSIS installer
+!macro customInstall
+  # Custom install steps can go here
 !macroend 

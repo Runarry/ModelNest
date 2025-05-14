@@ -34,7 +34,6 @@ files:
       - "!renderer/js/**" # ...and its modules.
       - "!renderer/styles/**" # ...and its modules.
 
-
 icon: assets/icon.png
 
 asar:
@@ -46,16 +45,19 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: zip # Add zip target for unpacked version
+    - target: zip
       arch:
         - x64
 nsis:
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true
+  uninstallDisplayName: ${productName}
   include: ./scripts/installer.nsh
+  deleteAppDataOnUninstall: false
+  runAfterFinish: true
 publish:
   provider: github
-  owner: Runarry 
-  repo: ModelNest 
-  releaseType: release # 可选: draft, prerelease, release (默认)
+  owner: Runarry
+  repo: ModelNest
+  releaseType: release
