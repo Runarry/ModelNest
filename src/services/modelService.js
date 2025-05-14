@@ -271,17 +271,19 @@ class ModelService {
     log.debug(`[ModelService getAvailableFilterOptions] Successfully retrieved filter options for sourceId: ${sourceId}. Options:`, filterOptions);
 
     // 移除filterOptions.tags里所有的blockTags
-    const blockTags = this.configService.getBlockedTags();
-    if (filterOptions && Array.isArray(filterOptions.tags) && Array.isArray(blockTags)) {
-      const lowerCaseBlockTags = blockTags.map(tag => typeof tag === 'string' ? tag.toLowerCase() : '').filter(tag => tag !== ''); // 确保是字符串且非空
-      filterOptions.tags = filterOptions.tags.filter(tag => {
+    const blockTags = await this.configService.getBlockedTags();
+    if (filterOptions) {
+      let tagsArray = Array.from(filterOptions.tags);
+      tagsArray = tagsArray.filter(tag => {
         if (typeof tag !== 'string' || tag.trim() === '') {
-          return false; // 如果tag不是有效字符串，则直接过滤掉或保留取决于需求，这里选择过滤
+          return false; // 如果tag不是有效字符串，则直接过滤掉
         }
-        return !lowerCaseBlockTags.includes(tag.toLowerCase());
+        return !blockTags.includes(tag.toLowerCase());
       });
-      log.debug(`[ModelService getAvailableFilterOptions] Filtered out blocked tags. Remaining tags count: ${filterOptions.tags.length}`);
-    }
+      filterOptions.tags = tagsArray; // 将过滤后的数组赋值回去
+      filterOptions.tags = new Set(filterOptions.tags); // 转回Set
+      log.debug(`[ModelService getAvailableFilterOptions] Filtered out blocked tags. Remaining tags count: ${filterOptions.tags.size}`); // 使用 .size 获取 Set 的长度
+    } 
 
     return filterOptions;
   }
