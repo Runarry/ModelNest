@@ -8,6 +8,7 @@ const { deepClone } = require('../common/utils'); // 假设 utils.js 中有 deep
 const DEFAULT_CONFIG = {
   modelSources: [],
   supportedExtensions: [],
+  blockedTags: [], // Add blockedTags field with default empty array
   imageCache: {
     maxCacheSizeMB: 200,
     compressQuality: 80,
