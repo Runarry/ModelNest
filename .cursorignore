@@ -1,0 +1,10 @@
+doc/review/
+node_modules/
+dist/
+.git/
+.vscode/
+.VSCodeCounter/
+.roo/
+cache/
+coverage/
+logs/ 
