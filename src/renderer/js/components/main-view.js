@@ -815,9 +815,7 @@ async function handleSearchButtonClick() {
 
     if(searchTerm === currentAppliedFilters.searchValue) return;
 
-    if (searchTerm) {
-        currentAppliedFilters.searchValue = searchTerm;
-    }
+    currentAppliedFilters.searchValue = searchTerm??'';
 
     if (currentSourceId) {
         await loadModels(currentSourceId, currentDirectory);

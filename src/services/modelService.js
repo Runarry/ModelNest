@@ -177,6 +177,9 @@ class ModelService {
             // 检查模型是否有name属性
             if (!modelObj.name || typeof modelObj.name !== 'string') {
               passesSearch = false;
+            } else if (searchValue === '') {
+              // 如果搜索值为空字符串，则所有项目都应通过搜索筛选
+              passesSearch = true;
             } else {
               // 检查是否是正则表达式格式 (被 / 包围)
               const isRegex = searchValue.length >= 2 && 
