@@ -660,10 +660,11 @@ class WebDavDataSource extends DataSource {
         currentSourceId,
         currentResolvedBasePath
       );
-      // 修复点：补充 jsonPath 字段，便于后续查找
-      if (jsonFileToUse && jsonFileToUse.filename) {
-        modelObj.jsonPath = jsonFileToUse.filename;
-      }
+      // 注意：不再覆盖 jsonPath，使用 createWebDavModelObject 设置的相对路径
+      // 原代码：
+      // if (jsonFileToUse && jsonFileToUse.filename) {
+      //   modelObj.jsonPath = jsonFileToUse.filename;
+      // }
       const duration = Date.now() - startTime;
       this.logger.debug(`_buildModelEntry: Model object created for ${modelFile.filename}, Duration: ${duration}ms`);
       return modelObj;
@@ -842,52 +843,55 @@ class WebDavDataSource extends DataSource {
     }
   }
 
-  async writeModelJson(relativePath, dataToWrite) { 
-    this.logger.debug(`[writeModelJson] dataToWrite , ${relativePath}`); 
+  async writeModelJson(relativePath, dataToWrite) {
+    this.logger.debug(`[writeModelJson] called with relativePath: ${relativePath}`);
 
     const startTime = Date.now();
     await this.ensureInitialized();
     const sourceId = this.config.id;
-    const jsonFilePath = relativePath; // pathIdentifier for MODEL_JSON_INFO
+    
+    // relativeJsonPath 是相对于数据源根的路径
+    const relativeJsonPath = relativePath;
 
-    if (!jsonFilePath) {
+    if (!relativeJsonPath) {
       throw new Error('Relative path cannot be empty for WebDAV write.');
     }
     if (typeof dataToWrite !== 'string') {
       throw new Error('Data to write must be a string for WebDAV model JSON.');
     }
 
-    const resolvedPath = jsonFilePath;
-    this.logger.info(`Attempting to write model JSON to WebDAV: ${resolvedPath} (relative: ${jsonFilePath})`);
+    // 将相对路径转换为 WebDAV 客户端可用的绝对路径
+    const absoluteJsonPath = this._resolvePath(relativeJsonPath);
+    this.logger.info(`Attempting to write model JSON to WebDAV. Relative: ${relativeJsonPath}, Absolute: ${absoluteJsonPath}`);
 
     try {
-      const resolvedDirPath = path.posix.dirname(resolvedPath);
+      const absoluteDirPath = path.posix.dirname(absoluteJsonPath);
       try {
-        await this.client.stat(resolvedDirPath);
+        await this.client.stat(absoluteDirPath);
       } catch (statError) {
         if (statError.response && statError.response.status === 404) {
-          this.logger.info(`Parent directory ${resolvedDirPath} does not exist, attempting to create...`);
-          await this.client.createDirectory(resolvedDirPath, { recursive: true });
-          this.logger.info(`Successfully created directory ${resolvedDirPath}`);
+          this.logger.info(`Parent directory ${absoluteDirPath} does not exist, attempting to create...`);
+          await this.client.createDirectory(absoluteDirPath, { recursive: true });
+          this.logger.info(`Successfully created directory ${absoluteDirPath}`);
         } else {
-          this.logger.error(`Error checking directory ${resolvedDirPath}:`, statError.message, statError.stack, statError.response?.status);
+          this.logger.error(`Error checking directory ${absoluteDirPath}:`, statError.message, statError.stack, statError.response?.status);
           throw statError;
         }
       }
 
-      await this.client.putFileContents(resolvedPath, dataToWrite, { overwrite: true });
+      await this.client.putFileContents(absoluteJsonPath, dataToWrite, { overwrite: true });
       const duration = Date.now() - startTime;
-      this.logger.info(`Successfully wrote model JSON to WebDAV: ${resolvedPath}, 耗时: ${duration}ms`);
+      this.logger.info(`Successfully wrote model JSON to WebDAV. Absolute: ${absoluteJsonPath}, 耗时: ${duration}ms`);
 
       // --- Update caches ---
-      this.logger.debug(`[writeModelJson] Attempting to update caches for ${jsonFilePath}`);
+      this.logger.debug(`[writeModelJson] Attempting to update caches for ${relativeJsonPath}`);
       try {
         const newJsonData = JSON.parse(dataToWrite);
-        this.logger.debug(`[writeModelJson] Parsed new JSON data for ${jsonFilePath}`);
+        this.logger.debug(`[writeModelJson] Parsed new JSON data for ${relativeJsonPath}`);
         
         // --- Update L2 Cache (MODEL_JSON_INFO) ---
         if (this.modelInfoCacheService && this.modelInfoCacheService.isInitialized && this.modelInfoCacheService.isEnabled) {
-          this.logger.info(`[writeModelJson] Updating L2 caches (MODEL_JSON_INFO) for ${jsonFilePath}`);
+          this.logger.info(`[writeModelJson] Updating L2 caches (MODEL_JSON_INFO) for ${relativeJsonPath}`);
           this.logger.debug(`[writeModelJson] modelInfoCacheService is initialized and enabled.`);
           
           // 1. Update MODEL_JSON_INFO for this file
@@ -900,84 +904,88 @@ class WebDavDataSource extends DataSource {
           this.modelInfoCacheService.setDataToCache(
             CacheDataType.MODEL_JSON_INFO,
             sourceId,
-            jsonFilePath,
+            absoluteJsonPath, // 使用绝对路径作为缓存键
             newJsonData,
             jsonFileStats,
             'webdav'
           );
-          this.logger.debug(`[writeModelJson] setDataToCache for MODEL_JSON_INFO completed for ${jsonFilePath}`);
+          this.logger.debug(`[writeModelJson] setDataToCache for MODEL_JSON_INFO completed for ${absoluteJsonPath}`);
           
           // 2. Find and update the model in allModelsCache
-          this.logger.debug(`[writeModelJson] Attempting to find and update model in allModelsCache for ${jsonFilePath}`);
-          // 优先用 jsonPath 精确查找
+          this.logger.debug(`[writeModelJson] Attempting to find and update model in allModelsCache for ${relativeJsonPath}`);
+          // 由于 allModelsCache 中的 model.jsonPath 现在是相对路径，所以比较时应使用 relativeJsonPath
           let modelIndex = this.allModelsCache.findIndex(model =>
-            model.jsonPath === jsonFilePath
+            model.jsonPath === relativeJsonPath // 使用相对路径进行比较
           );
-          this.logger.debug(`[writeModelJson] modelIndex in allModelsCache for ${jsonFilePath}: ${modelIndex}`);
+          this.logger.debug(`[writeModelJson] modelIndex in allModelsCache for ${relativeJsonPath}: ${modelIndex}`);
           let modelToUpdate = null;
           let potentialModelFile = null;
 
           if (modelIndex !== -1) {
             modelToUpdate = this.allModelsCache[modelIndex];
             potentialModelFile = modelToUpdate.file;
-            this.logger.debug(`[writeModelJson] Found modelToUpdate in allModelsCache. Path: ${modelToUpdate.relativePath}, File: ${potentialModelFile ? potentialModelFile.relativePath : 'N/A'}`);
+            this.logger.debug(`[writeModelJson] Found modelToUpdate in allModelsCache. Path: ${modelToUpdate.relativePath}, File: ${potentialModelFile || 'N/A'}`);
           }
            
           else {
-              // log.info -> this.logger.info
-              this.logger.info(`[webDavDataSource writeModelJson] Model for JSON ${jsonFilePath} not found in allModelsCache by jsonPath. It will be processed by the next InitAllSource if it's a new model or its corresponding model file is found.`);
+              this.logger.info(`[webDavDataSource writeModelJson] Model for JSON ${relativeJsonPath} not found in allModelsCache by jsonPath. It will be processed by the next InitAllSource if it's a new model or its corresponding model file is found.`);
            }
 
           if (modelToUpdate && potentialModelFile) {
-            this.logger.info(`[writeModelJson] Updating model in allModelsCache: ${modelToUpdate.file?.relativePath || modelToUpdate.relativePath}`);
-            this.logger.debug(`[writeModelJson] Calling _buildModelEntry for ${potentialModelFile.relativePath}`);
-            // Re-build the model object with new JSON data
-            const updatedModelObj = await this._buildModelEntry(
-              potentialModelFile,
-              sourceId,
-              this._resolvePath('/'),
-              newJsonData,
+            this.logger.info(`[writeModelJson] Updating model in allModelsCache: ${modelToUpdate.file || modelToUpdate.relativePath}`);
+            
+            const modelFileItemFromCache = this._allItemsCache.find(
+              item => item.relativePath === potentialModelFile
             );
-            this.logger.debug(`[writeModelJson] _buildModelEntry returned: ${updatedModelObj ? 'object' : 'null'}`);
-            if (updatedModelObj) {
-              // Preserve the relativePath
-              if (modelToUpdate.relativePath) {
-                updatedModelObj.relativePath = modelToUpdate.relativePath;
-                this.logger.debug(`[writeModelJson] Preserved relativePath: ${modelToUpdate.relativePath}`);
-              }
-              // Update the model in allModelsCache
-              this.allModelsCache[modelIndex] = updatedModelObj;
-              this.logger.info(`[writeModelJson] Successfully updated model in allModelsCache for ${jsonFilePath}`);
+
+            if (!modelFileItemFromCache) {
+              this.logger.warn(`[writeModelJson] Could not find full model file item in _allItemsCache for relative path: ${potentialModelFile}. Cache might be inconsistent.`);
             } else {
-              this.logger.warn(`[writeModelJson] Re-building model after JSON update returned null for ${jsonFilePath}. Cache might be inconsistent until next InitAllSource.`);
+              this.logger.debug(`[writeModelJson] Calling _buildModelEntry for ${modelFileItemFromCache.filename} (relative: ${potentialModelFile})`);
+              const updatedModelObj = await this._buildModelEntry(
+                modelFileItemFromCache,
+                sourceId,
+                this._resolvePath('/'),
+                new Map() // Pass an empty Map instead of null
+              );
+              this.logger.debug(`[writeModelJson] _buildModelEntry returned: ${updatedModelObj ? 'object' : 'null'}`);
+              if (updatedModelObj) {
+                if (modelToUpdate.relativePath) {
+                  updatedModelObj.relativePath = modelToUpdate.relativePath;
+                  this.logger.debug(`[writeModelJson] Preserved relativePath: ${modelToUpdate.relativePath}`);
+                }
+                this.allModelsCache[modelIndex] = updatedModelObj;
+                this.logger.info(`[writeModelJson] Successfully updated model in allModelsCache for ${relativeJsonPath}`);
+              } else {
+                this.logger.warn(`[writeModelJson] Re-building model after JSON update returned null for ${relativeJsonPath}. Cache might be inconsistent until next InitAllSource.`);
+              }
+              this.logger.debug(`[writeModelJson] Attempting to invalidate MODEL_DETAIL cache for ${potentialModelFile}`);
+              await this.modelInfoCacheService.invalidateCacheEntry(
+                CacheDataType.MODEL_DETAIL,
+                sourceId,
+                potentialModelFile
+              );
+              this.logger.debug(`[writeModelJson] Invalidated MODEL_DETAIL cache for ${potentialModelFile}`);
             }
-            // Invalidate MODEL_DETAIL cache
-            this.logger.debug(`[writeModelJson] Attempting to invalidate MODEL_DETAIL cache for ${potentialModelFile.relativePath}`);
-            await this.modelInfoCacheService.invalidateCacheEntry(
-              CacheDataType.MODEL_DETAIL,
-              sourceId,
-              potentialModelFile.relativePath
-            );
-            this.logger.debug(`[writeModelJson] Invalidated MODEL_DETAIL cache for ${potentialModelFile.relativePath}`);
           } else {
-            this.logger.warn(`[writeModelJson] Model for JSON ${jsonFilePath} not found in allModelsCache or potentialModelFile is missing. It will be processed by the next InitAllSource.`);
+            this.logger.warn(`[writeModelJson] Model for JSON ${relativeJsonPath} not found in allModelsCache or potentialModelFile is missing. It will be processed by the next InitAllSource.`);
           }
         } else {
-          this.logger.warn(`[writeModelJson] modelInfoCacheService is not available or not enabled. Skipping L2 cache updates for ${jsonFilePath}. Initialized: ${this.modelInfoCacheService?.isInitialized}, Enabled: ${this.modelInfoCacheService?.isEnabled}`);
+          this.logger.warn(`[writeModelJson] modelInfoCacheService is not available or not enabled. Skipping L2 cache updates for ${relativeJsonPath}. Initialized: ${this.modelInfoCacheService?.isInitialized}, Enabled: ${this.modelInfoCacheService?.isEnabled}`);
         }
       } catch (cacheUpdateError) {
-        this.logger.error(`[writeModelJson] Error updating caches for ${jsonFilePath}: ${cacheUpdateError.message}`, cacheUpdateError.stack, cacheUpdateError);
+        this.logger.error(`[writeModelJson] Error updating caches for ${relativeJsonPath}: ${cacheUpdateError.message}`, cacheUpdateError.stack, cacheUpdateError);
       }
       
       // Update internal caches
       this.logger.debug(`[writeModelJson] Clearing _allItemsCache and _lastRefreshedFromRootPath for ${this.config.id}`);
       this._allItemsCache = [];
       this._lastRefreshedFromRootPath = null; // Force refresh
-      this.logger.debug(`[writeModelJson] Cleared _allItemsCache to ensure fresh contentHash on next listModels after JSON write for ${jsonFilePath}.`);
+      this.logger.debug(`[writeModelJson] Cleared _allItemsCache to ensure fresh contentHash on next listModels after JSON write for ${relativeJsonPath}.`);
 
     } catch (error) {
       const duration = Date.now() - startTime;
-      this.logger.error(`Failed to write model JSON to WebDAV: ${resolvedPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
+      this.logger.error(`Failed to write model JSON to WebDAV: ${absoluteJsonPath}, 耗时: ${duration}ms`, error.message, error.stack, error.response?.status);
       throw error;
     }
   }
@@ -1066,3 +1074,4 @@ class WebDavDataSource extends DataSource {
 module.exports = {
   WebDavDataSource
 };
+
