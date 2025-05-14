@@ -913,34 +913,12 @@ class WebDavDataSource extends DataSource {
 
           if (modelIndex !== -1) {
             modelToUpdate = this.allModelsCache[modelIndex];
-            // 通过 jsonPath 找到的模型，反查其文件
-            if (modelToUpdate.file) {
-              potentialModelFile = this._allItemsCache.find(item =>
-                item.type === 'file' &&
-                item.filename === modelToUpdate.file
-              );
-            }
-          } else {
-            // 兼容旧逻辑兜底
-            const modelFileBaseName = path.posix.basename(jsonFilePath, '.json');
-            const dirName = path.posix.dirname(jsonFilePath);
-            await this._populateAllItemsCacheIfNeeded(this._resolvePath('/'));
-            potentialModelFile = this._allItemsCache.find(item =>
-              item.type === 'file' &&
-              path.posix.dirname(item.relativePath) === dirName &&
-              path.posix.basename(item.relativePath, path.posix.extname(item.relativePath)) === modelFileBaseName &&
-              !item.relativePath.endsWith('.json')
-            );
-            if (potentialModelFile) {
-              modelIndex = this.allModelsCache.findIndex(model =>
-                model.file === potentialModelFile.filename ||
-                model.relativePath === potentialModelFile.relativePath
-              );
-              if (modelIndex !== -1) {
-                modelToUpdate = this.allModelsCache[modelIndex];
-              }
-            }
+            potentialModelFile = modelToUpdate.file;
           }
+           
+          else {
+              log.info(`[webDavDataSource writeModelJson] Model for JSON ${fileName} not found in allModelsCache. It will be processed by the next InitAllSource if it's a new model or its corresponding model file is found.`);
+           }
 
           if (modelToUpdate && potentialModelFile) {
             this.logger.info(`Updating model in allModelsCache: ${modelToUpdate.file || modelToUpdate.relativePath}`);
@@ -949,7 +927,7 @@ class WebDavDataSource extends DataSource {
               potentialModelFile,
               sourceId,
               this._resolvePath('/'),
-              new Map([[potentialModelFile.filename, dataToWrite]])
+              newJsonData,
             );
             if (updatedModelObj) {
               // Preserve the relativePath
