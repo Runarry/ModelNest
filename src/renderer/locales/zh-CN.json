@@ -21,9 +21,12 @@
   },
   "main": {
     "labelModelSource": "模型库:",
-    "button": 
-    {
+    "button": {
       "crawlInfoTitle": "通过CIVITA抓取信息"
+    },
+    "search": {
+      "placeholder": "搜索模型...",
+      "buttonTitle": "搜索"
     }
   },
   "detail": {
@@ -213,7 +216,7 @@
     "title": "补全模型信息状态",
     "closeTitle": "关闭",
     "status": {
-      "idle": "准备就绪。点击“开始”以补全当前模型库的信息。",
+      "idle": "准备就绪。点击\"开始\"以补全当前模型库的信息。",
       "scanning": "扫描文件中...",
       "running": "正在处理: {processed}/{total} - 当前模型: {model}",
       "paused": "已暂停 ({processed}/{total})",

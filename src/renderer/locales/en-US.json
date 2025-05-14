@@ -23,6 +23,10 @@
     "labelModelSource": "Model Source:",
     "button": {
       "crawlInfoTitle": "Retrieve information via CIVITA"
+    },
+    "search": {
+      "placeholder": "Search models...",
+      "buttonTitle": "Search"
     }
   },
   "detail": {
