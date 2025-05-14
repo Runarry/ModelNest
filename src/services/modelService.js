@@ -137,11 +137,20 @@ class ModelService {
 
   _applyFiltersToListModels(modelObjs, filters, sourceId, directory) {
       log.debug(`[ModelService _applyFiltersToListModels] Before filtering. Count: ${modelObjs.length}`);
-      if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) || (Array.isArray(filters.tags) && filters.tags.length > 0) )) {
+      
+      const hasArrayFilters = filters && (
+        (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || 
+        (Array.isArray(filters.modelType) && filters.modelType.length > 0) || 
+        (Array.isArray(filters.tags) && filters.tags.length > 0)
+      );
+      
+      const hasSearchFilter = filters && filters.searchValue && typeof filters.searchValue === 'string' && filters.searchValue.trim() !== '';
+      
+      if (hasArrayFilters || hasSearchFilter) {
         const baseModelFilter = (filters.baseModel && Array.isArray(filters.baseModel)) ? filters.baseModel.map(bm => bm.toLowerCase()) : [];
         const modelTypeFilter = (filters.modelType && Array.isArray(filters.modelType)) ? filters.modelType.map(mt => mt.toLowerCase()) : [];
         const tagsFilter = (filters.tags && Array.isArray(filters.tags)) ? filters.tags.map(tag => tag.toLowerCase()) : [];
-
+        const searchValue = hasSearchFilter ? filters.searchValue.trim() : '';
 
         modelObjs = modelObjs.filter(modelObj => {
           let passesBaseModel = true;
@@ -161,8 +170,38 @@ class ModelService {
             const filterTags = filters.tags.map(t => t.toLowerCase());
             passesTags = filterTags.some(tag => modelTags.includes(tag));
           }
+          
+          // 搜索值筛选：通过模型的名称（name）进行匹配
+          let passesSearch = true;
+          if (hasSearchFilter) {
+            // 检查模型是否有name属性
+            if (!modelObj.name || typeof modelObj.name !== 'string') {
+              passesSearch = false;
+            } else {
+              // 检查是否是正则表达式格式 (被 / 包围)
+              const isRegex = searchValue.length >= 2 && 
+                              searchValue.startsWith('/') && 
+                              searchValue.endsWith('/');
+              
+              if (isRegex) {
+                // 正则表达式匹配
+                try {
+                  const regexPattern = searchValue.substring(1, searchValue.length - 1);
+                  const regex = new RegExp(regexPattern, 'i'); // 'i' 表示不区分大小写
+                  passesSearch = regex.test(modelObj.name);
+                } catch (e) {
+                  log.warn(`[ModelService _applyFiltersToListModels] Invalid regex in searchValue: ${searchValue}. Error: ${e.message}`);
+                  // 如果正则表达式无效，则退回到字符串包含匹配
+                  passesSearch = modelObj.name.toLowerCase().includes(searchValue.toLowerCase());
+                }
+              } else {
+                // 普通字符串包含匹配
+                passesSearch = modelObj.name.toLowerCase().includes(searchValue.toLowerCase());
+              }
+            }
+          }
 
-          return passesBaseModel && passesModelType && passesTags;
+          return passesBaseModel && passesModelType && passesTags && passesSearch;
         });
         log.debug(`[ModelService _applyFiltersToListModels] Filtered model objects. Count: ${modelObjs.length}`);
       }
@@ -177,11 +216,12 @@ class ModelService {
         if (!fltrs || Object.keys(fltrs).length === 0) {
           return true;
         }
-        const { baseModel, modelType } = fltrs;
+        const { baseModel, modelType, searchValue } = fltrs;
         const isBaseModelFilterEmpty = !baseModel || (Array.isArray(baseModel) && baseModel.length === 0);
         const isModelTypeFilterEmpty = !modelType || (Array.isArray(modelType) && modelType.length === 0);
+        const isSearchValueEmpty = !searchValue || typeof searchValue !== 'string' || searchValue.trim() === '';
         
-        return isBaseModelFilterEmpty && isModelTypeFilterEmpty;
+        return isBaseModelFilterEmpty && isModelTypeFilterEmpty && isSearchValueEmpty;
       }
       
       if (_isDefaultDirectory(directory) && _areFiltersEmpty(filters)) {

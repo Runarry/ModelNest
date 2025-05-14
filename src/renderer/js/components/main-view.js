@@ -812,14 +812,16 @@ async function handleSearchButtonClick() {
     const searchTerm = searchInput.value.trim();
     logMessage('info', `[MainView] Search button clicked. Term: "${searchTerm}"`);
 
+    if(searchTerm === currentAppliedFilters.searchValue) return;
+
 
 
     if (searchTerm) {
         currentAppliedFilters.searchValue = searchTerm;
-        if (currentSourceId) {
-            await loadModels(currentSourceId, currentDirectory);
-        }
+    }
 
+    if (currentSourceId) {
+        await loadModels(currentSourceId, currentDirectory);
     }
 
 
