@@ -137,10 +137,11 @@ class ModelService {
 
   _applyFiltersToListModels(modelObjs, filters, sourceId, directory) {
       log.debug(`[ModelService _applyFiltersToListModels] Before filtering. Count: ${modelObjs.length}`);
-      if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) )) {
+      if (filters && ( (Array.isArray(filters.baseModel) && filters.baseModel.length > 0) || (Array.isArray(filters.modelType) && filters.modelType.length > 0) || (Array.isArray(filters.tags) && filters.tags.length > 0) )) {
         const baseModelFilter = (filters.baseModel && Array.isArray(filters.baseModel)) ? filters.baseModel.map(bm => bm.toLowerCase()) : [];
         const modelTypeFilter = (filters.modelType && Array.isArray(filters.modelType)) ? filters.modelType.map(mt => mt.toLowerCase()) : [];
-        
+        const tagsFilter = (filters.tags && Array.isArray(filters.tags)) ? filters.tags.map(tag => tag.toLowerCase()) : [];
+
 
         modelObjs = modelObjs.filter(modelObj => {
           let passesBaseModel = true;
@@ -153,9 +154,15 @@ class ModelService {
             passesModelType = modelObj.modelType && typeof modelObj.modelType === 'string' && modelTypeFilter.includes(modelObj.modelType.toLowerCase());
           }
 
+          // tags筛选：filters.tags和modelObj.tags都是数组，只要有交集即通过
+          let passesTags = true;
+          if (Array.isArray(filters.tags) && filters.tags.length > 0) {
+            const modelTags = Array.isArray(modelObj.tags) ? modelObj.tags.map(t => t.toLowerCase()) : [];
+            const filterTags = filters.tags.map(t => t.toLowerCase());
+            passesTags = filterTags.some(tag => modelTags.includes(tag));
+          }
 
-          
-          return passesBaseModel && passesModelType;
+          return passesBaseModel && passesModelType && passesTags;
         });
         log.debug(`[ModelService _applyFiltersToListModels] Filtered model objects. Count: ${modelObjs.length}`);
       }
