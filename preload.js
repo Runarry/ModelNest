@@ -70,12 +70,16 @@ clearImageCache: () => ipcRenderer.invoke('clear-image-cache'), // 添加图片�
 
   // Add API to get blocked tags from config
   getBlockedTags: () => ipcRenderer.invoke('get-blocked-tags'),
+  
+  // Add API for cleaning up userData directories
+  cleanupUserData: (options = {}) => ipcRenderer.invoke('cleanup-user-data', options),
 });
 
 // 也将API暴露给window.electronAPI，便于在更多地方使用
 contextBridge.exposeInMainWorld('electronAPI', {
   clearImageCache: () => ipcRenderer.invoke('clear-image-cache'),
-  getCacheStats: () => ipcRenderer.invoke('get-cache-stats')
+  getCacheStats: () => ipcRenderer.invoke('get-cache-stats'),
+  cleanupUserData: (options = {}) => ipcRenderer.invoke('cleanup-user-data', options) // Add cleanup function to electronAPI too
 });
 
 console.log('[Preload] API exposed successfully.');
