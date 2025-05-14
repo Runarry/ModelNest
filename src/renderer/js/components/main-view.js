@@ -21,8 +21,7 @@ let searchButton;
 
 // ===== Module State =====
 let models = [];
-let currentAppliedFilters = { baseModel: [], modelType: [], tags: [] };
-let currentSearchTerm = ''; // 新增：存储当前搜索关键词
+let currentAppliedFilters = { baseModel: [], modelType: [], tags: [], searchValue:'' };     
 let filterPanelInstance = null;
 let displayMode = 'card'; // 'card' or 'list'
 let currentDirectory = null;
@@ -59,8 +58,8 @@ export async function initMainView(config, showDetailCallback) { // Make init as
     directoryTabsContainer = document.querySelector(config.directoryTabsSelector);
     crawlInfoButton = document.getElementById(config.crawlInfoButtonId);
     sourceReadonlyIndicator = document.getElementById(config.sourceReadonlyIndicatorId);
-    searchInput = document.getElementById('search-input'); // 新增
-    searchButton = document.getElementById('search-button'); // 新增
+    searchInput = document.getElementById('search-input'); 
+    searchButton = document.getElementById('search-button');    
 
     if (!sourceSelect || !modelList || !cardViewBtn || !listViewBtn || !directoryTabsContainer || !crawlInfoButton || !sourceReadonlyIndicator || !openFilterPanelBtn || !filterPanelContainer || !searchInput || !searchButton) {
         logMessage('error', "[MainView] Initialization failed: DOM elements missing.", config);
@@ -77,8 +76,8 @@ export async function initMainView(config, showDetailCallback) { // Make init as
     crawlInfoButton.addEventListener('click', () => {
         if (crawlStatusModal) crawlStatusModal.show(currentSourceId, currentDirectory);
     });
-    searchButton.addEventListener('click', handleSearchButtonClick); // 新增
-    searchInput.addEventListener('keypress', handleSearchInputKeypress); // 新增
+    searchButton.addEventListener('click', handleSearchButtonClick);
+    searchInput.addEventListener('keypress', handleSearchInputKeypress); 
 
     updateViewModeButtons();
     _showDetail = showDetailCallback;
@@ -206,17 +205,10 @@ function setupGlobalTagsTooltip() {
 
 function handleFiltersApplied(newFilters) {
     logMessage('info', '[MainView] Filters applied:', newFilters);
-    currentAppliedFilters = newFilters || { baseModel: [], modelType: [], tags: [] };
+    currentAppliedFilters.baseModel = newFilters.baseModel || [];
+    currentAppliedFilters.modelType = newFilters.modelType || [];
+    currentAppliedFilters.tags = newFilters.tags || [];
 
-    // 将当前搜索词合并到筛选条件中
-    if (currentSearchTerm) {
-        if (!currentAppliedFilters.tags) {
-            currentAppliedFilters.tags = [];
-        }
-        if (!currentAppliedFilters.tags.includes(currentSearchTerm)) {
-            currentAppliedFilters.tags.push(currentSearchTerm);
-        }
-    }
 
     if (currentSourceId) loadModels(currentSourceId, currentDirectory);
 }
@@ -240,37 +232,16 @@ async function fetchAndStoreSourceConfigs() {
 
 export async function loadModels(sourceId, directory = null, externalFilters = null) {
     logMessage('info', `[MainView] Loading models: sourceId=${sourceId}, directory=${directory ?? 'root'}, externalFilters: ${JSON.stringify(externalFilters)}`);
-    setLoading(true);
+    setLoading(true);   
     currentSourceId = sourceId;
     currentDirectory = directory;
 
     try {
-        let filtersToUse = { ...currentAppliedFilters };
-
-        if (externalFilters) {
-            filtersToUse = { ...filtersToUse, ...externalFilters };
-            // 合并 tags，确保不重复
-            if (externalFilters.tags) {
-                filtersToUse.tags = [...new Set([...(currentAppliedFilters.tags || []), ...externalFilters.tags])];
-            }
-        } else if (currentSearchTerm) { // 如果没有外部筛选，但有搜索词
-            if (!filtersToUse.tags) {
-                filtersToUse.tags = [];
-            }
-            if (!filtersToUse.tags.includes(currentSearchTerm)) {
-                filtersToUse.tags.push(currentSearchTerm);
-            }
-        }
-        logMessage('debug', `[MainView loadModels] Effective filters: ${JSON.stringify(filtersToUse)}`);
-        models = await listModels(sourceId, directory, filtersToUse);
-
-
+        models = await listModels(sourceId, directory, currentAppliedFilters);
         if (directory === null) {
             subdirectories = await listSubdirectories(sourceId);
             renderDirectoryTabs();
         }
-
-
         // Setup or update virtual scroll regardless of mode, as it handles both now
         if (typeof VirtualScroll !== 'undefined') {
             setupOrUpdateVirtualScroll();
@@ -540,15 +511,7 @@ function _renderSingleModelElement(modelObj) { // Renders the core card structur
     contentDiv.appendChild(nameH3);
     contentDiv.appendChild(typeSpan);
 
-    // Description (conditionally for list view, or if design changes)
-    // if (displayMode === 'list' && modelObj.modelJsonInfo && modelObj.modelJsonInfo.description) {
-    //     const descriptionP = document.createElement('p');
-    //     descriptionP.className = 'model-description-list-view'; // Specific class for styling
-    //     descriptionP.textContent = modelObj.modelJsonInfo.description.substring(0, 100) + (modelObj.modelJsonInfo.description.length > 100 ? '...' : ''); // Example: truncate
-    //     contentDiv.appendChild(descriptionP);
-    // }
     fragment.appendChild(contentDiv);
-
 
     // --- Tags ---
     const tagsContainer = document.createElement('div');
@@ -645,7 +608,7 @@ export function updateSingleModelCard(updatedModelObj) {
     }
     logMessage('info', `[MainView] Updating single model item: ${updatedModelObj.name}`);
 
-logMessage('debug', `[MainView updateSingleModelCard] Comparing with updatedModelObj: file='${updatedModelObj.file}', jsonPath='${updatedModelObj.jsonPath}', sourceId='${updatedModelObj.sourceId}'`);
+    logMessage('debug', `[MainView updateSingleModelCard] Comparing with updatedModelObj: file='${updatedModelObj.file}', jsonPath='${updatedModelObj.jsonPath}', sourceId='${updatedModelObj.sourceId}'`);
 
     logMessage('debug', '[MainView updateSingleModelCard] Iterating current models array for comparison:');
     models.forEach((m, index) => {
@@ -848,28 +811,16 @@ function handleSearchInputKeypress(event) {
 async function handleSearchButtonClick() {
     const searchTerm = searchInput.value.trim();
     logMessage('info', `[MainView] Search button clicked. Term: "${searchTerm}"`);
-    currentSearchTerm = searchTerm; // 更新当前搜索词
 
-    let combinedFilters = { ...currentAppliedFilters };
+
 
     if (searchTerm) {
-        if (!combinedFilters.tags) {
-            combinedFilters.tags = [];
+        currentAppliedFilters.searchValue = searchTerm;
+        if (currentSourceId) {
+            await loadModels(currentSourceId, currentDirectory);
         }
-        // 添加搜索词到tags，避免重复
-        if (!combinedFilters.tags.includes(searchTerm)) {
-            combinedFilters.tags.push(searchTerm);
-        }
-    } else {
-        // 如果搜索词为空，并且之前 currentAppliedFilters.tags 中包含了旧的 currentSearchTerm，则需要移除
-        // 这一步在 loadModels 中通过 currentSearchTerm 的更新来间接处理，
-        // 或者在 currentAppliedFilters 更新时更精确地管理
-        // 为了简化，这里依赖 loadModels 重新构建 filtersToUse
+
     }
 
 
-    if (currentSourceId) {
-        // 调用 loadModels 时，它会使用 currentSearchTerm 和 currentAppliedFilters
-        await loadModels(currentSourceId, currentDirectory);
-    }
 }
