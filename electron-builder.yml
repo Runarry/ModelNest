@@ -51,6 +51,7 @@ nsis:
   oneClick: false
   perMachine: true
   allowToChangeInstallationDirectory: true
+  include: ./scripts/installer.nsh
 publish:
   provider: github
   owner: Runarry 

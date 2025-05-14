@@ -2,6 +2,7 @@ const { ipcMain, BrowserWindow, app } = require('electron');
 const log = require('electron-log');
 const imageCache = require('../common/imageCache'); // 直接导入 imageCache
 const { WebDavDataSource } = require('../data/webdavDataSource'); // 导入 WebDavDataSource
+const { cleanupUserData } = require('../../scripts/cleanup-handler'); // 导入清理函数
 
 /**
  * 初始化应用级别的 IPC Handlers
@@ -386,6 +387,27 @@ function initializeAppIPC(services) {
 
 
   // --- End ModelInfoCacheService IPC Handlers ---
+
+  // 清理用户数据目录
+  ipcMain.handle('cleanup-user-data', async (event, options = {}) => {
+    log.info('[IPC] cleanup-user-data 请求', options);
+    try {
+      const userDataPath = app.getPath('userData');
+      const { cleanCache = true, cleanLogs = true } = options;
+      
+      // 调用清理函数
+      const result = await cleanupUserData(userDataPath, cleanCache, cleanLogs);
+      
+      log.info(`[IPC] 用户数据清理结果: ${result.success ? '成功' : '失败'}`);
+      return result;
+    } catch (error) {
+      log.error('[IPC] 清理用户数据目录失败:', error);
+      return { 
+        success: false, 
+        errors: [`清理失败: ${error.message}`] 
+      };
+    }
+  });
 
   log.info('[IPC] App IPC Handlers 初始化完成');
 }
