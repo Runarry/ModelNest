@@ -843,6 +843,8 @@ class WebDavDataSource extends DataSource {
   }
 
   async writeModelJson(relativePath, dataToWrite) { 
+    this.logger.debug(`[writeModelJson] dataToWrite , ${relativePath}`); 
+
     const startTime = Date.now();
     await this.ensureInitialized();
     const sourceId = this.config.id;
