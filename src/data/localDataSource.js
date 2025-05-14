@@ -60,7 +60,7 @@ class LocalDataSource extends DataSource {
     }
 
     // 设置并发限制，限制同时处理的文件或目录数量
-    const limit = pLimit(8);
+    const limit = pLimit(12);
 
     // 初始化用于存储结果的数据结构
     let allModels = []; // 存储所有找到的模型对象
@@ -89,10 +89,11 @@ class LocalDataSource extends DataSource {
       try {
         // 读取当前目录下的文件和子目录
         const files = await fs.promises.readdir(currentDir, { withFileTypes: true });
-        
+        log.debug(`[LocalDataSource InitAllSource walk] 读取目录: ${currentDir}, 相对路径: ${relativePath}`);
         // 过滤出当前目录中支持的模型文件
         const modelFiles = files.filter(f => f.isFile() && effectiveSupportedExts.some(ext => f.name.toLowerCase().endsWith(ext.toLowerCase())));
         
+        log.debug(`[LocalDataSource InitAllSource walk] 过滤出当前目录中支持的模型文件: ${JSON.stringify(modelFiles, null, 2)}`);
         // 存储当前目录中的模型名称
         const modelsInCurrentDir = [];
 
