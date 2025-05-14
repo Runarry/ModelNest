@@ -20,6 +20,58 @@ async function initializeLogger(configService) {
     // 若目录创建失败，降级为默认路径
     log.error('日志目录创建失败:', e.message, e.stack);
   }
+
+  // 日志清理配置
+  const maxTotalLogSize = 100 * 1024 * 1024; // 100MB，日志目录最大总大小
+  const maxLogFileAgeDays = 30; // 30天，日志文件最大保留时间
+
+  // 清理旧日志文件函数
+  async function cleanOldLogs() {
+    try {
+      const files = await fs.promises.readdir(logsDir);
+      const logFiles = files
+        .filter(f => f.endsWith('.log'))
+        .map(f => path.join(logsDir, f));
+
+      // 获取文件信息
+      const fileInfos = await Promise.all(
+        logFiles.map(async file => {
+          const stats = await fs.promises.stat(file);
+          return { file, size: stats.size, mtime: stats.mtime };
+        })
+      );
+
+      // 删除超过最大保留时间的日志文件
+      const now = Date.now();
+      const expiredFiles = fileInfos.filter(info => {
+        const ageDays = (now - info.mtime.getTime()) / (1000 * 60 * 60 * 24);
+        return ageDays > maxLogFileAgeDays;
+      });
+      for (const info of expiredFiles) {
+        await fs.promises.unlink(info.file);
+        log.info(`[Log] 删除过期日志文件: ${info.file}`);
+      }
+
+      // 重新获取文件信息，计算总大小
+      const remainingFiles = fileInfos.filter(info => !expiredFiles.includes(info));
+      let totalSize = remainingFiles.reduce((acc, info) => acc + info.size, 0);
+
+      // 按修改时间升序排序，删除最旧文件直到总大小符合限制
+      remainingFiles.sort((a, b) => a.mtime.getTime() - b.mtime.getTime());
+      for (const info of remainingFiles) {
+        if (totalSize <= maxTotalLogSize) break;
+        await fs.promises.unlink(info.file);
+        log.info(`[Log] 删除日志文件以控制总大小: ${info.file}`);
+        totalSize -= info.size;
+      }
+    } catch (err) {
+      log.error('[Log] 清理日志文件时出错:', err.message, err.stack);
+    }
+  }
+
+  // 执行日志清理
+  cleanOldLogs();
+
   log.transports.file.resolvePath = () => logFile;
   log.transports.file.format = '{y}-{m}-{d} {h}:{i}:{s}.{ms} [{level}] {text}';
   log.transports.file.maxSize = 10 * 1024 * 1024; // 10MB
