@@ -1,13 +1,10 @@
 // 定义 __DEV__ 常量，用于区分开发和生产环境
 const __DEV__ = process.env.IS_DEV_MODE === 'true';
 const { app, BrowserWindow, ipcMain, dialog } = require('electron'); // Add dialog here
-const { autoUpdater } = require('electron-updater'); // Import autoUpdater
 const path = require('path');
 const fs = require('fs-extra'); // Add fs-extra for file operations
 
 const imageCache = require('./src/common/imageCache');
-const os = require('os');
-const crypto = require('crypto');
 const log = require('electron-log'); // electron-log is still used for direct logging in main.js if needed, and by logger.js
 const { initializeLogger } = require('./src/utils/logger'); // Import the logger initializer
 const { cleanupUserData } = require('./scripts/cleanup-handler'); // Import cleanup handler
@@ -221,5 +218,3 @@ ipcMain.handle('open-folder-dialog', async (event) => {
     return result.filePaths[0];
   }
 });
-
-// The duplicate handlers are removed, as they're already defined in appIPC.js
