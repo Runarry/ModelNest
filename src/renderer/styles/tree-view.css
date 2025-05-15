@@ -23,6 +23,10 @@
   overflow-y: auto;
   scrollbar-width: thin;
   scrollbar-color: rgba(0,0,0,0.2) transparent;
+  will-change: transform;
+  position: relative;
+  overflow-anchor: none;
+  scroll-behavior: smooth;
 }
 
 .directory-tree-container::-webkit-scrollbar {
@@ -40,6 +44,7 @@
   color: var(--tree-text-color);
   padding: 0px;
   user-select: none; /* Prevent text selection during interaction */
+  min-height: 100%;
 }
 
 .tree-node-li {
@@ -73,6 +78,7 @@
 
 /* Tree lines styling */
 .tree-children {
+  overflow: visible;
   margin-left: var(--tree-indent-size);
   padding-left: 0;
   position: relative;
@@ -161,18 +167,26 @@
   opacity: 0.5;
 }
 
-.tree-children {
-  overflow: hidden;
-  transition: max-height 0.3s ease;
-  max-height: 1000px; /* Arbitrary large value */
-}
-
 .tree-children.collapsed {
   display: none;
-  max-height: 0;
 }
 
 /* Ensure the indent lines up with parent folders */
 .tree-node-arrow + .tree-node-icon {
   padding-left: 2px;
+}
+
+/* 确保最后一个节点有足够的底部空间 */
+.tree-node-li:last-child {
+  padding-bottom: 5px;
+}
+
+/* 为树视图容器添加底部内边距，确保最后的项目可见 */
+.tree-view-container > ul.tree-root-list {
+  padding-bottom: 60px;
+}
+
+/* 确保每次展开的子树都有足够的渲染空间 */
+.tree-children:not(.collapsed) {
+  padding-bottom: 5px;
 }

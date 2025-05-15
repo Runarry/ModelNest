@@ -835,14 +835,25 @@ function highlightActiveDirectory(directoryPath) {
 function ensureParentNodesExpanded(node) {
     if (!node) return;
     
+    // 保存滚动位置
+    const treeContainer = directoryTabsContainer?.querySelector('#directory-tree-container');
+    const scrollTop = treeContainer ? treeContainer.scrollTop : 0;
+    
     // 找到当前节点的 li 父元素
     const nodeLi = node.closest('.tree-node-li');
     if (!nodeLi) return;
     
     // 向上查找所有父级 ul.tree-children
     let parent = nodeLi.parentElement;
+    let expandedAny = false;
+    
     while (parent) {
         if (parent.classList.contains('tree-children')) {
+            // 如果原本是折叠状态，记录已展开状态
+            if (parent.classList.contains('collapsed')) {
+                expandedAny = true;
+            }
+            
             // 展开这个父节点
             parent.classList.remove('collapsed');
             
@@ -859,6 +870,21 @@ function ensureParentNodesExpanded(node) {
         } else {
             break;
         }
+    }
+    
+    // 如果有任何节点被展开，则设置一个延时，等DOM更新后滚动到选定节点
+    if (expandedAny) {
+        setTimeout(() => {
+            // 恢复滚动位置
+            if (treeContainer) {
+                treeContainer.scrollTop = scrollTop;
+            }
+            
+            // 滚动选定节点到视图中
+            setTimeout(() => {
+                node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 100);
+        }, 50);
     }
 }
 

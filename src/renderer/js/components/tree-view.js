@@ -96,6 +96,9 @@ function createTreeView(container, data, options = {}) {
   };
   const config = { ...defaults, ...options };
 
+  // 保存滚动位置
+  const scrollTop = container.scrollTop;
+
   container.innerHTML = ""; // Clear previous content
   container.classList.add("tree-view-container");
 
@@ -130,6 +133,11 @@ function createTreeView(container, data, options = {}) {
   }
 
   container.appendChild(rootUl);
+
+  // 恢复滚动位置
+  setTimeout(() => {
+    container.scrollTop = scrollTop;
+  }, 0);
 
   // Event delegation for clicks
   rootUl.addEventListener('click', (event) => {
@@ -192,7 +200,6 @@ function renderNode(nodeData, level, config) {
     // Indentation
     for (let i = 0; i < level; i++) {
       const indentSpan = document.createElement("span");
-      indentSpan.classList.add("tree-node-indent");
       nodeElement.appendChild(indentSpan);
     }
   }
@@ -255,6 +262,10 @@ function toggleNode(nodeElement) {
   const iconSpan = nodeElement.querySelector('.tree-node-icon');
   
   if (childrenUl && childrenUl.classList) {
+    // 保存父容器和滚动位置
+    const container = listItem.closest('.directory-tree-container');
+    const scrollTop = container ? container.scrollTop : 0;
+    
     const isCollapsed = childrenUl.classList.toggle('collapsed');
     if (iconSpan) {
       // 根据折叠状态更新图标
@@ -262,6 +273,25 @@ function toggleNode(nodeElement) {
         iconSpan.innerHTML = '<i class="fas fa-folder"></i>';
       } else {
         iconSpan.innerHTML = '<i class="fas fa-folder-open"></i>';
+        
+        // 如果展开节点，确保在复杂嵌套中节点能够完全渲染
+        setTimeout(() => {
+          // 触发容器的scroll事件，强制浏览器重新计算可见区域
+          if (container) {
+            container.dispatchEvent(new Event('scroll'));
+            
+            // 恢复滚动位置
+            container.scrollTop = scrollTop;
+            
+            // 滚动到视图中间如果当前节点不可见（展开大目录时可能发生）
+            const nodeRect = nodeElement.getBoundingClientRect();
+            const containerRect = container.getBoundingClientRect();
+            
+            if (nodeRect.bottom > containerRect.bottom || nodeRect.top < containerRect.top) {
+              nodeElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+          }
+        }, 50); // 给DOM有时间更新
       }
     }
   }
