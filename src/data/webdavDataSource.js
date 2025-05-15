@@ -4,7 +4,6 @@ const {createWebDavModelObject } = require('./modelParser'); // 导入 createWeb
 const path = require('path');
 const log = require('electron-log'); // 添加 electron-log 导入
 const crypto = require('crypto'); // 引入 crypto 模块
-const pLimit = require('p-limit').default; // 引入 p-limit
 
 /**
  * Parses a WebDAV lastmod timestamp string into milliseconds.
@@ -131,24 +130,16 @@ class WebDavDataSource extends DataSource {
       this.logger.warn(`[WebDavDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`);
     }
 
-    // 设置并发限制
-    const limit = pLimit(8);
-
-    // 初始化用于存储结果的数据结构
-    let allModels = [];
-    let directoryStructure = {
-      name: "root",
-      path: "",
-      children: []
-    };
-    let modelsByDirectory = new Map();
-
     // 获取根路径
     const resolvedRootOfSource = this._resolvePath('/');
     this.logger.info(`[WebDavDataSource InitAllSource] 解析后的根路径: ${resolvedRootOfSource}`);
 
+    // Moved declarations to function scope
+    let allModels = [];
+    let modelsByDirectory = new Map();
+
     try {
-      // 确保 _allItemsCache 已填充
+      // Ensure _allItemsCache 已填充
       await this._populateAllItemsCacheIfNeeded(resolvedRootOfSource);
       
       // 收集所有目录
@@ -171,6 +162,8 @@ class WebDavDataSource extends DataSource {
       }
       
       // 构建目录树结构
+      // Clear existing children before rebuilding the tree
+      this.directoryStructureCache.children = []; 
       for (const dir of dirSet) {
         if (dir !== '/') {
           // 确保目录名不包含 /
@@ -183,7 +176,7 @@ class WebDavDataSource extends DataSource {
             children: []
           };
           
-          this._addNodeToDirectoryTree(directoryStructure, parentPath, dirNode);
+          this._addNodeToDirectoryTree(this.directoryStructureCache, parentPath, dirNode);
         }
       }
       
@@ -223,49 +216,47 @@ class WebDavDataSource extends DataSource {
         preFetchedJsonContentsMap = await this._batchFetchJsonContents(uniqueJsonFilePaths);
       }
       
-      // 并发构建模型条目
-      const modelBuildPromises = [];
-      
+      // 初始化用于存储结果的数据结构
+      allModels = [];
+      modelsByDirectory = new Map();
+
+      this.logger.info(`[WebDavDataSource InitAllSource] Sequentially building ${modelFileItems.length} model entries.`);
+
       for (const modelFile of modelFileItems) {
-        modelBuildPromises.push(limit(() =>
-          this._buildModelEntry(modelFile, sourceId, resolvedRootOfSource, preFetchedJsonContentsMap)
-        ));
-      }
-      
-      const settledModelEntries = await Promise.allSettled(modelBuildPromises);
-      
-      // 处理模型构建结果
-      for (const result of settledModelEntries) {
-        if (result.status === 'fulfilled' && result.value) {
-          const modelObj = result.value;
-          allModels.push(modelObj);
+        this.logger.debug(`[WebDavDataSource InitAllSource] Awaiting _buildModelEntry for: ${modelFile.filename}`);
+        try {
+          const modelObj = await this._buildModelEntry(modelFile, sourceId, resolvedRootOfSource, preFetchedJsonContentsMap);
+          this.logger.debug(`[WebDavDataSource InitAllSource] Completed _buildModelEntry for: ${modelFile.filename}. Has modelObj: ${!!modelObj}`);
           
-          // 获取模型所在的目录
-          // 确保 path.posix.dirname 总是接收到一个字符串参数
-          const modelPath = modelObj.relativePath || modelObj.fileName || modelObj.file || '/';
-          const modelDir = path.posix.dirname(modelPath);
-          const dirKey = modelDir === '.' ? '/' : modelDir;
-          
-          // 将模型添加到对应目录的映射中
-          if (!modelsByDirectory.has(dirKey)) {
-            modelsByDirectory.set(dirKey, []);
+          if (modelObj) {
+            allModels.push(modelObj);
+            const modelPath = modelObj.relativePath || modelObj.fileName || modelObj.file || '/';
+            const modelDir = path.posix.dirname(modelPath);
+            const dirKey = modelDir === '.' ? '/' : modelDir;
+            if (!modelsByDirectory.has(dirKey)) {
+              modelsByDirectory.set(dirKey, []);
+            }
+            modelsByDirectory.get(dirKey).push(modelObj.file);
           }
-          modelsByDirectory.get(dirKey).push(modelObj.file);
+        } catch (buildError) {
+          // Log error from _buildModelEntry if it throws and is not caught internally
+          this.logger.error(`[WebDavDataSource InitAllSource] Error building model entry for ${modelFile.filename}: ${buildError.message}`, buildError.stack);
         }
       }
+      
     } catch (error) {
       const duration = Date.now() - startTime;
       this.logger.error(`[WebDavDataSource InitAllSource] 初始化过程中出错: ${error.message}, 耗时: ${duration}ms`, error.stack);
-      return { allModels: [], directoryStructure, modelsByDirectory: new Map() };
+      // Return an explicitly empty directory structure
+      return { allModels: [], directoryStructure: { name: "root", path: "", children: [] }, modelsByDirectory: new Map() };
     }
     
     const duration = Date.now() - startTime;
-    const dirCount = this._getAllPathsFromTree(directoryStructure).length;
+    const dirCount = this._getAllPathsFromTree(this.directoryStructureCache).length;
     this.logger.info(`[WebDavDataSource InitAllSource] 完成. 耗时: ${duration}ms, 找到 ${allModels.length} 个模型, ${dirCount} 个目录`);
     
     // 缓存结果
     this.allModelsCache = allModels;
-    this.directoryStructureCache = directoryStructure;
     this.modelsByDirectoryMap = modelsByDirectory;
     
     // 返回初始化结果
@@ -274,7 +265,7 @@ class WebDavDataSource extends DataSource {
     
     return {
       allModels,
-      directoryStructure,
+      directoryStructure: this.directoryStructureCache,
       modelsByDirectory
     };
   }
@@ -517,43 +508,32 @@ class WebDavDataSource extends DataSource {
     this.logger.info(`_populateAllItemsCache complete. Found ${this._allItemsCache.length} file objects.`);
   }
  
-  async _batchFetchJsonContents(jsonFilePaths) {
+  async _batchFetchJsonContents(jsonFilePaths = []) {
     const startTime = Date.now();
     await this.ensureInitialized();
-    const sourceId = this.config.id;
     const resultsMap = new Map();
 
     if (!jsonFilePaths || jsonFilePaths.length === 0) {
+      this.logger.info('_batchFetchJsonContents: No JSON file paths provided.');
       return resultsMap;
     }
 
-    this.logger.info(`_batchFetchJsonContents: Starting batch fetch for ${jsonFilePaths.length} JSON files.`);
+    this.logger.info(`_batchFetchJsonContents: Starting sequential fetch for ${jsonFilePaths.length} JSON files.`);
 
-    // 新增并发限制
-    const limit = pLimit(8);
-
-    const fetchPromises = jsonFilePaths.map(filePath => limit(async () => {
+    for (const filePath of jsonFilePaths) {
+      this.logger.debug(`_batchFetchJsonContents: Fetching ${filePath}`);
       try {
         const content = await this.client.getFileContents(filePath, { format: 'text' });
-        return { status: 'fulfilled', path: filePath, value: content };
+        resultsMap.set(filePath, content);
+        this.logger.debug(`_batchFetchJsonContents: Successfully fetched ${filePath}`);
       } catch (error) {
-        return { status: 'rejected', path: filePath, reason: error };
+        resultsMap.set(filePath, null); // Store null on error to indicate attempt
+        this.logger.error(`_batchFetchJsonContents: Failed to fetch ${filePath}:`, error.message, error.response?.status);
       }
-    }));
-
-    const results = await Promise.all(fetchPromises); // Use Promise.all as limit handles concurrency
-
-    results.forEach(result => {
-      if (result.status === 'fulfilled') {
-        resultsMap.set(result.path, result.value);
-      } else { // status === 'rejected'
-        resultsMap.set(result.path, null);
-        this.logger.error(`_batchFetchJsonContents: Failed to fetch ${result.path}:`, result.reason.message, result.reason.response?.status);
-      }
-    });
+    }
 
     const duration = Date.now() - startTime;
-    this.logger.info(`_batchFetchJsonContents: Finished batch fetch. ${resultsMap.size} results (some might be null for failures). Duration: ${duration}ms`);
+    this.logger.info(`_batchFetchJsonContents: Finished sequential fetch. ${resultsMap.size} results processed. Duration: ${duration}ms`);
     return resultsMap;
   }
 
