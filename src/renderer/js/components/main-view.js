@@ -41,6 +41,7 @@ let blockedTags = []; // Add state for blocked tags
 // ===== Virtual Scroll State & Constants =====
 let virtualScrollInstance = null;
 let cardViewResizeObserver = null;
+let previousVisibleItemsMap = new Map(); // Track currently visible items for cleanup
 
 // Card View Constants
 const CARD_APPROX_WIDTH = 180;
@@ -51,6 +52,101 @@ const CARD_ROW_ITEM_HEIGHT = CARD_HEIGHT + VERTICAL_ROW_GAP;
 
 // List View Constants
 const LIST_ITEM_HEIGHT = 80; // Example height for a list item, adjust as needed
+
+// Original loadImage function captures via imageObserver
+// Track items with BlobURLs to monitor for leaks
+const trackedBlobUrls = new Map(); // Map of modelIdentifier -> {timestamp, cacheKey}
+
+// Wrap the image observer to track when blob URLs are added
+const originalImageObserver = imageObserver;
+const monitoredImageObserver = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+        if (entry.isIntersecting) {
+            const img = entry.target;
+            const modelCard = img.closest('.model-card');
+            if (modelCard && modelCard.dataset.modelIdentifier) {
+                // Set up monitoring for when the blob URL is added
+                const originalSrcSetter = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src').set;
+                Object.defineProperty(img, 'src', {
+                    set(value) {
+                        if (value && value.startsWith('blob:') && img.dataset.blobCacheKey) {
+                            trackedBlobUrls.set(modelCard.dataset.modelIdentifier, {
+                                timestamp: Date.now(),
+                                cacheKey: img.dataset.blobCacheKey,
+                                blobUrl: value
+                            });
+                            logMessage('debug', `[BlobTracker] Blob URL assigned to card ${modelCard.dataset.modelIdentifier}: ${img.dataset.blobCacheKey}`);
+                        }
+                        // Call the original setter
+                        originalSrcSetter.call(this, value);
+                    }
+                });
+            }
+            loadImage(img);
+            monitoredImageObserver.unobserve(img);
+        }
+    });
+}, { threshold: 0.1 });
+
+// Replace the original imageObserver in the module state
+// This is a debugging operation! For production, use the original observer.
+// Uncomment the next line to enable blob tracking:
+// imageObserver = monitoredImageObserver;
+
+// Add a function to monitor tracking statistics
+function reportBlobTracking() {
+    const stats = {
+        trackedUrls: trackedBlobUrls.size,
+        activeElements: document.querySelectorAll('.model-image[data-blob-cache-key]').length,
+        oldestTrackedTime: null,
+        newestTrackedTime: null
+    };
+    
+    if (trackedBlobUrls.size > 0) {
+        // Find oldest and newest timestamps
+        let oldest = Date.now();
+        let newest = 0;
+        
+        trackedBlobUrls.forEach(info => {
+            if (info.timestamp < oldest) oldest = info.timestamp;
+            if (info.timestamp > newest) newest = info.timestamp;
+        });
+        
+        stats.oldestTrackedTime = new Date(oldest).toISOString();
+        stats.newestTrackedTime = new Date(newest).toISOString();
+    }
+    
+    logMessage('info', '[BlobTracker] Current tracking status:', stats);
+    return stats;
+}
+
+// Add a cleanup function for tracked blob URLs to match actual releases
+function _releaseTrackedBlobUrl(modelIdentifier, cacheKey) {
+    if (trackedBlobUrls.has(modelIdentifier)) {
+        const info = trackedBlobUrls.get(modelIdentifier);
+        if (info.cacheKey === cacheKey) {
+            trackedBlobUrls.delete(modelIdentifier);
+            logMessage('debug', `[BlobTracker] Released tracked blob URL for ${modelIdentifier}: ${cacheKey}`);
+        }
+    }
+}
+
+// Override _releaseBlobUrlForCardElement to track releases
+const original_releaseBlobUrlForCardElement = _releaseBlobUrlForCardElement;
+_releaseBlobUrlForCardElement = function(cardElement) {
+    if (!cardElement) return;
+    
+    // Check if this card has an identifier for tracking
+    if (cardElement.dataset.modelIdentifier) {
+        const imgElement = cardElement.querySelector('.model-image[data-blob-cache-key]');
+        if (imgElement && imgElement.dataset.blobCacheKey) {
+            _releaseTrackedBlobUrl(cardElement.dataset.modelIdentifier, imgElement.dataset.blobCacheKey);
+        }
+    }
+    
+    // Call the original function
+    original_releaseBlobUrlForCardElement(cardElement);
+};
 
 // ===== Helper function to cleanup Blob URLs from VirtualScroll items =====
 /**
@@ -97,6 +193,18 @@ function _cleanupVirtualScrollItems(instance, mode) {
     if (releasedCount > 0 && BlobUrlCache && typeof BlobUrlCache.recordCleanupRelease === 'function') {
         BlobUrlCache.recordCleanupRelease(releasedCount);
         logMessage('debug', `[MainView _cleanupVirtualScrollItems] Recorded cleanup of ${releasedCount} items.`);
+    }
+}
+
+// The original implementation needed to be restored
+function _releaseBlobUrlForCardElement(cardElement) { // This is generic enough
+    if (!cardElement) return;
+    // Find image within the card/list item structure
+    const imgElement = cardElement.querySelector('.model-image[data-blob-cache-key]');
+    if (imgElement) {
+        const cacheKey = imgElement.dataset.blobCacheKey;
+        if (cacheKey) BlobUrlCache.releaseBlobUrlByKey(cacheKey);
+        delete imgElement.dataset.blobCacheKey;
     }
 }
 
@@ -456,23 +564,146 @@ function setupOrUpdateVirtualScroll() {
         virtualScrollInstance = null;
     }
 
+    // We need to wrap the render function to track what items are visible and clean up
+    // when they're removed from view
+    const wrappedRenderFunction = (item, index) => {
+        // First, capture the current state of rendered items before this new render
+        if (virtualScrollInstance && virtualScrollInstance.contentContainer) {
+            _captureCurrentVisibleItems();
+        }
+        
+        // Call the original render function
+        const element = renderFunction(item, index);
+        
+        // After render, clean up items that are no longer visible (comparing previous to current)
+        setTimeout(() => _cleanupRecycledItems(), 0);
+        
+        return element;
+    };
+
     if (!virtualScrollInstance) {
         logMessage('info', `[MainView] Initializing VirtualScroll for ${displayMode} view.`);
         virtualScrollInstance = new VirtualScroll({
             container: modelList,
             items: itemsData,
             itemHeight: itemHeight,
-            renderItem: renderFunction,
+            renderItem: wrappedRenderFunction,
             bufferSize: displayMode === 'card' ? 4 : 10, // Different buffer for card vs list
         });
     } else {
         logMessage('debug', `[MainView] Updating VirtualScroll items for ${displayMode} view.`);
+        virtualScrollInstance.customRenderItem = wrappedRenderFunction; // Override the render function
         virtualScrollInstance.updateItems(itemsData);
     }
     // Always refresh after creation or update to ensure correct rendering
     if (virtualScrollInstance) {
         virtualScrollInstance.refresh();
     }
+}
+
+/**
+ * Captures all currently visible model cards by their unique identifier to detect recycling
+ */
+function _captureCurrentVisibleItems() {
+    if (!virtualScrollInstance || !virtualScrollInstance.contentContainer) return;
+    
+    // Reset the map if this is a new capture after processing
+    if (previousVisibleItemsMap.size === 0) {
+        previousVisibleItemsMap = new Map();
+        
+        const shells = Array.from(virtualScrollInstance.contentContainer.children);
+        let cardCount = 0;
+        
+        shells.forEach(shell => {
+            // For card view, need to look inside row containers for actual cards
+            if (displayMode === 'card') {
+                const cardElements = shell.querySelectorAll('.model-card');
+                cardElements.forEach(card => {
+                    if (card.dataset.modelIdentifier) {
+                        previousVisibleItemsMap.set(card.dataset.modelIdentifier, card);
+                        cardCount++;
+                    }
+                });
+            } else {
+                // For list view, find the card in the list item
+                const modelCard = shell.querySelector('.model-card');
+                if (modelCard && modelCard.dataset.modelIdentifier) {
+                    previousVisibleItemsMap.set(modelCard.dataset.modelIdentifier, modelCard);
+                    cardCount++;
+                }
+            }
+        });
+        
+        if (cardCount > 0) {
+            logMessage('debug', `[MainView] Captured ${cardCount} currently visible items`);
+        }
+    }
+}
+
+/**
+ * Compares previously visible items with current ones to clean up recycled items
+ */
+function _cleanupRecycledItems() {
+    if (previousVisibleItemsMap.size === 0) return;
+    
+    // Get currently visible items
+    const currentVisibleMap = new Map();
+    let recycledCount = 0;
+    
+    if (virtualScrollInstance && virtualScrollInstance.contentContainer) {
+        const shells = Array.from(virtualScrollInstance.contentContainer.children);
+        
+        shells.forEach(shell => {
+            if (displayMode === 'card') {
+                const cardElements = shell.querySelectorAll('.model-card');
+                cardElements.forEach(card => {
+                    if (card.dataset.modelIdentifier) {
+                        currentVisibleMap.set(card.dataset.modelIdentifier, card);
+                    }
+                });
+            } else {
+                const modelCard = shell.querySelector('.model-card');
+                if (modelCard && modelCard.dataset.modelIdentifier) {
+                    currentVisibleMap.set(modelCard.dataset.modelIdentifier, modelCard);
+                }
+            }
+        });
+    }
+    
+    // Find items that are in previous but not in current (they've been recycled)
+    const recycledItems = [];
+    previousVisibleItemsMap.forEach((card, identifier) => {
+        if (!currentVisibleMap.has(identifier)) {
+            // Get the model data for logging
+            let modelData = null;
+            try {
+                modelData = JSON.parse(identifier);
+            } catch (e) {
+                modelData = { error: "Failed to parse identifier" };
+            }
+            
+            // Check if this card actually has a blob URL to release
+            const imgElement = card.querySelector('.model-image[data-blob-cache-key]');
+            const hasBlobToRelease = !!imgElement && !!imgElement.dataset.blobCacheKey;
+            
+            if (hasBlobToRelease) {
+                _releaseBlobUrlForCardElement(card);
+                recycledItems.push({
+                    modelId: modelData,
+                    blobKey: imgElement ? imgElement.dataset.blobCacheKey : 'unknown'
+                });
+                recycledCount++;
+            }
+        }
+    });
+    
+    if (recycledCount > 0) {
+        logMessage('info', `[MainView] Released ${recycledCount} blob URLs from recycled items in ${displayMode} mode. Items:`, recycledItems);
+        BlobUrlCache.recordCleanupRelease(recycledCount);
+    }
+    
+    // Clear the previous map to indicate we've processed this batch
+    previousVisibleItemsMap.clear();
 }
 
 
@@ -628,17 +859,6 @@ function _renderSingleModelElement(modelObj) { // Renders the core card structur
     return card;
 }
 
-
-function _releaseBlobUrlForCardElement(cardElement) { // This is generic enough
-    if (!cardElement) return;
-    // Find image within the card/list item structure
-    const imgElement = cardElement.querySelector('.model-image[data-blob-cache-key]');
-    if (imgElement) {
-        const cacheKey = imgElement.dataset.blobCacheKey;
-        if (cacheKey) BlobUrlCache.releaseBlobUrlByKey(cacheKey);
-        delete imgElement.dataset.blobCacheKey;
-    }
-}
 
 function renderModels() {
     if (!modelList) return;
