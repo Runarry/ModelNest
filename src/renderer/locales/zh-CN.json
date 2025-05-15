@@ -106,7 +106,7 @@
     "fileRecognition": {
       "title": "文件识别",
       "extensionsLabel": "支持的文件扩展名 (逗号分隔)",
-      "extensionsPlaceholder": ".json, .yaml, .txt"
+      "extensionsPlaceholder": ".checkpoint, .ckpt, .safetensors, .pt, .pth, .bin"
     },
     "imageCache": {
       "title": "图片缓存",

@@ -337,7 +337,7 @@ function populateFileRecognitionPane() {
     const textarea = pane.querySelector('#supportedFileExtensions'); // Corrected ID from HTML
     if (textarea) {
         // Use default from configService if available, otherwise a hardcoded default
-        const defaultExtensions = currentConfigData.defaults?.supportedExtensions || ['.json', '.yaml', '.txt']; // Example default
+        const defaultExtensions = currentConfigData.defaults?.supportedExtensions || [".checkpoint", ".ckpt", ".safetensors", ".pt", ".pth", ".bin"];
         const currentExtensions = currentConfigData.supportedExtensions || defaultExtensions;
         textarea.value = currentExtensions.join(', ');
     } else {

@@ -106,7 +106,7 @@
     "fileRecognition": {
       "title": "File Recognition",
       "extensionsLabel": "Supported File Extensions (comma-separated)",
-      "extensionsPlaceholder": ".json, .yaml, .txt"
+      "extensionsPlaceholder": ".checkpoint, .ckpt, .safetensors, .pt, .pth, .bin"
     },
     "imageCache": {
       "title": "Image Cache",
