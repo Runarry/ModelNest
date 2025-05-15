@@ -298,7 +298,7 @@ class ModelService {
     }
   }
 
-  async getAvailableFilterOptions(sourceId = null, directory = '', supportedExtensions = null) {
+  async getAvailableFilterOptions(sourceId = null) {
     // 如果sourceId 为null，使用默认的
     if (!sourceId) {
       log.debug('[ModelService getAvailableFilterOptions] sourceId is null or undefined, returning empty options immediately.');
