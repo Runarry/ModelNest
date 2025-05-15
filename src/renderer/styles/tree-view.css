@@ -178,7 +178,7 @@
 
 /* 确保最后一个节点有足够的底部空间 */
 .tree-node-li:last-child {
-  padding-bottom: 5px;
+  padding-bottom: 0px;
 }
 
 /* 为树视图容器添加底部内边距，确保最后的项目可见 */

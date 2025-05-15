@@ -74,6 +74,8 @@
   </script>
  */
 
+import { t } from '../core/i18n.js';
+
 /**
  * Creates a tree view component.
  * @param {HTMLElement} container - The DOM element to render the tree into.
@@ -336,8 +338,9 @@ function renderRootNode(rootData, config) {
 
   const nameSpan = document.createElement("span");
   nameSpan.classList.add("tree-node-name");
-  nameSpan.textContent = rootData.name;
-  nameSpan.title = rootData.name; // Tooltip for long names
+  // 使用 i18n 获取本地化的"全部"文本
+  nameSpan.textContent = t('all');
+  nameSpan.title = t('all'); // Tooltip也使用本地化文本
   nodeElement.appendChild(nameSpan);
 
   if (config.showCount && typeof rootData.count === 'number') {
