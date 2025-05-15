@@ -38,7 +38,7 @@
   font-family: var(--tree-font-family);
   font-size: var(--tree-font-size);
   color: var(--tree-text-color);
-  padding: 5px;
+  padding: 0px;
   user-select: none; /* Prevent text selection during interaction */
 }
 

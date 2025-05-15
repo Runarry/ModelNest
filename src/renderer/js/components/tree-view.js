@@ -218,7 +218,7 @@ function renderNode(nodeData, level, config) {
 
   if (nodeData.children && nodeData.children.length > 0) {
     nodeElement.classList.add("has-children");
-    // 使用文件夹图标替代箭头
+    // 使用文件夹图标
     iconSpan.innerHTML = '<i class="fas fa-folder"></i>'; // 使用 FontAwesome 文件夹图标
 
     const childrenUl = document.createElement("ul");
@@ -234,7 +234,8 @@ function renderNode(nodeData, level, config) {
     });
     listItem.appendChild(childrenUl);
   } else {
-    iconSpan.innerHTML = '<i class="fas fa-file"></i>'; // 使用 FontAwesome 文件图标
+    // 叶子节点也使用文件夹图标
+    iconSpan.innerHTML = '<i class="fas fa-folder"></i>'; // 所有节点都使用文件夹图标
   }
 
   return listItem;
@@ -300,7 +301,7 @@ function renderRootNode(rootData, config) {
 
   const iconSpan = document.createElement("span");
   iconSpan.classList.add("tree-node-icon", "root-icon");
-  iconSpan.innerHTML = '<i class="fas fa-folder-open"></i>'; // 使用 FontAwesome 图标
+  iconSpan.innerHTML = '<i class="fas fa-layer-group"></i>'; // 使用 fa-layer-group 图标作为根节点
   nodeElement.appendChild(iconSpan);
 
   const nameSpan = document.createElement("span");
