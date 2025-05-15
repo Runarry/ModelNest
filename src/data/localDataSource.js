@@ -59,9 +59,6 @@ class LocalDataSource extends DataSource {
       log.warn(`[LocalDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`); // 记录使用默认值的警告
     }
 
-    // 设置并发限制，限制同时处理的文件或目录数量
-    const limit = pLimit(12);
-
     // 初始化用于存储结果的数据结构
     let allModels = []; // 存储所有找到的模型对象
     let directoryStructure = {
@@ -90,47 +87,48 @@ class LocalDataSource extends DataSource {
         // 读取当前目录下的文件和子目录
         const files = await fs.promises.readdir(currentDir, { withFileTypes: true });
         log.debug(`[LocalDataSource InitAllSource walk] 读取目录: ${currentDir}, 相对路径: ${relativePath}`);
-        // 过滤出当前目录中支持的模型文件
         const modelFiles = files.filter(f => f.isFile() && effectiveSupportedExts.some(ext => f.name.toLowerCase().endsWith(ext.toLowerCase())));
-        
         log.debug(`[LocalDataSource InitAllSource walk] 过滤出当前目录中支持的模型文件: ${JSON.stringify(modelFiles, null, 2)}`);
-        // 存储当前目录中的模型名称
         const modelsInCurrentDir = [];
 
-        // 使用并发限制处理模型文件
-        await Promise.all(modelFiles.map(modelFile => limit(async () => {
-          const modelFilePath = path.join(currentDir, modelFile.name); // 构建模型文件的完整路径
-          const relativeModelFilePath = path.relative(rootPath, modelFilePath); // 构建模型文件的相对路径
-          const associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json'; // 构建关联JSON文件的路径
-          
-          let modelJsonInfo; // 存储从JSON文件解析的模型信息
-          let jsonFileStats; // 存储关联JSON文件的统计信息
-
-          // 尝试获取关联JSON文件的统计信息
-          try {
-            jsonFileStats = await this.getFileStats(associatedJsonPath);
-          } catch (e) {
-            log.warn(`[LocalDataSource InitAllSource] 无法获取关联JSON的统计信息: ${associatedJsonPath}`, e.message); // 获取统计信息失败，记录警告
-            jsonFileStats = null;
-          }
-
-          modelJsonInfo = await this._getJsonInfo(associatedJsonPath, jsonFileStats)
-          const sourceConfig = { id: sourceId }; // 构建数据源配置对象
-          // 解析单个模型文件，获取模型对象
-          const modelObj = await parseSingleModelFile(modelFilePath, effectiveSupportedExts, sourceConfig, true, modelJsonInfo, jsonFileStats);
-          
-          // 如果成功解析出模型对象，则添加到结果列表中
-          if (modelObj) {
-            // 确保 modelObj 有 relativePath 属性，与 listModels 中的筛选逻辑对应
-            // relativePath 是当前 modelObj 所在的目录相对于 rootPath 的路径
-            modelObj.relativePath = relativePath.replace(/\\/g, '/');
-            log.debug(`[InitAllSource walk] Model: ${modelObj.name}, Assigned relativePath: '${modelObj.relativePath}' (from walk's current relativePath: '${relativePath}')`);
-            allModels.push(modelObj); // 添加到所有模型列表
-            this.addfilterOptionsByModelObj(modelObj);
-
-            modelsInCurrentDir.push(modelObj.file); 
-          }
-        })));
+        // 使用纯 async/await 串行处理模型文件
+        for (const modelFile of modelFiles) {
+          log.debug(`[LocalDataSource InitAllSource walk] Awaiting direct processing for: ${modelFile.name} in directory ${currentDir}`);
+          // Directly await the file processing logic (IIFE or separate async function)
+          await (async () => {
+            log.debug(`[LocalDataSource InitAllSource walk] ENTERED direct async processing for: ${modelFile.name}`);
+            const modelFilePath = path.join(currentDir, modelFile.name); 
+            const relativeModelFilePath = path.relative(rootPath, modelFilePath); 
+            const associatedJsonPath = modelFilePath.substring(0, modelFilePath.lastIndexOf('.')) + '.json'; 
+            
+            log.debug(`[LocalDataSource InitAllSource walk] Processing model file: ${modelFilePath}`); 
+            let modelJsonInfo; 
+            let jsonFileStats; 
+            try {
+              log.debug(`[LocalDataSource InitAllSource walk] Attempting to getFileStats for: ${associatedJsonPath}`); 
+              jsonFileStats = await this.getFileStats(associatedJsonPath);
+              log.debug(`[LocalDataSource InitAllSource walk] Completed getFileStats for: ${associatedJsonPath}. Stats: ${JSON.stringify(jsonFileStats)}`); 
+            } catch (e) {
+              log.warn(`[LocalDataSource InitAllSource] 无法获取关联JSON的统计信息: ${associatedJsonPath}`, e.message); 
+              jsonFileStats = null;
+            }
+            log.debug(`[LocalDataSource InitAllSource walk] Attempting to _getJsonInfo for: ${associatedJsonPath}`); 
+            modelJsonInfo = await this._getJsonInfo(associatedJsonPath, jsonFileStats);
+            log.debug(`[LocalDataSource InitAllSource walk] Completed _getJsonInfo for: ${associatedJsonPath}. Has modelJsonInfo: ${!!modelJsonInfo}`); 
+            const sourceConfig = { id: sourceId }; 
+            log.debug(`[LocalDataSource InitAllSource walk] Attempting to parseSingleModelFile for: ${modelFilePath}`); 
+            const modelObj = await parseSingleModelFile(modelFilePath, effectiveSupportedExts, sourceConfig, true, modelJsonInfo, jsonFileStats);
+            log.debug(`[LocalDataSource InitAllSource walk] Completed parseSingleModelFile for: ${modelFilePath}. Has modelObj: ${!!modelObj}`); 
+            if (modelObj) {
+              modelObj.relativePath = relativePath.replace(/\\/g, '/');
+              log.debug(`[InitAllSource walk] Model: ${modelObj.name}, Assigned relativePath: '${modelObj.relativePath}' (from walk's current relativePath: '${relativePath}')`);
+              allModels.push(modelObj); 
+              this.addfilterOptionsByModelObj(modelObj);
+              modelsInCurrentDir.push(modelObj.file); 
+            }
+          })(); // End of IIFE for file processing
+          log.debug(`[LocalDataSource InitAllSource walk] COMPLETED direct awaited processing for: ${modelFile.name} in directory ${currentDir}`);
+        }
 
         // 如果当前目录有模型，添加到目录与模型名称的映射中
         if (modelsInCurrentDir.length > 0) {
@@ -156,12 +154,14 @@ class LocalDataSource extends DataSource {
           this._addNodeToDirectoryTree(directoryStructure, relativePath, subDirNode);
         }
 
-        // 使用并发限制递归处理子目录
-        await Promise.all(subDirs.map(subDir => limit(async () => {
-          const subDirPath = path.join(currentDir, subDir.name); // 构建子目录的完整路径
-          const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name; // 构建子目录的相对路径
-          await walk(subDirPath, subDirRelativePath); // 递归调用walk函数处理子目录
-        })));
+        // 使用纯 async/await 串行递归处理子目录
+        for (const subDir of subDirs) {
+          const subDirPath = path.join(currentDir, subDir.name); 
+          const subDirRelativePath = relativePath ? `${relativePath}/${subDir.name}` : subDir.name; 
+          log.debug(`[LocalDataSource InitAllSource walk] Awaiting direct walk for subdirectory: ${subDir.name}`);
+          await walk(subDirPath, subDirRelativePath); // Directly await recursive call
+          log.debug(`[LocalDataSource InitAllSource walk] COMPLETED direct walk for subdirectory: ${subDir.name}`);
+        }
       } catch (error) {
         // 遍历目录时出错处理
         if (error.code === 'ENOENT') {
