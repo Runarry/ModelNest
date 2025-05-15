@@ -760,7 +760,10 @@ async function handleSourceChange(event) {
     if (sourceSelect.disabled) {
         return;
     }
-    const sourceId = event.target.value;
+    
+    // Handle case when function is called directly without an event
+    const sourceId = event?.target?.value || sourceSelect.value;
+    
     if (!sourceId) {
         logMessage('warn', '[MainView] Source change event without a valid sourceId');
         return;
