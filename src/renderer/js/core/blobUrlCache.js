@@ -5,6 +5,37 @@ const cache = new Map(); // Stores { blob, blobUrl, refCount, mimeType, revocati
 const pendingRequests = new Map();
 const REVOCATION_DELAY_MS = 60000; // block缓存丢弃时间。
 
+// Performance monitoring stats
+const stats = {
+    totalCreated: 0,         // Total number of Blob URLs created
+    totalReleased: 0,        // Total number of Blob URLs released (refCount reached 0)
+    totalRevoked: 0,         // Total number of Blob URLs actually revoked (after delay)
+    totalReused: 0,          // Total number of cache hits
+    totalEarlyReuse: 0,      // Total reuse with active revocation timer cancellation
+    totalPendingDeduped: 0,  // Total pending requests deduped
+    currentActiveBlobs: 0,   // Current number of active blob entries (cache.size)
+    totalBytesStored: 0,     // Estimated total bytes in memory for blobs
+    totalBytesSaved: 0,      // Estimated bytes saved by reusing
+    cleanupEvents: 0,        // Number of cleanup invocations
+    cleanupItemsReleased: 0, // Number of items released during cleanup
+    lastCleanupTime: null,   // Timestamp of last cleanup
+    lastStatsResetTime: Date.now(), // Timestamp when stats were last reset
+    resetStats() {
+        this.totalCreated = 0;
+        this.totalReleased = 0;
+        this.totalRevoked = 0;
+        this.totalReused = 0;
+        this.totalEarlyReuse = 0;
+        this.totalPendingDeduped = 0;
+        this.totalBytesStored = 0;
+        this.totalBytesSaved = 0;
+        this.cleanupEvents = 0;
+        this.cleanupItemsReleased = 0;
+        this.lastStatsResetTime = Date.now();
+        // Don't reset currentActiveBlobs since it's a current state
+    }
+};
+
 /**
  * 生成缓存键.
  * @param {string} sourceId
@@ -29,6 +60,7 @@ async function getOrCreateBlobUrl(sourceId, imagePath) {
 
     if (pendingRequests.has(cacheKey)) {
         logMessage('debug', `${logPrefix} Request is pending, awaiting existing promise.`);
+        stats.totalPendingDeduped++;
         return pendingRequests.get(cacheKey);
     }
 
@@ -39,8 +71,16 @@ async function getOrCreateBlobUrl(sourceId, imagePath) {
             clearTimeout(entry.revocationTimerId);
             entry.revocationTimerId = null;
             logMessage('debug', `${logPrefix} Cancelled pending revocation timer.`);
+            stats.totalEarlyReuse++;
         }
         entry.refCount++;
+        stats.totalReused++;
+        
+        // Estimate bytes saved by reuse
+        if (entry.blob && entry.blob.size) {
+            stats.totalBytesSaved += entry.blob.size;
+        }
+        
         logMessage('debug', `${logPrefix} Cache HIT. New refCount: ${entry.refCount}. URL: ${entry.blobUrl}`);
         return entry.blobUrl;
     }
@@ -55,6 +95,13 @@ async function getOrCreateBlobUrl(sourceId, imagePath) {
                 logMessage('debug', `${logPrefix} Received image data from API. Size: ${imageData.data?.length} bytes, Type: ${imageData.mimeType}`);
                 const blob = new Blob([new Uint8Array(imageData.data)], { type: imageData.mimeType || 'application/octet-stream' });
                 const blobUrl = URL.createObjectURL(blob);
+
+                // Update stats
+                stats.totalCreated++;
+                stats.currentActiveBlobs = cache.size + 1; // +1 for the one we're about to add
+                if (blob.size) {
+                    stats.totalBytesStored += blob.size;
+                }
 
                 cache.set(cacheKey, {
                     blob: blob,
@@ -101,6 +148,17 @@ function releaseBlobUrlByKey(cacheKey) {
 }
 
 /**
+ * 记录某次来自于清理事件的释放
+ * @param {number} count - 释放的项目数量
+ */
+function recordCleanupRelease(count) {
+    if (count <= 0) return;
+    stats.cleanupEvents++;
+    stats.cleanupItemsReleased += count;
+    stats.lastCleanupTime = Date.now();
+}
+
+/**
  * 内部函数，处理实际的释放和延迟撤销逻辑.
  * @param {string} cacheKey
  */
@@ -120,6 +178,9 @@ function _performRelease(cacheKey) {
         logMessage('debug', `${logPrefix} Decremented refCount. New refCount: ${entry.refCount}.`);
 
         if (entry.refCount === 0) {
+            // Update stats for zero refCount
+            stats.totalReleased++;
+
             // Clear any existing timer for this key before starting a new one
             if (entry.revocationTimerId) {
                 clearTimeout(entry.revocationTimerId);
@@ -133,7 +194,15 @@ function _performRelease(cacheKey) {
                 if (currentEntry && currentEntry.refCount === 0) {
                     logMessage('info', `${logPrefix} Revocation timer expired. refCount still 0. Revoking URL: ${currentEntry.blobUrl} and removing from cache.`);
                     URL.revokeObjectURL(currentEntry.blobUrl);
+                    
+                    // Update stats before deletion
+                    stats.totalRevoked++;
+                    if (currentEntry.blob && currentEntry.blob.size) {
+                        stats.totalBytesStored -= currentEntry.blob.size;
+                    }
+                    
                     cache.delete(cacheKey);
+                    stats.currentActiveBlobs = cache.size;
                 } else if (currentEntry) {
                     logMessage('debug', `${logPrefix} Revocation timer expired, but refCount is now ${currentEntry.refCount}. URL will not be revoked.`);
                     currentEntry.revocationTimerId = null; // Clear the timerId as it's no longer pending
@@ -154,16 +223,42 @@ function _performRelease(cacheKey) {
  */
 function clearAllBlobUrls() {
     logMessage('info', '[BlobUrlCache] Clearing all cached Blob URLs.');
+    let revokedCount = 0;
+    let totalBytes = 0;
+    
     for (const [key, entry] of cache) {
         if (entry.revocationTimerId) {
             clearTimeout(entry.revocationTimerId); // Clear any pending revocation timers
         }
+        if (entry.blob && entry.blob.size) {
+            totalBytes += entry.blob.size;
+        }
         logMessage('debug', `[BlobUrlCache ClearAll] Revoking ${entry.blobUrl} for key ${key}`);
         URL.revokeObjectURL(entry.blobUrl);
+        revokedCount++;
     }
+    
+    // Update stats
+    stats.totalRevoked += revokedCount;
+    stats.totalBytesStored = 0;
+    stats.currentActiveBlobs = 0;
+    
     cache.clear();
     pendingRequests.clear(); // 也清除所有待处理的请求
-    logMessage('info', '[BlobUrlCache] All Blob URLs cleared.');
+    logMessage('info', `[BlobUrlCache] All Blob URLs cleared. Count: ${revokedCount}, Bytes: ${totalBytes}`);
+}
+
+/**
+ * 获取BlobUrlCache的统计信息，用于监控和调试
+ * @returns {Object} 统计数据对象
+ */
+function getStats() {
+    return {
+        ...stats,
+        pendingRequestsCount: pendingRequests.size,
+        cacheSize: cache.size,
+        revocationDelayMs: REVOCATION_DELAY_MS,
+    };
 }
 
 export const BlobUrlCache = {
@@ -171,6 +266,9 @@ export const BlobUrlCache = {
     releaseBlobUrl,
     releaseBlobUrlByKey, // Export new method
     clearAllBlobUrls,
+    recordCleanupRelease, // Export for performance tracking
+    getStats, // Export stats function for monitoring
+    resetStats: () => stats.resetStats(), // Export resetStats directly
     // generateCacheKey is already exported as a named export
     // 辅助函数，用于测试或调试
     _getCacheEntryForTesting: (sourceId, imagePath) => cache.get(generateCacheKey(sourceId, imagePath)),

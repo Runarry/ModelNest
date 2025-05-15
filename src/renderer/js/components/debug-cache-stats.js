@@ -5,6 +5,7 @@
 
 import { getCacheStats, logMessage } from '../apiBridge.js';
 import { migrateImageCache, migrateModelCache, cleanupUserData } from '../apiBridge.js';
+import { BlobUrlCache } from '../core/blobUrlCache.js';
 
 class DebugCacheStats {
   constructor() {
@@ -51,7 +52,7 @@ class DebugCacheStats {
     `;
     
     const title = document.createElement('h3');
-    title.textContent = '图片缓存统计';
+    title.textContent = '缓存统计';
     title.style.margin = '0';
     
     const closeBtn = document.createElement('button');
@@ -74,6 +75,11 @@ class DebugCacheStats {
     const statsContainer = document.createElement('div');
     statsContainer.id = 'cacheStatsContent';
     panel.appendChild(statsContainer);
+
+    // Blob URL 统计数据容器
+    const blobStatsContainer = document.createElement('div');
+    blobStatsContainer.id = 'blobUrlStatsContent';
+    panel.appendChild(blobStatsContainer);
 
     // 底部操作按钮
     const footer = document.createElement('div');
@@ -181,12 +187,52 @@ class DebugCacheStats {
     `;
     cleanupLogsBtn.onclick = () => this.cleanupUserDataLogs();
     
+    // 添加Blob URL清理按钮
+    const clearBlobUrlsBtn = document.createElement('button');
+    clearBlobUrlsBtn.textContent = '清理Blob URLs';
+    clearBlobUrlsBtn.style.cssText = `
+      background: #538;
+      border: none;
+      color: #fff;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    clearBlobUrlsBtn.onclick = () => this.clearBlobUrls();
+    
+    // 添加重置Blob URL统计按钮
+    const resetBlobStatsBtn = document.createElement('button');
+    resetBlobStatsBtn.textContent = '重置Blob统计';
+    resetBlobStatsBtn.style.cssText = `
+      background: #358;
+      border: none;
+      color: #fff;
+      padding: 5px 8px;
+      border-radius: 3px;
+      cursor: pointer;
+      font-size: 11px;
+    `;
+    resetBlobStatsBtn.onclick = () => this.resetBlobStats();
+    
     // 添加按钮到容器
     migrationContainer.appendChild(migrateImgCacheBtn);
     migrationContainer.appendChild(migrateModelCacheBtn);
     
     cleanupContainer.appendChild(cleanupCacheBtn);
     cleanupContainer.appendChild(cleanupLogsBtn);
+    
+    // 创建Blob URL按钮容器
+    const blobUrlContainer = document.createElement('div');
+    blobUrlContainer.style.cssText = `
+      width: 100%;
+      margin-top: 5px;
+      display: flex;
+      justify-content: space-between;
+    `;
+    
+    blobUrlContainer.appendChild(clearBlobUrlsBtn);
+    blobUrlContainer.appendChild(resetBlobStatsBtn);
     
     footer.appendChild(refreshBtn);
     footer.appendChild(clearCacheBtn);
@@ -197,6 +243,9 @@ class DebugCacheStats {
     
     // 添加清理按钮容器
     panel.appendChild(cleanupContainer);
+    
+    // 添加Blob URL按钮容器
+    panel.appendChild(blobUrlContainer);
 
     document.body.appendChild(panel);
     this.container = panel;
@@ -256,11 +305,13 @@ class DebugCacheStats {
     if (!this.isVisible) return;
     
     const statsContainer = document.getElementById('cacheStatsContent');
-    if (!statsContainer) return;
+    const blobStatsContainer = document.getElementById('blobUrlStatsContent');
+    if (!statsContainer || !blobStatsContainer) return;
     
     try {
       // 显示加载中
       statsContainer.innerHTML = '<p>正在加载统计信息...</p>';
+      blobStatsContainer.innerHTML = '';
       
       // 获取统计数据
       const stats = await getCacheStats();
@@ -283,6 +334,7 @@ class DebugCacheStats {
       
       // 构建HTML
       let html = `
+        <h4 class="stat-section-title">磁盘缓存</h4>
         <div class="stat-grid">
           <div class="stat-item">
             <div class="stat-label">请求总数</div>
@@ -326,6 +378,80 @@ class DebugCacheStats {
         </div>
       `;
       
+      // 获取Blob URL缓存统计数据
+      const blobStats = BlobUrlCache.getStats();
+      
+      if (blobStats) {
+        const blobHtml = `
+          <h4 class="stat-section-title">Blob URL 缓存</h4>
+          <div class="stat-grid">
+            <div class="stat-item">
+              <div class="stat-label">当前活跃Blob</div>
+              <div class="stat-value">${blobStats.currentActiveBlobs || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">已创建总数</div>
+              <div class="stat-value">${blobStats.totalCreated || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">已释放总数</div>
+              <div class="stat-value">${blobStats.totalReleased || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">已撤销总数</div>
+              <div class="stat-value">${blobStats.totalRevoked || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">重用次数</div>
+              <div class="stat-value">${blobStats.totalReused || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">提前恢复</div>
+              <div class="stat-value">${blobStats.totalEarlyReuse || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">当前存储大小</div>
+              <div class="stat-value">${formatSize(blobStats.totalBytesStored || 0)}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">节省大小</div>
+              <div class="stat-value">${formatSize(blobStats.totalBytesSaved || 0)}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">请求合并次数</div>
+              <div class="stat-value">${blobStats.totalPendingDeduped || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">清理事件数</div>
+              <div class="stat-value">${blobStats.cleanupEvents || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">清理释放项</div>
+              <div class="stat-value">${blobStats.cleanupItemsReleased || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">最后清理时间</div>
+              <div class="stat-value">${blobStats.lastCleanupTime ? new Date(blobStats.lastCleanupTime).toLocaleString() : '无'}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">待处理请求</div>
+              <div class="stat-value">${blobStats.pendingRequestsCount || 0}</div>
+            </div>
+            <div class="stat-item">
+              <div class="stat-label">缓存延迟(ms)</div>
+              <div class="stat-value">${blobStats.revocationDelayMs || 0}</div>
+            </div>
+          </div>
+          <div class="stat-update-time">
+            统计重置于: ${blobStats.lastStatsResetTime ? new Date(blobStats.lastStatsResetTime).toLocaleString() : '未知'}
+          </div>
+        `;
+        
+        blobStatsContainer.innerHTML = blobHtml;
+      } else {
+        blobStatsContainer.innerHTML = '<p class="error">无法获取Blob URL缓存统计</p>';
+      }
+      
       // 添加样式
       html += `
         <style>
@@ -348,6 +474,12 @@ class DebugCacheStats {
             font-weight: bold;
             font-size: 14px;
           }
+          .stat-section-title {
+            margin: 12px 0 8px;
+            font-size: 14px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            padding-bottom: 4px;
+          }
           .stat-update-time {
             text-align: right;
             font-size: 10px;
@@ -364,6 +496,7 @@ class DebugCacheStats {
     } catch (error) {
       logMessage('error', '获取缓存统计失败:', error);
       statsContainer.innerHTML = `<p class="error">更新统计信息失败: ${error.message}</p>`;
+      blobStatsContainer.innerHTML = '';
     }
   }
 
@@ -509,6 +642,61 @@ class DebugCacheStats {
         statusContainer.remove();
       }
     }, 5000);
+  }
+
+  /**
+   * 清除所有BlobUrl
+   */
+  async clearBlobUrls() {
+    if (!confirm('确定要清空所有Blob URL缓存吗？这可能会导致当前页面上的一些图片无法显示。')) {
+      return;
+    }
+    
+    try {
+      this.setStatusMessage('正在清除Blob URL缓存...');
+      
+      BlobUrlCache.clearAllBlobUrls();
+      logMessage('info', 'Blob URL缓存已清除');
+      
+      // 刷新统计信息
+      setTimeout(() => this.updateStats(), 500);
+    } catch (error) {
+      logMessage('error', '清除Blob URL缓存失败:', error);
+      this.setStatusMessage(`清除Blob URL缓存失败: ${error.message}`);
+    }
+  }
+  
+  /**
+   * 重置Blob URL统计
+   */
+  resetBlobStats() {
+    try {
+      // 获取BlobUrlCache统计信息
+      const stats = BlobUrlCache.getStats();
+      
+      // 直接调用BlobUrlCache中的stats对象的resetStats方法
+      if (stats && stats.resetStats) {
+        stats.resetStats();
+        this.setStatusMessage('Blob URL统计已重置');
+        logMessage('info', 'Blob URL统计已重置');
+      } else {
+        // 尝试备用方案
+        logMessage('warn', 'BlobUrlCache.getStats().resetStats 不可用，尝试备用方法');
+        if (typeof BlobUrlCache.resetStats === 'function') {
+          BlobUrlCache.resetStats();
+          this.setStatusMessage('Blob URL统计已重置（通过备用方法）');
+          logMessage('info', 'Blob URL统计已重置（通过备用方法）');
+        } else {
+          throw new Error('无法找到重置Blob URL统计的方法');
+        }
+      }
+      
+      // 刷新统计信息
+      setTimeout(() => this.updateStats(), 500);
+    } catch (error) {
+      logMessage('error', '重置Blob URL统计失败:', error);
+      this.setStatusMessage(`重置Blob URL统计失败: ${error.message}`);
+    }
   }
 }
 

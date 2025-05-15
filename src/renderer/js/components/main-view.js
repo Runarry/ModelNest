@@ -7,6 +7,9 @@ import { BlobUrlCache } from '../core/blobUrlCache.js';
 import { VirtualScroll } from '../../vendor/js-booster/js-booster.js'; // Assuming js-booster is available
 import debugCacheStats from './debug-cache-stats.js'; // 引入缓存统计面板
 import { createTreeView } from './tree-view.js'; // 引入树形目录组件
+import { getCacheStats, getModelsInDirectory, getDirectories, getFilterOptions } from '../apiBridge.js';
+import { setLocalConfig, getLocalConfig } from '../apiBridge.js';
+import { formatFileSize, isInvalidImageSrc, showToast, getDefaultThumbnail } from '../utils/ui-utils.js';
 
 // ===== DOM Element References =====
 let sourceSelect;
@@ -48,6 +51,54 @@ const CARD_ROW_ITEM_HEIGHT = CARD_HEIGHT + VERTICAL_ROW_GAP;
 
 // List View Constants
 const LIST_ITEM_HEIGHT = 80; // Example height for a list item, adjust as needed
+
+// ===== Helper function to cleanup Blob URLs from VirtualScroll items =====
+/**
+ * Iterates through the currently rendered items in a VirtualScroll instance
+ * and calls _releaseBlobUrlForCardElement for the model cards within them.
+ * @param {object} instance - The VirtualScroll instance.
+ * @param {string} mode - The display mode ('card' or 'list') for which items are being cleaned.
+ */
+function _cleanupVirtualScrollItems(instance, mode) {
+    if (!instance || !instance.contentContainer) { // contentContainer holds the shells
+        logMessage('debug', '[MainView _cleanupVirtualScrollItems] Instance or contentContainer not found, skipping cleanup.');
+        return;
+    }
+    logMessage('debug', `[MainView _cleanupVirtualScrollItems] Cleaning up VirtualScroll items for mode: ${mode}`);
+
+    const shells = Array.from(instance.contentContainer.children);
+    let releasedCount = 0;
+    
+    shells.forEach(shellElement => {
+        const contentElement = shellElement.firstChild; // This is what our customRenderItem returned
+        if (!contentElement) return;
+
+        if (mode === 'card') {
+            // contentElement is the row container div from _renderVirtualCardRow.
+            // Its children are the actual model-card elements.
+            Array.from(contentElement.children).forEach(cardElement => {
+                if (cardElement.classList.contains('model-card')) {
+                    _releaseBlobUrlForCardElement(cardElement);
+                    releasedCount++;
+                }
+            });
+        } else { // mode === 'list'
+            // contentElement is the list-item-row div from _renderVirtualListItem.
+            // Its first child should be the model-card element.
+            const modelCardElement = contentElement.firstChild;
+            if (modelCardElement && modelCardElement.classList.contains('model-card')) {
+                _releaseBlobUrlForCardElement(modelCardElement);
+                releasedCount++;
+            }
+        }
+    });
+    
+    // Record cleanup statistics in BlobUrlCache
+    if (releasedCount > 0 && BlobUrlCache && typeof BlobUrlCache.recordCleanupRelease === 'function') {
+        BlobUrlCache.recordCleanupRelease(releasedCount);
+        logMessage('debug', `[MainView _cleanupVirtualScrollItems] Recorded cleanup of ${releasedCount} items.`);
+    }
+}
 
 // ===== Initialization =====
 export async function initMainView(config, showDetailCallback) { // Make init async to await _loadBlockedTags
@@ -364,6 +415,7 @@ function setupOrUpdateVirtualScroll() {
     if (!modelList || typeof VirtualScroll === 'undefined') {
         logMessage('warn', '[MainView] VirtualScroll setup skipped: modelList or VirtualScroll lib not available.');
         if (virtualScrollInstance) { // If lib was available but now isn't, or modelList gone
+            _cleanupVirtualScrollItems(virtualScrollInstance, displayMode); // Clean before destroy
             virtualScrollInstance.destroy();
             virtualScrollInstance = null;
         }
@@ -378,6 +430,8 @@ function setupOrUpdateVirtualScroll() {
 
     if (models.length === 0) {
         if (virtualScrollInstance) {
+            // No items to render, but ensure old items are cleaned if instance existed
+            _cleanupVirtualScrollItems(virtualScrollInstance, displayMode);
             virtualScrollInstance.updateItems([]);
         }
         // renderModels will handle showing the empty message
@@ -387,10 +441,8 @@ function setupOrUpdateVirtualScroll() {
     // If instance exists and config (itemHeight/renderFn) might change due to mode switch, destroy and recreate
     let needsRecreation = false;
     if (virtualScrollInstance) {
-        // Check if critical parameters that require recreation have changed
-        // Note: Accessing internal properties like _itemHeight might be fragile.
-        // A safer approach is to always recreate if the mode changes, as handled in switchViewMode.
-        // Here, we only check if an instance exists but maybe wasn't configured for the current mode yet.
+        _cleanupVirtualScrollItems(virtualScrollInstance, displayMode); // Clean up before potential destroy or update
+
         if (virtualScrollInstance._itemHeight !== itemHeight || virtualScrollInstance._renderItem !== renderFunction) {
              logMessage('debug', '[MainView] VirtualScroll config mismatch detected, scheduling recreation.');
              needsRecreation = true;
@@ -399,6 +451,7 @@ function setupOrUpdateVirtualScroll() {
 
     if (needsRecreation && virtualScrollInstance) {
         logMessage('debug', '[MainView] Recreating VirtualScroll instance due to config mismatch.');
+        // _cleanupVirtualScrollItems already called above
         virtualScrollInstance.destroy();
         virtualScrollInstance = null;
     }
@@ -928,11 +981,13 @@ async function handleSourceChange(event) {
 
 function switchViewMode(newMode) {
     if (displayMode !== newMode) {
+        const oldDisplayMode = displayMode; // Capture old mode
         logMessage('info', `[UI] Switching view mode to: ${newMode}`);
         displayMode = newMode; // Set new mode first
 
         if (virtualScrollInstance) { // Destroy existing instance before re-setup
-            logMessage('debug', '[MainView] Mode changed, destroying existing VirtualScroll instance.');
+            logMessage('debug', '[MainView] Mode changed, cleaning up old VirtualScroll instance items before destroying.');
+            _cleanupVirtualScrollItems(virtualScrollInstance, oldDisplayMode); // Use old mode for cleanup logic
             virtualScrollInstance.destroy();
             virtualScrollInstance = null;
             // Don't clear children here, renderModels will handle it or VirtualScroll will overwrite
@@ -1024,7 +1079,11 @@ function handleModelListMouseOutOfTagsTooltip(event) {
 
 export function cleanupMainView() {
     if (cardViewResizeObserver && modelList) cardViewResizeObserver.unobserve(modelList);
-    if (virtualScrollInstance) virtualScrollInstance.destroy();
+    if (virtualScrollInstance) {
+        _cleanupVirtualScrollItems(virtualScrollInstance, displayMode); // Clean before destroy
+        virtualScrollInstance.destroy();
+        virtualScrollInstance = null; // Ensure it's nulled after destroy
+    }
     document.removeEventListener('mousedown', handleOutsideClickForFilterPanel);
     window.removeEventListener('model-updated', _handleModelUpdatedEvent); // Remove event listener
     logMessage('debug', '[MainView] Cleaned up.');
