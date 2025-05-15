@@ -846,13 +846,12 @@ function ensureParentNodesExpanded(node) {
             // 展开这个父节点
             parent.classList.remove('collapsed');
             
-            // 找到父节点的箭头并更新状态
+            // 找到父节点并更新图标
             const parentLi = parent.parentElement;
             const parentNode = parentLi?.querySelector('.tree-node');
-            const arrow = parentNode?.querySelector('.tree-node-arrow');
-            if (arrow) {
-                arrow.innerHTML = '&#9660;'; // ▼
-                arrow.classList.add('expanded');
+            const iconSpan = parentNode?.querySelector('.tree-node-icon');
+            if (iconSpan) {
+                iconSpan.innerHTML = '<i class="fas fa-folder-open"></i>'; // 使用文件夹打开图标
             }
             
             // 继续向上查找

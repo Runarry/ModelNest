@@ -136,7 +136,6 @@ function createTreeView(container, data, options = {}) {
     const targetNodeElement = event.target.closest('.tree-node');
     if (!targetNodeElement) return;
     
-    const arrow = event.target.closest('.tree-node-arrow');
     const iconOrName = event.target.closest('.tree-node-icon') || event.target.closest('.tree-node-name');
 
     // 处理父目录的点击事件，同时处理选中和展开/折叠
@@ -144,18 +143,16 @@ function createTreeView(container, data, options = {}) {
       // 选中该节点
       selectNode(targetNodeElement, rootUl);
       
-      // 如果点击的是箭头或文件夹图标，触发展开/折叠
-      if (arrow || iconOrName) {
-        toggleNode(targetNodeElement);
-        
-        if (typeof config.onNodeToggle === 'function') {
-          const childrenElement = targetNodeElement.querySelector('.tree-children');
-          const isExpanded = childrenElement ? !childrenElement.classList.contains('collapsed') : false;
-          config.onNodeToggle(targetNodeElement, isExpanded);
-        }
+      // 切换展开/折叠状态
+      toggleNode(targetNodeElement);
+      
+      if (typeof config.onNodeToggle === 'function') {
+        const childrenElement = targetNodeElement.querySelector('.tree-children');
+        const isExpanded = childrenElement ? !childrenElement.classList.contains('collapsed') : false;
+        config.onNodeToggle(targetNodeElement, isExpanded);
       }
       
-      // 无论是否展开/折叠，都要触发节点选中事件
+      // 触发节点选中事件
       if (typeof config.onNodeClick === 'function') {
         config.onNodeClick(targetNodeElement);
       }
@@ -190,16 +187,15 @@ function renderNode(nodeData, level, config) {
   // 添加路径属性用于节点选择和模型加载
   nodeElement.dataset.path = nodeData.path || '/';
 
-  // Indentation
-  for (let i = 0; i < level; i++) {
-    const indentSpan = document.createElement("span");
-    indentSpan.classList.add("tree-node-indent");
-    nodeElement.appendChild(indentSpan);
+  // 只有非顶级节点才需要缩进
+  if (level > 0) {
+    // Indentation
+    for (let i = 0; i < level; i++) {
+      const indentSpan = document.createElement("span");
+      indentSpan.classList.add("tree-node-indent");
+      nodeElement.appendChild(indentSpan);
+    }
   }
-
-  const arrowSpan = document.createElement("span");
-  arrowSpan.classList.add("tree-node-arrow");
-  nodeElement.appendChild(arrowSpan);
 
   const iconSpan = document.createElement("span");
   iconSpan.classList.add("tree-node-icon");
@@ -222,15 +218,13 @@ function renderNode(nodeData, level, config) {
 
   if (nodeData.children && nodeData.children.length > 0) {
     nodeElement.classList.add("has-children");
-    arrowSpan.innerHTML = "&#9654;"; // Right-pointing triangle (▶)
-    iconSpan.classList.add("folder");
+    // 使用文件夹图标替代箭头
+    iconSpan.innerHTML = '<i class="fas fa-folder"></i>'; // 使用 FontAwesome 文件夹图标
 
     const childrenUl = document.createElement("ul");
     childrenUl.classList.add("tree-children", "collapsed"); // Start collapsed
     childrenUl.style.listStyleType = "none";
     childrenUl.style.paddingLeft = "0"; // CSS will handle actual indent via .tree-children
-    childrenUl.style.margin = "0";
-
 
     nodeData.children.forEach(childNodeData => {
       const childNodeElement = renderNode(childNodeData, level + 1, config);
@@ -240,8 +234,7 @@ function renderNode(nodeData, level, config) {
     });
     listItem.appendChild(childrenUl);
   } else {
-    arrowSpan.innerHTML = "&nbsp;"; // Non-breaking space for alignment
-    iconSpan.classList.add("file");
+    iconSpan.innerHTML = '<i class="fas fa-file"></i>'; // 使用 FontAwesome 文件图标
   }
 
   return listItem;
@@ -258,13 +251,17 @@ function toggleNode(nodeElement) {
   if (!listItem) return;
   
   const childrenUl = listItem.querySelector('.tree-children');
-  const arrowSpan = nodeElement.querySelector('.tree-node-arrow');
-
+  const iconSpan = nodeElement.querySelector('.tree-node-icon');
+  
   if (childrenUl && childrenUl.classList) {
     const isCollapsed = childrenUl.classList.toggle('collapsed');
-    if (arrowSpan) {
-      arrowSpan.innerHTML = isCollapsed ? '&#9654;' : '&#9660;'; // ▶ or ▼
-      arrowSpan.classList.toggle('expanded', !isCollapsed);
+    if (iconSpan) {
+      // 根据折叠状态更新图标
+      if (isCollapsed) {
+        iconSpan.innerHTML = '<i class="fas fa-folder"></i>';
+      } else {
+        iconSpan.innerHTML = '<i class="fas fa-folder-open"></i>';
+      }
     }
   }
 }
@@ -303,7 +300,7 @@ function renderRootNode(rootData, config) {
 
   const iconSpan = document.createElement("span");
   iconSpan.classList.add("tree-node-icon", "root-icon");
-  iconSpan.innerHTML = '🏠'; // 使用房子图标表示根目录
+  iconSpan.innerHTML = '<i class="fas fa-folder-open"></i>'; // 使用 FontAwesome 图标
   nodeElement.appendChild(iconSpan);
 
   const nameSpan = document.createElement("span");

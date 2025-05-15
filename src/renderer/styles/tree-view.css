@@ -49,27 +49,26 @@
 
 /* 根节点特殊样式 */
 .root-node-li {
-  margin-bottom: 8px;
+  margin-bottom: 4px;
 }
 
 .root-node {
   font-weight: 500;
-  padding: 8px 6px;
-  border-radius: 6px;
-  background-color: rgba(67, 97, 238, 0.05);
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  padding: 4px 6px;
+  border-radius: 4px;
 }
 
-.root-node:hover {
-  background-color: rgba(67, 97, 238, 0.1);
+.root-node .fas {
+  opacity: 0.8;
+  color: var(--tree-icon-color);
 }
 
-.root-node.selected {
-  background-color: rgba(67, 97, 238, 0.2);
-}
-
-.root-icon {
-  font-size: 15px;
+/* 为 FontAwesome 图标设置统一样式 */
+.tree-node .fas {
+  font-size: 0.9em;
+  width: 1em;
+  text-align: center;
+  color: var(--tree-icon-color);
 }
 
 /* Tree lines styling */
@@ -100,8 +99,8 @@
   height: var(--tree-item-height);
   line-height: var(--tree-item-height);
   cursor: pointer;
-  padding: 6px 4px;
-  border-radius: 6px;
+  padding: 2px 4px;
+  border-radius: 4px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -119,9 +118,12 @@
   font-weight: 500;
 }
 
-.tree-node.selected .tree-node-arrow,
 .tree-node.selected .tree-node-icon,
 .tree-node.selected .tree-node-count {
+  color: var(--tree-selected-text-color);
+}
+
+.tree-node.selected .fas {
   color: var(--tree-selected-text-color);
 }
 
@@ -132,38 +134,13 @@
   flex-shrink: 0;
 }
 
-.tree-node-arrow {
-  display: inline-block;
-  width: 16px;
-  height: 100%;
-  text-align: center;
-  color: var(--tree-icon-color);
-  flex-shrink: 0;
-  transition: transform 0.1s ease-in-out;
-  font-size: 10px;
-}
-
-.tree-node-arrow.expanded {
-  transform: rotate(90deg);
-}
-
 .tree-node-icon {
   display: inline-block;
   width: 18px;
   text-align: center;
-  margin-right: 4px;
+  margin-right: 6px;
   color: var(--tree-icon-color);
   flex-shrink: 0;
-}
-
-.tree-node-icon.folder::before {
-  content: '📁';
-  font-size: 14px;
-}
-
-.tree-node-icon.file::before {
-  content: '📄';
-  font-size: 14px;
 }
 
 .tree-node-name {
@@ -174,15 +151,14 @@
 
 .tree-node-count {
   margin-left: 6px;
-  font-size: 0.8rem;
-  color: var(--text-secondary, #666);
-  border-radius: 10px;
-  padding: 2px 6px;
-  background-color: rgba(0, 0, 0, 0.1);
+  font-size: 0.75rem;
+  color: var(--tree-count-color);
+  opacity: 0.7;
+  padding: 1px 3px;
 }
 
 [data-theme="dark"] .tree-node-count {
-  background-color: rgba(255, 255, 255, 0.1);
+  opacity: 0.5;
 }
 
 .tree-children {
