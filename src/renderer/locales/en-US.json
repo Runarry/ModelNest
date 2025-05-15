@@ -246,5 +246,14 @@
     "clearFilters": "Clear Filters",
     "noOptionsAvailable": "No options available"
   },
-  "unknownError": "An unknown error occurred"
+  "unknownError": "An unknown error occurred",
+  "modelListTitle": "Models",
+  "sourceSelect": "Select Data Source",
+  "modelImage": "Model",
+  "modelImageAlt": "Model preview image",
+  "noModelLibrariesConfigured": "No model libraries configured yet.",
+  "addModelLibrary": "Add Model Library",
+  "virtualScrollError": "Virtual scroll initialization failed. Please reload the app.",
+  "filter": "Filter",
+  "errorMissingLibrary": "Cannot render: {library} library not loaded."
 }

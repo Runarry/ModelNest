@@ -225,19 +225,45 @@ async function fetchAndStoreSourceConfigs() {
     try {
         allSourceConfigs = await getAllSourceConfigs() || [];
         logMessage('info', `[MainView] Fetched ${allSourceConfigs.length} source configs.`);
+        
+        // If there are no sources, immediately update the UI to show the message
+        if (allSourceConfigs.length === 0 && modelList) {
+            showNoModelLibrariesMessage();
+        }
     } catch (error) {
         logMessage('error', '[MainView] Failed to fetch source configs:', error);
         allSourceConfigs = [];
+        
+        // Also show the message on error
+        if (modelList) {
+            showNoModelLibrariesMessage();
+        }
     }
 }
 
 export async function loadModels(sourceId, directory = null, externalFilters = null) {
-    logMessage('info', `[MainView] Loading models: sourceId=${sourceId}, directory=${directory ?? 'root'}, externalFilters: ${JSON.stringify(externalFilters)}`);
+    logMessage('info', `[MainView] Loading models: sourceId=${sourceId || 'null'}, directory=${directory ?? 'root'}, externalFilters: ${JSON.stringify(externalFilters)}`);
     setLoading(true);   
     currentSourceId = sourceId;
     currentDirectory = directory;
 
     try {
+        // If no sourceId is provided, this might mean no sources are configured
+        if (!sourceId) {
+            // Fetch source configs if not already available
+            if (!allSourceConfigs) {
+                await fetchAndStoreSourceConfigs();
+            }
+            
+            // If there are no sources configured, show the no model libraries message
+            if (allSourceConfigs.length === 0) {
+                showNoModelLibrariesMessage();
+                setLoading(false);
+                return;
+            }
+        }
+        
+        // Proceed with normal model loading if sourceId exists or we have sources
         models = await listModels(sourceId, directory, currentAppliedFilters);
         if (directory === null) {
             subdirectories = await listSubdirectories(sourceId);
@@ -584,6 +610,12 @@ function renderModels() {
         return;
     }
 
+    // Show "No model libraries" message if no sources are configured
+    if (allSourceConfigs.length === 0) {
+        showNoModelLibrariesMessage();
+        return;
+    }
+
     // VirtualScroll instance handles rendering its items into modelList.
     // We just need to ensure it's updated. setupOrUpdateVirtualScroll() is called from loadModels or switchViewMode.
     if (models.length === 0) {
@@ -601,6 +633,57 @@ function renderModels() {
     // If virtualScrollInstance exists and models.length > 0, the library handles rendering.
 }
 
+/**
+ * Shows a message in the center of the main UI when no model libraries are configured,
+ * with a button to add a new model library that opens the settings page.
+ */
+function showNoModelLibrariesMessage() {
+    if (!modelList) return;
+    
+    clearChildren(modelList);
+    
+    // Create container for centered content
+    const container = document.createElement('div');
+    container.className = 'no-model-libraries-container';
+    container.style.display = 'flex';
+    container.style.flexDirection = 'column';
+    container.style.justifyContent = 'center';
+    container.style.alignItems = 'center';
+    container.style.height = '100%';
+    container.style.textAlign = 'center';
+    container.style.padding = '20px';
+    
+    // Create message
+    const message = document.createElement('p');
+    message.className = 'empty-list-message no-libraries-message';
+    message.textContent = t('noModelLibrariesConfigured') || '还未添加模型库';
+    message.style.marginBottom = '20px';
+    message.style.fontSize = '1.2em';
+    
+    // Create add library button
+    const addButton = document.createElement('button');
+    addButton.className = 'btn btn-primary add-library-btn';
+    addButton.textContent = t('addModelLibrary') || '添加模型库';
+    addButton.addEventListener('click', () => {
+        // Open the settings page and specifically the data sources tab
+        const settingsBtn = document.getElementById('settingsBtn');
+        if (settingsBtn) {
+            settingsBtn.click();
+            // After a small delay, click the data sources tab
+            setTimeout(() => {
+                const dataSourcesTab = document.querySelector('[data-tab="data-sources"]');
+                if (dataSourcesTab) {
+                    dataSourcesTab.click();
+                }
+            }, 300);
+        }
+    });
+    
+    // Append to container and then to model list
+    container.appendChild(message);
+    container.appendChild(addButton);
+    modelList.appendChild(container);
+}
 
 export function updateSingleModelCard(updatedModelObj) {
     if (!updatedModelObj || !updatedModelObj.file || !updatedModelObj.jsonPath || !updatedModelObj.sourceId) {
@@ -672,30 +755,39 @@ function setActiveTab(activeTabElement) {
     activeTabElement.classList.add('active');
 }
 
-async function handleSourceChange() {
-    if (!sourceSelect) return;
-    const selectedSourceId = sourceSelect.value;
-    logMessage('info', `[UI] Source changed to: ${selectedSourceId}`);
-    currentSourceConfig = allSourceConfigs.find(config => config.id === selectedSourceId) || null;
-
-    if (crawlInfoButton && sourceReadonlyIndicator) {
-        const isReadOnly = currentSourceConfig?.readOnly === true;
-        const isLocal = currentSourceConfig?.type?.toUpperCase() === 'LOCAL';
-        sourceReadonlyIndicator.style.display = isReadOnly ? 'inline-flex' : 'none';
-        crawlInfoButton.style.display = (!isReadOnly && isLocal) ? 'inline-block' : 'none';
+async function handleSourceChange(event) {
+    // If sourceSelect is disabled, don't proceed
+    if (sourceSelect.disabled) {
+        return;
     }
-
-    if (selectedSourceId) {
-        await loadModels(selectedSourceId, null);
-    } else {
-        models = [];
-        subdirectories = [];
-        if (typeof VirtualScroll !== 'undefined') setupOrUpdateVirtualScroll();
-        renderModels();
-        renderDirectoryTabs();
-        if (crawlInfoButton) crawlInfoButton.style.display = 'none';
-        if (sourceReadonlyIndicator) sourceReadonlyIndicator.style.display = 'none';
+    const sourceId = event.target.value;
+    if (!sourceId) {
+        logMessage('warn', '[MainView] Source change event without a valid sourceId');
+        return;
     }
+    logMessage('info', `[MainView] Source changed to: ${sourceId}`);
+    
+    // Ensure we have the latest source configs before proceeding
+    if (!allSourceConfigs || allSourceConfigs.length === 0) {
+        await fetchAndStoreSourceConfigs();
+    }
+    
+    // Find the source config for this sourceId
+    const sourceConfig = allSourceConfigs.find(cfg => cfg.id === sourceId);
+    if (sourceConfig && sourceReadonlyIndicator) {
+        if (sourceConfig.readOnly) {
+            sourceReadonlyIndicator.classList.add('visible');
+            sourceReadonlyIndicator.title = t('sourceReadOnly');
+        } else {
+            sourceReadonlyIndicator.classList.remove('visible');
+            sourceReadonlyIndicator.title = '';
+        }
+    }
+    
+    // Set loading state and clear current filter values
+    // currentAppliedFilters remains at default if not modified by filter panel
+    resetCurrentFilters();
+    loadModels(sourceId);
 }
 
 function switchViewMode(newMode) {
@@ -822,4 +914,20 @@ async function handleSearchButtonClick() {
     }
 
 
+}
+
+/**
+ * Resets the current applied filters to their default state
+ */
+function resetCurrentFilters() {
+    currentAppliedFilters = {
+        baseModel: [],
+        modelType: [],
+        tags: [],
+        searchValue: ''
+    };
+    // Also reset the search input value if it exists
+    if (searchInput) {
+        searchInput.value = '';
+    }
 }

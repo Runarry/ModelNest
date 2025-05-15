@@ -1197,7 +1197,7 @@ async function handleBrowseInline(listItem) {
 /** Handles saving the settings for a specific section/pane. */
 async function handleSaveSection(category, paneElement) {
     if (!paneElement || !currentConfigData) {
-        logMessage('error', `[settingsModal] 保存分区 ${category} 失败：面板元素或当前配置不可用`);
+        logMessage('error', `[settingsModal] 保存失败：缺少必要参数 paneElement=${!!paneElement}, currentConfigData=${!!currentConfigData}`);
         return;
     }
     logMessage('info', `[settingsModal] 开始保存分区: ${category}`);
@@ -1345,6 +1345,29 @@ async function handleSaveSection(category, paneElement) {
 
         // Update our local copy of the config
         currentConfigData = fullConfigToSend;
+
+        // If we're saving data sources, we need to refresh the main UI
+        if (category === 'data-sources') {
+            // If the UI will be automatically refreshed via onConfigUpdated event in main.js
+            // we can ensure that it selects a valid source ID, especially if none was selected before
+            // We can use a custom event for this specific situation
+            try {
+                const sourceSelect = document.getElementById('sourceSelect');
+                const hasModelLibraries = tempModelSources && tempModelSources.length > 0;
+                const wasSourceSelected = sourceSelect && sourceSelect.value;
+                
+                if (hasModelLibraries && !wasSourceSelected) {
+                    // Dispatch a custom event to notify that we need to load the first source
+                    window.dispatchEvent(new CustomEvent('load-first-source', {
+                        detail: { firstSourceId: tempModelSources[0].id }
+                    }));
+                    logMessage('info', `[settingsModal] 触发加载第一个模型库: ${tempModelSources[0].id}`);
+                }
+            } catch (refreshError) {
+                logMessage('error', '[settingsModal] 保存后刷新主界面失败:', refreshError.message, refreshError.stack);
+                // This is non-fatal, the config was already saved
+            }
+        }
 
         const duration = Date.now() - startTime;
         logMessage('info', `[settingsModal] 分区 ${category} 保存成功, 总耗时: ${duration}ms`);

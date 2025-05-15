@@ -29,8 +29,12 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
   ipcMain.handle('listModels', async (event, { sourceId, directory, filters }) => { // Added filters
     log.info('[IPC] listModels 请求', { sourceId, directory, filters: JSON.stringify(filters) }); // Log filters
     try {
-      // 验证输入
-      if (!sourceId) throw new Error('缺少 sourceId');
+      // If sourceId is missing, return an empty array instead of throwing an error
+      if (!sourceId) {
+        log.warn('[IPC] listModels 请求缺少 sourceId，返回空数组');
+        return [];
+      }
+      
       // 直接调用 ModelService 列出模型, 传递 filters
       return await services.modelService.listModels(sourceId, directory, filters);
     } catch (error) {
@@ -44,8 +48,12 @@ function initializeModelLibraryIPC(services) { // 接收 services 对象
   ipcMain.handle('listSubdirectories', async (event, { sourceId }) => {
     log.info('[IPC] listSubdirectories 请求', { sourceId });
     try {
-      // 验证输入
-      if (!sourceId) throw new Error('缺少 sourceId');
+      // If sourceId is missing, return an empty array instead of throwing an error
+      if (!sourceId) {
+        log.warn('[IPC] listSubdirectories 请求缺少 sourceId，返回空数组');
+        return [];
+      }
+      
       // 直接调用 ModelService 列出子目录
       return await services.modelService.listSubdirectories(sourceId);
     } catch (error) {

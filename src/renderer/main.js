@@ -212,6 +212,19 @@ document.addEventListener('DOMContentLoaded', async () => {
        }
    });
 
+   // Listen for the event to load the first source (when a new source is added in settings)
+   window.addEventListener('load-first-source', (event) => {
+       if (event.detail && event.detail.firstSourceId) {
+           logMessage('info', `[Renderer] 收到 load-first-source 事件，将加载数据源: ${event.detail.firstSourceId}`);
+           const sourceSelectElement = document.getElementById('sourceSelect');
+           if (sourceSelectElement) {
+               sourceSelectElement.value = event.detail.firstSourceId;
+               // Load models for this source
+               loadModelsForView(event.detail.firstSourceId, null);
+           }
+       }
+   });
+
   // Helper function to display critical initialization errors
    function showInitializationError(message) {
         const mainSection = document.getElementById('mainSection');
