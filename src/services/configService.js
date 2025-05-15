@@ -7,7 +7,7 @@ const { deepClone } = require('../common/utils'); // 假设 utils.js 中有 deep
 
 const DEFAULT_CONFIG = {
   modelSources: [],
-  supportedExtensions: [],
+  supportedExtensions: ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'],
   blockedTags: [], // Add blockedTags field with default empty array
   imageCache: {
     maxCacheSizeMB: 200,
@@ -79,8 +79,15 @@ class ConfigService {
       let loadedConfig = JSON.parse(configData);
       log.info('[ConfigService] Config file parsed successfully.');
 
+      if(loadedConfig.supportedExtensions && loadedConfig.supportedExtensions.length === 0){
+        loadedConfig.supportedExtensions = DEFAULT_CONFIG.supportedExtensions;
+      }
+
+      
+
       // Ensure default keys exist if missing from file
       loadedConfig = { ...deepClone(DEFAULT_CONFIG), ...loadedConfig };
+
       log.debug(`[ConfigService _loadConfigFromFile] supportedExtensions after merge. Value: ${JSON.stringify(loadedConfig.supportedExtensions)}, Type: ${typeof loadedConfig.supportedExtensions}`);
 
       // Ensure each modelSource has a readOnly property (defaulting to false)
@@ -255,6 +262,10 @@ class ConfigService {
     const blockedTags = await this.getSetting('blockedTags');
     // Ensure the result is an array, defaulting to an empty array if not
     return Array.isArray(blockedTags) ? blockedTags : [];
+  }
+
+  getSupportedExtensions() {
+    return this.config.supportedExtensions;
   }
 }
 

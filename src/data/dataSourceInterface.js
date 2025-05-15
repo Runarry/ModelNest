@@ -176,31 +176,27 @@ class DataSourceInterface {
    *
    * @param {object} sourceConfig - The configuration object for the data source.
    * @param {string|null} directory - The specific subdirectory to list models from (relative to source root), or null for the root.
-   * @param {string[]} supportedExts - An array of supported file extensions (e.g., ['.safetensors', '.ckpt']).
    * @param {boolean} showSubdirectory - Whether to include subdirectories in the result.
    * @returns {Promise<Array<object>>} A promise that resolves with an array of model objects.
    * @throws {Error} If the data source type is unknown or listing fails.
    */
-  async listModels(sourceConfig, directory = null, supportedExts = [], showSubdirectory = true) {
+  async listModels(sourceConfig, directory = null, showSubdirectory = true) {
     const startTime = Date.now();
     if (!sourceConfig || !sourceConfig.type || !sourceConfig.id) {
       log.error('[DataSourceInterface] listModels called with invalid sourceConfig:', sourceConfig);
       throw new Error('Invalid source configuration provided (missing type or id).');
     }
-    if (!Array.isArray(supportedExts)) {
-      log.warn(`[DataSourceInterface] listModels called with non-array supportedExts: ${supportedExts}. Using empty array.`);
-      supportedExts = [];
-    }
+
 
     const sourceId = sourceConfig.id;
-    log.info(`[DataSourceInterface] Attempting to list models. sourceId: ${sourceId}, directory: ${directory}, supportedExts: ${supportedExts}`);
+    log.info(`[DataSourceInterface] Attempting to list models. sourceId: ${sourceId}, directory: ${directory}`);
     log.debug(`[DataSourceInterface] Received sourceConfig: ${JSON.stringify(sourceConfig)}`);
 
     try {
       // 获取数据源实例
       const ds = this.getDataSourceInstance(sourceConfig);
       // 调用标准接口方法, 注意 listModels 在具体数据源中也可能需要 showSubdirectory
-      const models = await ds.listModels(directory, sourceConfig, supportedExts, showSubdirectory);
+      const models = await ds.listModels(directory, showSubdirectory);
       const duration = Date.now() - startTime;
       log.info(`[DataSourceInterface] Successfully listed models for sourceId: ${sourceId}, directory: ${directory}. Found ${models.length} models. 耗时: ${duration}ms`);
       return models;

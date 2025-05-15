@@ -35,7 +35,6 @@ class WebDavDataSource extends DataSource {
    * @param {string} config.username - The WebDAV username.
    * @param {string} config.password - The WebDAV password.
    * @param {string} [config.subDirectory=''] - The subdirectory within the WebDAV server.
-   * @param {string[]} [config.supportedExts=['.safetensors', '.ckpt']] - Supported model file extensions.
    * @param {ModelInfoCacheService} modelInfoCacheService - The cache service instance.
    */
   constructor(config, modelInfoCacheService, configService) {
@@ -122,13 +121,8 @@ class WebDavDataSource extends DataSource {
     this.logger.info(`[WebDavDataSource InitAllSource] 开始初始化所有数据源: ${sourceId}`);
 
     // 确定支持的文件扩展名
-    let effectiveSupportedExts;
-    if (this.config && this.config.supportedExts && this.config.supportedExts.length > 0) {
-      effectiveSupportedExts = this.config.supportedExts;
-    } else {
-      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
-      this.logger.warn(`[WebDavDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`);
-    }
+    const effectiveSupportedExts = this.configService.getSupportedExtensions()||[]; 
+
 
     // 获取根路径
     const resolvedRootOfSource = this._resolvePath('/');
@@ -685,7 +679,6 @@ class WebDavDataSource extends DataSource {
   }
 
   async _populateAllItemsCacheIfNeeded(resolvedRootOfSource) {
-    const sourceId = this.config.id;
     if (this._allItemsCache.length === 0 || this._lastRefreshedFromRootPath !== resolvedRootOfSource) {
       this.logger.info(`_populateAllItemsCacheIfNeeded: Refreshing _allItemsCache from root: ${resolvedRootOfSource}. Reason: cacheEmpty=${this._allItemsCache.length === 0}, lastRefreshMismatch=${this._lastRefreshedFromRootPath !== resolvedRootOfSource}`);
       await this._populateAllItemsCache(resolvedRootOfSource); 
@@ -724,7 +717,7 @@ class WebDavDataSource extends DataSource {
    * @param {boolean} [showSubdirectory=true] - Whether to include models from subdirectories.
    * @returns {Promise<Array<object>>} A promise that resolves to an array of model objects.
    */
-  async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
+  async listModels(directory = null, showSubdirectory = true) {
     if (!this.allModelsCache || this.allModelsCache.length === 0) {
       await this.InitAllSource();
     }

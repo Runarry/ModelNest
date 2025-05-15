@@ -20,8 +20,8 @@ class DataSource {
    * @returns {Promise<Array<object>>} 模型对象数组。
    * @throws {Error} 如果子类未实现此方法。
    */
-  async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
-    throw new Error(`'listModels' method must be implemented by subclass. Received directory: ${directory}, supportedExts: ${supportedExts}`);
+  async listModels(directory = null, showSubdirectory = true) {
+    throw new Error(`'listModels' method must be implemented by subclass. Received directory: ${directory}`);
   }
 
 

@@ -18,7 +18,6 @@ class LocalDataSource extends DataSource {
    * @param {object} config - The configuration object for this data source.
    * @param {string} config.id - The unique ID of this data source.
    * @param {string} config.path - The root path of this data source.
-   * @param {string[]} [config.supportedExts=['.safetensors', '.ckpt']] - Supported model file extensions.
    * @param {ModelInfoCacheService} modelInfoCacheService - The cache service instance.
    */
   constructor(config, modelInfoCacheService, configService) {
@@ -51,13 +50,8 @@ class LocalDataSource extends DataSource {
     log.info(`[LocalDataSource InitAllSource] 开始初始化所有数据源: ${rootPath}, SourceId: ${sourceId}`); // 记录初始化开始日志
 
     // 确定支持的文件扩展名
-    let effectiveSupportedExts;
-    if (this.config && this.config.supportedExts && this.config.supportedExts.length > 0) {
-      effectiveSupportedExts = this.config.supportedExts; // 使用配置中指定的支持扩展名
-    } else {
-      effectiveSupportedExts = ['.safetensors', '.ckpt', '.pt', '.pth', '.bin']; // 如果未配置，使用默认扩展名
-      log.warn(`[LocalDataSource InitAllSource] 未提供或配置 supportedExts，使用默认值: ${effectiveSupportedExts.join(', ')}`); // 记录使用默认值的警告
-    }
+    const effectiveSupportedExts = this.configService.getSupportedExtensions();   
+
 
     // 初始化用于存储结果的数据结构
     let allModels = []; // 存储所有找到的模型对象
@@ -334,7 +328,7 @@ class LocalDataSource extends DataSource {
    * @param {boolean} [showSubdirectory=true] - Whether to include models from subdirectories.
    * @returns {Promise<Array<object>>} A promise that resolves to an array of model objects.
    */
-  async listModels(directory = null, sourceConfig, supportedExts = [], showSubdirectory = true) {
+  async listModels(directory = null, showSubdirectory = true) {
     if (!this.allModelsCache ||this.allModelsCache.length === 0) {
       await this.InitAllSource();
     }
@@ -508,9 +502,7 @@ class LocalDataSource extends DataSource {
           log.info(`[LocalDataSource writeModelJson] Updating model in allModelsCache: ${modelToUpdate.file}`);
 
           const fullModelFilePath = modelToUpdate.file;
-          let effectiveSupportedExts = (this.config && this.config.supportedExts && this.config.supportedExts.length > 0)
-                                     ? this.config.supportedExts
-                                     : ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'];
+          const effectiveSupportedExts = this.configService.getSupportedExtensions()||[]; 
           
           try {
             const updatedModelObject = await parseSingleModelFile(

@@ -110,11 +110,11 @@ class ModelService {
       log.warn(`[ModelService listModels] Source config not found for ID: ${sourceId}. Returning empty array.`);
       return [];
     }
-    const extsToUse = supportedExtensions || await this.dataSourceService.getSupportedExtensions();
+
 
     // L1 cache logic removed. Fetching directly from data source.
     log.info(`[ModelService listModels] Fetching model list from dataSourceInterface for source: ${sourceId}, dir: ${directory}. Cache is now handled by data sources.`);
-    let baseModelInfos = await this.dataSourceInterface.listModels(sourceConfig, directory, extsToUse, showSubdirectory);
+    let baseModelInfos = await this.dataSourceInterface.listModels(sourceConfig, directory, showSubdirectory);
     log.info(`[ModelService listModels] Fetched ${baseModelInfos.length} raw model entries for source ${sourceId} in directory ${directory}`);
 
     const modelObjs = [];
