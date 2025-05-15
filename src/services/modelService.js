@@ -1,7 +1,6 @@
 const log = require('electron-log');
 const path = require('path');
 const crypto = require('crypto'); // For hashing supportedExts
-const dataSourceInterface = require('../data/dataSourceInterface'); // Adjusted path
 const { prepareModelDataForSaving } = require('../data/modelParser'); // Adjusted path
 
 // Helper function to generate hash for supported extensions
@@ -17,10 +16,11 @@ function generateSupportedExtsHash(extensions) {
 class ModelService {
   /**
    * @param {import('./dataSourceService')} dataSourceService - An instance of DataSourceService.
-   * @param {import('./configService')} configService - An instance of ConfigService.
    * @param {import('./modelInfoCacheService')} modelInfoCacheService - An instance of ModelInfoCacheService.
+   * @param {import('./configService')} configService - An instance of ConfigService.
+   * @param {import('../data/dataSourceInterface').DataSourceInterface} dataSourceInterface - An instance of DataSourceInterface.
    */
-  constructor(dataSourceService, modelInfoCacheService, configService) {
+  constructor(dataSourceService, modelInfoCacheService, configService, dataSourceInterface) {
     if (!dataSourceService) {
       throw new Error("ModelService requires a DataSourceService instance.");
     }
@@ -30,10 +30,14 @@ class ModelService {
     if (!configService) {
       throw new Error("ModelService requires a ConfigService instance.");
     }
+    if (!dataSourceInterface) {
+      throw new Error("ModelService requires a DataSourceInterface instance.");
+    }
     this.dataSourceService = dataSourceService;
     this.modelInfoCacheService = modelInfoCacheService;
     this.configService = configService;
-    log.info('[Service] ModelService initialized with DataSourceService, ModelInfoCacheService, and ConfigService.');
+    this.dataSourceInterface = dataSourceInterface;
+    log.info('[Service] ModelService initialized with required dependencies.');
   }
 
   /**
@@ -81,7 +85,7 @@ class ModelService {
         sourceId: modelObj.sourceId
       };
 
-      await dataSourceInterface.writeModelJson(sourceConfig, modelIdentifier, jsonDataString, this.modelInfoCacheService);
+      await this.dataSourceInterface.writeModelJson(sourceConfig, modelIdentifier, jsonDataString);
       log.info('[ModelService saveModel] Model JSON data written successfully', { sourceId: modelObj.sourceId, jsonPath: modelObj.jsonPath });
 
       // Cache invalidation logic removed as it's now handled by data sources.
@@ -110,7 +114,7 @@ class ModelService {
 
     // L1 cache logic removed. Fetching directly from data source.
     log.info(`[ModelService listModels] Fetching model list from dataSourceInterface for source: ${sourceId}, dir: ${directory}. Cache is now handled by data sources.`);
-    let baseModelInfos = await dataSourceInterface.listModels(sourceConfig, directory, extsToUse, showSubdirectory, this.modelInfoCacheService);
+    let baseModelInfos = await this.dataSourceInterface.listModels(sourceConfig, directory, extsToUse, showSubdirectory);
     log.info(`[ModelService listModels] Fetched ${baseModelInfos.length} raw model entries for source ${sourceId} in directory ${directory}`);
 
     const modelObjs = [];
@@ -256,7 +260,7 @@ class ModelService {
       }
       log.debug(`[ModelService listSubdirectories] Retrieved source config for ID: ${sourceId}`);
 
-      const subdirs = await dataSourceInterface.listSubdirectories(sourceConfig, this.modelInfoCacheService);
+      const subdirs = await this.dataSourceInterface.listSubdirectories(sourceConfig);
       log.info(`[ModelService listSubdirectories] Found ${subdirs.length} subdirectories for source ${sourceId}`);
       return subdirs;
     } catch (error) {
@@ -278,7 +282,7 @@ class ModelService {
       }
       log.debug(`[ModelService getModelDetail] Retrieved source config for ID: ${sourceId}`);
 
-      const fullModelObj = await dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath, this.modelInfoCacheService);
+      const fullModelObj = await this.dataSourceInterface.readModelDetail(sourceConfig, jsonPath, modelFilePath);
       
       if (!fullModelObj || Object.keys(fullModelObj).length === 0) {
         log.warn(`[ModelService getModelDetail] dataSourceInterface.readModelDetail did not return a valid modelObj for ${jsonPath}.`);
@@ -306,7 +310,7 @@ class ModelService {
       return { baseModels: [], modelTypes: [], tags:[]  };
     }
 
-    const filterOptions = await dataSourceInterface.getFilterOptions(sourceConfig, this.modelInfoCacheService);
+    const filterOptions = await this.dataSourceInterface.getFilterOptions(sourceConfig);
     if (!filterOptions) {
       log.error(`[ModelService getAvailableFilterOptions] Failed to retrieve filter options for sourceId: ${sourceId}. Returning empty options.`);
       return { baseModels: [], modelTypes: [],tags:[] };

@@ -1,8 +1,9 @@
 const log = require("electron-log");
 
 class DataSource {
-  constructor(config) {
+  constructor(config,configService) {
     this.config = config;
+    this.configService = configService; 
     this.filterOptions = 
     {
       baseModels: new Set(),

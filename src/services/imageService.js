@@ -2,7 +2,6 @@ const log = require('electron-log');
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const dataSourceInterface = require('../data/dataSourceInterface');
 const imageCache = require('../common/imageCache');
 
 /**
@@ -14,14 +13,23 @@ const imageCache = require('../common/imageCache');
 class ImageService {
     /**
      * @param {DataSourceService} dataSourceService Instance of DataSourceService.
+     * @param {import('./configService')} configService Instance of ConfigService.
+     * @param {import('../data/dataSourceInterface').DataSourceInterface} dataSourceInterface Instance of DataSourceInterface.
      */
-    constructor(dataSourceService, configService) {
+    constructor(dataSourceService, configService, dataSourceInterface) {
         if (!dataSourceService) {
             throw new Error("ImageService requires a DataSourceService instance.");
         }
+        if (!configService) {
+            throw new Error("ImageService requires a ConfigService instance.");
+        }
+        if (!dataSourceInterface) {
+            throw new Error("ImageService requires a DataSourceInterface instance.");
+        }
         this.dataSourceService = dataSourceService;
         this.configService = configService;
-        log.info('[ImageService] Initialized');
+        this.dataSourceInterface = dataSourceInterface;
+        log.info('[ImageService] Initialized with required dependencies');
     }
 
     /**
@@ -62,7 +70,7 @@ class ImageService {
 
             log.debug(`[ImageService] Attempting dataSourceInterface.getImageData for source ${libraryId}, path: ${imagePath}`);
             // 确保 dataSourceInterface.getImageData 返回的是 { data: Buffer | null, mimeType?: string }
-            const imageDataResult = await dataSourceInterface.getImageData(sourceConfig, imagePath);
+            const imageDataResult = await this.dataSourceInterface.getImageData(sourceConfig, imagePath);
             log.debug(`[ImageService] dataSourceInterface.getImageData returned for ${libraryId}/${imagePath}. Has data: ${!!(imageDataResult && imageDataResult.data)}`);
 
             if (!imageDataResult || !imageDataResult.data) {

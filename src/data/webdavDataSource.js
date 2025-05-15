@@ -38,8 +38,8 @@ class WebDavDataSource extends DataSource {
    * @param {string[]} [config.supportedExts=['.safetensors', '.ckpt']] - Supported model file extensions.
    * @param {ModelInfoCacheService} modelInfoCacheService - The cache service instance.
    */
-  constructor(config, modelInfoCacheService) {
-    super(config);
+  constructor(config, modelInfoCacheService, configService) {
+    super(config, configService);
     this.modelInfoCacheService = modelInfoCacheService;
     
     // 缓存
