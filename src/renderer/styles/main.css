@@ -185,7 +185,7 @@ body.modal-open {
   /* Arrange children (directory + content) horizontally */
   overflow: hidden;
   /* Prevent this layout from scrolling */
-  padding: 0.8rem 1.5rem 1.5rem 1.5rem;
+  padding: 0.8rem 1rem 1rem 1rem;
   /* 减小内边距，使内容区域更大 */
   min-width: 1080px;
 }
