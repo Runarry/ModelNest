@@ -6,6 +6,7 @@ import FilterPanel from './filter-panel.js';
 import { BlobUrlCache } from '../core/blobUrlCache.js';
 import { VirtualScroll } from '../../vendor/js-booster/js-booster.js'; // Assuming js-booster is available
 import debugCacheStats from './debug-cache-stats.js'; // 引入缓存统计面板
+import { createTreeView } from './tree-view.js'; // 引入树形目录组件
 
 // ===== DOM Element References =====
 let sourceSelect;
@@ -720,39 +721,146 @@ export function updateSingleModelCard(updatedModelObj) {
 
 function renderDirectoryTabs() {
     if (!directoryTabsContainer) return;
-    const tabList = directoryTabsContainer.querySelector('.tab-list');
-    if (!tabList) return;
-    clearChildren(tabList);
-
-    const allTab = document.createElement('div');
-    allTab.className = `tab-item ${currentDirectory === null ? 'active' : ''}`;
-    allTab.textContent = t('all');
-    allTab.onclick = () => {
-        if (currentDirectory !== null) {
-            setActiveTab(allTab);
-            loadModels(currentSourceId, null);
+    
+    // 获取或创建树视图容器
+    let treeContainer = directoryTabsContainer.querySelector('#directory-tree-container');
+    if (!treeContainer) {
+        // 移除旧的 tab-list (如果存在)
+        const oldTabList = directoryTabsContainer.querySelector('.tab-list');
+        if (oldTabList) {
+            oldTabList.remove();
         }
+        
+        // 创建新的树视图容器
+        treeContainer = document.createElement('div');
+        treeContainer.id = 'directory-tree-container';
+        treeContainer.className = 'directory-tree-container';
+        directoryTabsContainer.appendChild(treeContainer);
+    }
+    
+    // 如果没有目录数据，则隐藏整个目录区域
+    if (!Array.isArray(subdirectories) || subdirectories.length === 0) {
+        directoryTabsContainer.style.display = 'none';
+        return;
+    }
+    
+    directoryTabsContainer.style.display = 'block';
+    
+    // 准备树视图配置
+    const treeViewOptions = {
+        onNodeClick: handleDirectoryNodeClick,
+        onNodeToggle: handleDirectoryNodeToggle,
+        showCount: true
     };
-    tabList.appendChild(allTab);
-
-    subdirectories.sort().forEach(dir => {
-        const tab = document.createElement('div');
-        tab.className = `tab-item ${currentDirectory === dir ? 'active' : ''}`;
-        tab.textContent = dir;
-        tab.onclick = () => {
-            if (currentDirectory !== dir) {
-                setActiveTab(tab);
-                loadModels(currentSourceId, dir);
-            }
-        };
-        tabList.appendChild(tab);
-    });
-    directoryTabsContainer.style.display = subdirectories.length > 0 ? 'block' : 'none';
+    
+    // 创建树视图
+    createTreeView(treeContainer, subdirectories, treeViewOptions);
+    
+    // 找到并选中当前活动的目录节点
+    highlightActiveDirectory(currentDirectory);
 }
 
-function setActiveTab(activeTabElement) {
-    activeTabElement.parentNode.querySelectorAll('.tab-item').forEach(item => item.classList.remove('active'));
-    activeTabElement.classList.add('active');
+/**
+ * 处理目录节点点击事件
+ * @param {HTMLElement} nodeEl - 被点击的节点元素
+ */
+function handleDirectoryNodeClick(nodeEl) {
+    if (!nodeEl) return;
+    
+    const path = nodeEl.dataset.path;
+    if (path === undefined) return;
+    
+    logMessage('info', `[MainView] 目录节点点击: 路径: ${path}`);
+    
+    // 加载该目录的模型
+    if (currentDirectory !== path) {
+        loadModels(currentSourceId, path);
+    }
+}
+
+/**
+ * 处理目录节点展开/折叠事件
+ * @param {HTMLElement} nodeEl - 被操作的节点元素
+ * @param {boolean} isExpanded - 节点是否已展开
+ */
+function handleDirectoryNodeToggle(nodeEl, isExpanded) {
+    if (!nodeEl) return;
+    
+    const path = nodeEl.dataset.path;
+    if (!path) return;
+    
+    logMessage('debug', `[MainView] 目录节点 ${isExpanded ? '展开' : '折叠'}: ${path}`);
+    
+    // 如果节点被展开，但不是当前选中的节点，我们保持它展开的状态
+    // 但不改变当前选中的目录
+}
+
+/**
+ * 在树视图中高亮当前活动的目录
+ * @param {string} directoryPath - 当前活动的目录路径
+ */
+function highlightActiveDirectory(directoryPath) {
+    const treeContainer = directoryTabsContainer?.querySelector('#directory-tree-container');
+    if (!treeContainer) return;
+    
+    // 移除所有现有的选中状态
+    const allNodes = treeContainer.querySelectorAll('.tree-node');
+    allNodes.forEach(node => node.classList.remove('selected'));
+    
+    // 如果是根目录（null或'/'），选中根节点
+    if (directoryPath === null || directoryPath === '/') {
+        const rootNode = treeContainer.querySelector('.root-node');
+        if (rootNode) {
+            rootNode.classList.add('selected');
+        }
+        return;
+    }
+    
+    // 查找匹配路径的节点并选中
+    const matchingNode = Array.from(allNodes).find(node => node.dataset.path === directoryPath);
+    if (matchingNode) {
+        matchingNode.classList.add('selected');
+        
+        // 确保所有父节点都是展开的
+        ensureParentNodesExpanded(matchingNode);
+    } else {
+        logMessage('warn', `[MainView] 未找到匹配目录路径的节点: ${directoryPath}`);
+    }
+}
+
+/**
+ * 确保所有父节点都处于展开状态
+ * @param {HTMLElement} node - 需要确保其父节点展开的节点
+ */
+function ensureParentNodesExpanded(node) {
+    if (!node) return;
+    
+    // 找到当前节点的 li 父元素
+    const nodeLi = node.closest('.tree-node-li');
+    if (!nodeLi) return;
+    
+    // 向上查找所有父级 ul.tree-children
+    let parent = nodeLi.parentElement;
+    while (parent) {
+        if (parent.classList.contains('tree-children')) {
+            // 展开这个父节点
+            parent.classList.remove('collapsed');
+            
+            // 找到父节点的箭头并更新状态
+            const parentLi = parent.parentElement;
+            const parentNode = parentLi?.querySelector('.tree-node');
+            const arrow = parentNode?.querySelector('.tree-node-arrow');
+            if (arrow) {
+                arrow.innerHTML = '&#9660;'; // ▼
+                arrow.classList.add('expanded');
+            }
+            
+            // 继续向上查找
+            parent = parentLi?.parentElement;
+        } else {
+            break;
+        }
+    }
 }
 
 async function handleSourceChange(event) {

@@ -385,10 +385,99 @@ class WebDavDataSource extends DataSource {
     return currentNode;
   }
 
-  async listSubdirectories() {
+  /**
+   * 将内部目录树结构转换为前端可用的树结构
+   * @param {Object} node - 内部目录树节点
+   * @param {Map} modelCountMap - 每个目录的模型数量映射
+   * @returns {Object} 转换后的节点
+   * @private
+   */
+  _convertDirectoryNode(node, modelCountMap = null) {
+    if (!node) return null;
+
+    const result = {
+      name: node.name || '全部', // Use '全部' for root node
+      path: node.path || '/',
+    };
+
+    // 添加模型数量（如果可用）
+    if (modelCountMap) {
+      const count = modelCountMap.get(result.path);
+      if (count) {
+        result.count = count;
+      }
+    }
+
+    // 添加子节点（如果有）
+    if (node.children && node.children.length > 0) {
+      result.children = node.children
+        .map(child => this._convertDirectoryNode(child, modelCountMap))
+        .filter(Boolean); // 过滤掉null
+    }
+
+    return result;
+  }
+
+  /**
+   * 计算每个目录的模型数量
+   * @returns {Map<string, number>} 目录路径到模型数量的映射
+   * @private
+   */
+  _calculateDirectoryModelCounts() {
+    const modelCountMap = new Map();
+    
+    // 首先计算每个实际目录中的模型数量
+    for (const [dir, models] of this.modelsByDirectoryMap.entries()) {
+      modelCountMap.set(dir, models.length);
+    }
+    
+    // 然后，计算包含子目录模型的总数
     const paths = this._getAllPathsFromTree();
-    this.logger.debug(`[WebDavDataSource] listSubdirectories: paths=${paths}`);
-    return paths;
+    for (const path of paths) {
+      let totalCount = modelCountMap.get(path) || 0;
+      
+      // 添加所有子目录的模型数量
+      for (const [dir, models] of this.modelsByDirectoryMap.entries()) {
+        if (dir !== path && dir.startsWith(path + '/')) {
+          totalCount += models.length;
+        }
+      }
+      
+      if (totalCount > 0) {
+        modelCountMap.set(path, totalCount);
+      }
+    }
+    
+    return modelCountMap;
+  }
+
+  async listSubdirectories() {
+    await this.ensureInitialized();
+    
+    this.logger.debug(`[WebDavDataSource] listSubdirectories: 转换目录树结构`);
+    
+    // 确保模型缓存已初始化
+    try {
+      if (!this._allItemsCache || this._allItemsCache.length === 0) {
+        await this.InitAllSource();
+      }
+    } catch (error) {
+      this.logger.error(`[WebDavDataSource] Error initializing source in listSubdirectories:`, error.message, error.stack);
+      // Continue even with error, might have partial data
+    }
+    
+    // 计算每个目录的模型数量
+    const modelCountMap = this._calculateDirectoryModelCounts();
+    
+    // 创建一个根节点，表示"全部"
+    const rootNode = this._convertDirectoryNode(this.directoryStructureCache, modelCountMap);
+    
+    // 为根节点添加模型总数，如果有模型缓存
+    if (this._allModelsCache && Array.isArray(this._allModelsCache)) {
+      rootNode.count = this._allModelsCache.length;
+    }
+    
+    return [rootNode]; // 返回包含根节点的数组
   }
 
   async _traverseDirectoryItems(basePathToScan, itemHandlerAsync, processSubdirectories = true, sourceId, sourceRoot = null) {

@@ -211,7 +211,9 @@ class DataSourceInterface {
    * Lists subdirectories using the appropriate data source instance.
    *
    * @param {object} sourceConfig - The configuration object for the data source.
-   * @returns {Promise<Array<string>>} A promise that resolves with an array of subdirectory names.
+   * @returns {Promise<Array<object>>} A promise that resolves with a hierarchical tree structure of directories.
+   *         Each node has: { name, path, count?, children? } where count is the number of models (optional)
+   *         and children is an array of child nodes.
    * @throws {Error} If the data source type is unknown or listing fails.
    */
   async listSubdirectories(sourceConfig) {
@@ -227,11 +229,18 @@ class DataSourceInterface {
     try {
       // 获取数据源实例
       const ds = this.getDataSourceInstance(sourceConfig);
-      // 调用标准接口方法
-      const subdirs = await ds.listSubdirectories();
+      // 调用标准接口方法，现在这个方法需要返回一个层级结构
+      const directoryTree = await ds.listSubdirectories();
       const duration = Date.now() - startTime;
-      log.info(`[DataSourceInterface] Successfully listed subdirectories for sourceId: ${sourceId}. Found ${subdirs.length} directories. 耗时: ${duration}ms`);
-      return subdirs;
+      
+      // 验证返回的树结构
+      if (!directoryTree || !Array.isArray(directoryTree)) {
+        log.warn(`[DataSourceInterface] Directory tree invalid format from sourceId: ${sourceId}. Expected array.`);
+        return []; // 返回空数组作为回退
+      }
+      
+      log.info(`[DataSourceInterface] Successfully listed directory tree for sourceId: ${sourceId}. 耗时: ${duration}ms`);
+      return directoryTree;
     } catch (error) {
       const duration = Date.now() - startTime;
       log.error(`[DataSourceInterface] Failed to list subdirectories for sourceId: ${sourceId}, 耗时: ${duration}ms`, error.message, error.stack);

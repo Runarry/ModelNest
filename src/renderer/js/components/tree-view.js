@@ -99,17 +99,35 @@ function createTreeView(container, data, options = {}) {
   container.innerHTML = ""; // Clear previous content
   container.classList.add("tree-view-container");
 
+  // 创建根节点列表
   const rootUl = document.createElement("ul");
+  rootUl.className = "tree-root-list";
   rootUl.style.listStyleType = "none";
   rootUl.style.paddingLeft = "0";
   rootUl.style.margin = "0";
 
-  data.forEach(nodeData => {
-    const nodeElement = renderNode(nodeData, 0, config);
-    if (nodeElement) {
-      rootUl.appendChild(nodeElement);
+  // 处理根节点和第一级目录分离
+  if (data.length > 0) {
+    // 提取出根节点（第一个节点通常是"全部"）
+    const rootNode = data[0];
+    if (rootNode) {
+      // 渲染根节点
+      const rootElement = renderRootNode(rootNode, config);
+      if (rootElement) {
+        rootUl.appendChild(rootElement);
+      }
+
+      // 把根节点的子节点提取出来与根节点同级展示
+      if (rootNode.children && rootNode.children.length > 0) {
+        rootNode.children.forEach(childNodeData => {
+          const nodeElement = renderNode(childNodeData, 0, config);
+          if (nodeElement) {
+            rootUl.appendChild(nodeElement);
+          }
+        });
+      }
     }
-  });
+  }
 
   container.appendChild(rootUl);
 
@@ -117,25 +135,37 @@ function createTreeView(container, data, options = {}) {
   rootUl.addEventListener('click', (event) => {
     const targetNodeElement = event.target.closest('.tree-node');
     if (!targetNodeElement) return;
-
-    const nodeId = targetNodeElement.dataset.nodeId; // Assuming we'll add IDs or references
-    // For now, let's handle toggle directly on the arrow/icon/name
     
     const arrow = event.target.closest('.tree-node-arrow');
     const iconOrName = event.target.closest('.tree-node-icon') || event.target.closest('.tree-node-name');
 
-    if (arrow || (iconOrName && targetNodeElement.classList.contains('has-children'))) {
-      toggleNode(targetNodeElement);
-      if (typeof config.onNodeToggle === 'function') {
-        // Pass more comprehensive node info later
-        config.onNodeToggle(targetNodeElement, !targetNodeElement.querySelector('.tree-children').classList.contains('collapsed'));
-      }
-    } else if (iconOrName) { // Click on file or folder name (not for toggling)
-        selectNode(targetNodeElement, rootUl);
-        if (typeof config.onNodeClick === 'function') {
-            // Pass more comprehensive node info later
-            config.onNodeClick(targetNodeElement);
+    // 处理父目录的点击事件，同时处理选中和展开/折叠
+    if (targetNodeElement.classList.contains('has-children')) {
+      // 选中该节点
+      selectNode(targetNodeElement, rootUl);
+      
+      // 如果点击的是箭头或文件夹图标，触发展开/折叠
+      if (arrow || iconOrName) {
+        toggleNode(targetNodeElement);
+        
+        if (typeof config.onNodeToggle === 'function') {
+          const childrenElement = targetNodeElement.querySelector('.tree-children');
+          const isExpanded = childrenElement ? !childrenElement.classList.contains('collapsed') : false;
+          config.onNodeToggle(targetNodeElement, isExpanded);
         }
+      }
+      
+      // 无论是否展开/折叠，都要触发节点选中事件
+      if (typeof config.onNodeClick === 'function') {
+        config.onNodeClick(targetNodeElement);
+      }
+    } 
+    // 处理叶子节点的点击事件（无子节点的目录或文件）
+    else if (iconOrName) {
+      selectNode(targetNodeElement, rootUl);
+      if (typeof config.onNodeClick === 'function') {
+        config.onNodeClick(targetNodeElement);
+      }
     }
   });
 }
@@ -157,7 +187,8 @@ function renderNode(nodeData, level, config) {
 
   const nodeElement = document.createElement("div");
   nodeElement.classList.add("tree-node");
-  // nodeElement.dataset.nodeId = nodeData.id || generateUniqueId(); // TODO: Add unique ID
+  // 添加路径属性用于节点选择和模型加载
+  nodeElement.dataset.path = nodeData.path || '/';
 
   // Indentation
   for (let i = 0; i < level; i++) {
@@ -221,14 +252,19 @@ function renderNode(nodeData, level, config) {
  * @param {HTMLElement} nodeElement - The .tree-node div element.
  */
 function toggleNode(nodeElement) {
-  const childrenUl = nodeElement.nextElementSibling; // Assuming ul is direct sibling of the div.tree-node's parent li
-  const arrowSpan = nodeElement.querySelector(".tree-node-arrow");
+  if (!nodeElement) return;
+  
+  const listItem = nodeElement.closest('.tree-node-li');
+  if (!listItem) return;
+  
+  const childrenUl = listItem.querySelector('.tree-children');
+  const arrowSpan = nodeElement.querySelector('.tree-node-arrow');
 
-  if (childrenUl && childrenUl.classList.contains("tree-children")) {
-    const isCollapsed = childrenUl.classList.toggle("collapsed");
+  if (childrenUl && childrenUl.classList) {
+    const isCollapsed = childrenUl.classList.toggle('collapsed');
     if (arrowSpan) {
-      arrowSpan.innerHTML = isCollapsed ? "&#9654;" : "&#9660;"; // ▶ or ▼
-      arrowSpan.classList.toggle("expanded", !isCollapsed);
+      arrowSpan.innerHTML = isCollapsed ? '&#9654;' : '&#9660;'; // ▶ or ▼
+      arrowSpan.classList.toggle('expanded', !isCollapsed);
     }
   }
 }
@@ -245,6 +281,46 @@ function selectNode(nodeElement, rootUl) {
 
     // Select the clicked node
     nodeElement.classList.add('selected');
+}
+
+/**
+ * 渲染根节点（"全部"节点）
+ * @param {Object} rootData - 根节点数据
+ * @param {Object} config - 配置
+ * @returns {HTMLLIElement|null} - 渲染的根节点元素
+ */
+function renderRootNode(rootData, config) {
+  if (!rootData || typeof rootData.name !== 'string') {
+    return null;
+  }
+
+  const listItem = document.createElement("li");
+  listItem.classList.add("tree-node-li", "root-node-li");
+
+  const nodeElement = document.createElement("div");
+  nodeElement.classList.add("tree-node", "root-node");
+  nodeElement.dataset.path = rootData.path || '/';
+
+  const iconSpan = document.createElement("span");
+  iconSpan.classList.add("tree-node-icon", "root-icon");
+  iconSpan.innerHTML = '🏠'; // 使用房子图标表示根目录
+  nodeElement.appendChild(iconSpan);
+
+  const nameSpan = document.createElement("span");
+  nameSpan.classList.add("tree-node-name");
+  nameSpan.textContent = rootData.name;
+  nameSpan.title = rootData.name; // Tooltip for long names
+  nodeElement.appendChild(nameSpan);
+
+  if (config.showCount && typeof rootData.count === 'number') {
+    const countSpan = document.createElement("span");
+    countSpan.classList.add("tree-node-count");
+    countSpan.textContent = rootData.count.toLocaleString();
+    nodeElement.appendChild(countSpan);
+  }
+
+  listItem.appendChild(nodeElement);
+  return listItem;
 }
 
 // TODO: function generateUniqueId() { ... }
@@ -296,3 +372,6 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 */
+
+// Export the createTreeView function
+export { createTreeView };
