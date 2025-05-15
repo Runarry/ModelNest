@@ -424,3 +424,109 @@ export function showConfirmationDialog(message, onConfirm, onCancel) {
         dialogOverlay.style.opacity = '1';
     });
 }
+
+// ===== Missing functions needed by main-view.js =====
+
+/**
+ * Formats a file size in bytes to a human-readable string with appropriate units.
+ * @param {number} bytes - The file size in bytes
+ * @param {number} [decimals=2] - Number of decimal places to show
+ * @returns {string} Formatted file size with units (KB, MB, GB, etc.)
+ */
+export function formatFileSize(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB', 'PB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(decimals)) + ' ' + sizes[i];
+}
+
+/**
+ * Checks if an image source is invalid (empty, undefined, etc.)
+ * @param {string} src - The image source URL to check
+ * @returns {boolean} True if the source is invalid, false otherwise
+ */
+export function isInvalidImageSrc(src) {
+    return !src || src === 'undefined' || src === 'null' || src === '';
+}
+
+/**
+ * Shows a toast notification message that automatically disappears after a duration.
+ * @param {string} message - The message to display in the toast
+ * @param {'info'|'success'|'error'|'warning'} [type='info'] - The type of toast message
+ * @param {number} [duration=3000] - How long to show the toast (in ms)
+ */
+export function showToast(message, type = 'info', duration = 3000) {
+    // Check if toast container exists, create if not
+    let toastContainer = document.getElementById('toast-container');
+    if (!toastContainer) {
+        toastContainer = document.createElement('div');
+        toastContainer.id = 'toast-container';
+        toastContainer.style.position = 'fixed';
+        toastContainer.style.bottom = '20px';
+        toastContainer.style.right = '20px';
+        toastContainer.style.zIndex = '1000';
+        document.body.appendChild(toastContainer);
+    }
+    
+    // Create toast element
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    toast.style.backgroundColor = type === 'error' ? '#f44336' : 
+                                 type === 'success' ? '#4caf50' : 
+                                 type === 'warning' ? '#ff9800' : '#2196f3';
+    toast.style.color = '#fff';
+    toast.style.padding = '12px 16px';
+    toast.style.margin = '8px 0';
+    toast.style.borderRadius = '4px';
+    toast.style.boxShadow = '0 2px 5px rgba(0,0,0,0.2)';
+    toast.style.opacity = '0';
+    toast.style.transition = 'opacity 0.3s ease';
+    
+    // Add to container
+    toastContainer.appendChild(toast);
+    
+    // Animate in
+    setTimeout(() => {
+        toast.style.opacity = '1';
+    }, 10);
+    
+    // Automatically remove after duration
+    setTimeout(() => {
+        toast.style.opacity = '0';
+        setTimeout(() => {
+            if (toast.parentNode) {
+                toast.parentNode.removeChild(toast);
+            }
+            
+            // Remove container if empty
+            if (toastContainer.childNodes.length === 0) {
+                document.body.removeChild(toastContainer);
+            }
+        }, 300); // Match transition duration
+    }, duration);
+}
+
+/**
+ * Returns a default thumbnail image path for models without images
+ * @param {string} [modelType='unknown'] - The type of model
+ * @returns {string} Path to the default thumbnail image
+ */
+export function getDefaultThumbnail(modelType = 'unknown') {
+    // Define default thumbnails based on model type
+    const defaults = {
+        'checkpoint': '../../../assets/images/defaults/checkpoint.png',
+        'lora': '../../../assets/images/defaults/lora.png',
+        'vae': '../../../assets/images/defaults/vae.png',
+        'embedding': '../../../assets/images/defaults/embedding.png',
+        'controlnet': '../../../assets/images/defaults/controlnet.png',
+        'upscaler': '../../../assets/images/defaults/upscaler.png',
+        'unknown': '../../../assets/images/defaults/unknown.png'
+    };
+    
+    // Return the appropriate default thumbnail or the unknown one if type not found
+    return defaults[modelType] || defaults['unknown'];
+}

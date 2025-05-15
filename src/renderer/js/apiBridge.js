@@ -45,6 +45,12 @@ export const migrateImageCache = api.migrateImageCache; // 导出图片缓存迁
 export const migrateModelCache = api.migrateModelCache; // 导出模型缓存迁移函数
 export const cleanupUserData = api.cleanupUserData; // 导出用户数据清理函数
 
+// Add missing exports that are needed by main-view.js
+export const getModelsInDirectory = api.getModelsInDirectory;
+export const getDirectories = api.getDirectories;
+export const setLocalConfig = api.setLocalConfig;
+export const getLocalConfig = api.getLocalConfig;
+
 // You might also export the entire api object if needed,
 // but exporting individual functions is generally preferred for clarity.
 // export default api;
