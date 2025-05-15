@@ -6,7 +6,7 @@ import {
     pauseCrawl,
     resumeCrawl,
     cancelCrawl,
-    getCrawlStatus, // Although commented out below, import for consistency
+    getCrawlStatus, 
     onCrawlStatusUpdate,
     removeCrawlStatusUpdateListener
 } from '../apiBridge.js';
@@ -19,8 +19,8 @@ export class CrawlStatusModal {
         this.pauseResumeButton = null;
         this.cancelButton = null;
         this.closeButton = null;
-        this.currentSourceId = null; // 新增：存储当前数据源 ID
-        this.currentDirectory = null; // 新增：存储当前目录
+        this.currentSourceId = null; // 存储当前数据源 ID
+        this.currentDirectory = null; // 存储当前目录
 
         this.boundUpdateStatus = this.updateStatus.bind(this); // 预绑定 updateStatus
 
