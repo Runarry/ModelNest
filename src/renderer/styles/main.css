@@ -609,10 +609,11 @@ select:hover {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
   height: 100%;
   /* Take full height */
-  overflow-y: hidden;
-  /* Prevent directory tabs from scrolling */
+  /* overflow-y: hidden; */ /* Allow children to scroll if needed */
   margin-right: 1.5rem;
   /* Space between tabs and content */
+  display: flex; /* Added to make child height:100% work correctly */
+  flex-direction: column; /* Added for the same reason */
 }
 
 .tab-header {
@@ -627,6 +628,19 @@ select:hover {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
+  overflow-y: auto; /* Enable vertical scrolling */
+  height: 100%; /* Allow tab-list to fill parent and scroll its own content */
+  scrollbar-width: thin; /* Optional: for a thinner scrollbar */
+  scrollbar-color: rgba(0,0,0,0.2) transparent; /* Optional: scrollbar color */
+}
+
+.tab-list::-webkit-scrollbar { /* Optional: WebKit scrollbar styling */
+  width: 6px;
+}
+
+.tab-list::-webkit-scrollbar-thumb { /* Optional: WebKit scrollbar thumb styling */
+  background: rgba(0,0,0,0.3);
+  border-radius: 3px;
 }
 
 .tab-item {
