@@ -13,6 +13,7 @@ const { initializeModelLibraryIPC } = require('./src/ipc/modelLibraryIPC.js'); /
 const { initializeAppIPC } = require('./src/ipc/appIPC.js'); // Import the app IPC initializer
 const { initializeModelCrawlerIPC } = require('./src/ipc/modelCrawlerIPC.js'); // Import the model crawler IPC initializer
 const { createWindow, getMainWindow } = require('./src/utils/windowManager'); // Import window manager
+const { initializeTray, isTrayEnabled } = require('./src/utils/trayManager'); // Import tray manager
 let services = null; // Declare services globally
 
 // 监听应用卸载前的退出事件，用于清理用户数据
@@ -111,6 +112,24 @@ app.whenReady().then(async () => { // 改为 async 回调
     }
   } else {
     log.error('[Main] Failed to initialize post-window IPC or pass webContents: mainWindow or services not available.');
+  }
+
+  // --- Initialize Tray ---
+  try {
+    const trayEnabled = appConfig.enableTray === true;
+    initializeTray(mainWindow, trayEnabled);
+
+    if (trayEnabled) {
+      // Intercept close to hide to tray instead of exiting
+      mainWindow.on('close', (event) => {
+        if (!app.isQuiting && isTrayEnabled()) {
+          event.preventDefault();
+          mainWindow.hide();
+        }
+      });
+    }
+  } catch (trayErr) {
+    log.error('[Main] 初始化托盘时出错:', trayErr);
   }
 
 // --- Updater IPC Handlers ---

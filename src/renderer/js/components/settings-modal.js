@@ -328,6 +328,12 @@ function populateGeneralPane() {
     } else {
         logMessage('warn', "[settingsModal] 未找到常规设置面板中的 #languageSelector");
     }
+
+    // --- Enable Tray Checkbox ---
+    const trayCheckbox = pane.querySelector('#enableTrayCheckbox');
+    if (trayCheckbox) {
+        trayCheckbox.checked = !!currentConfigData.enableTray; // Ensure boolean
+    }
 }
 
 function populateFileRecognitionPane() {
@@ -1260,6 +1266,11 @@ async function handleSaveSection(category, paneElement) {
                 } else {
                     logMessage('warn', `[settingsModal] 保存常规设置失败：未找到 #languageSelector`);
                     // Decide if this should be a validation failure
+                }
+                const trayCheckbox = paneElement.querySelector('#enableTrayCheckbox');
+                if (trayCheckbox) {
+                    configUpdate.enableTray = trayCheckbox.checked;
+                    logMessage('debug', `[settingsModal] 保存常规设置 - enableTray: ${configUpdate.enableTray}`);
                 }
                 // Add logic here if other general settings are added in the future
                 break;

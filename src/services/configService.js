@@ -9,6 +9,7 @@ const DEFAULT_CONFIG = {
   modelSources: [],
   supportedExtensions: ['.safetensors', '.ckpt', '.pt', '.pth', '.bin'],
   blockedTags: [], // Add blockedTags field with default empty array
+  enableTray: false, // Whether to enable system tray feature
   imageCache: {
     maxCacheSizeMB: 200,
     compressQuality: 80,
