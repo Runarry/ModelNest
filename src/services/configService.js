@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const log = require('electron-log');
 const { deepClone } = require('../common/utils'); // 假设 utils.js 中有 deepClone
+const keytar = require('keytar');
+const KEYTAR_SERVICE = 'ModelNest';
 
 const DEFAULT_CONFIG = {
   modelSources: [],
@@ -101,7 +103,7 @@ class ConfigService {
       // Convert relative local paths to absolute paths
       // Migrated from main.js loadConfig
       if (Array.isArray(loadedConfig.modelSources)) {
-        loadedConfig.modelSources.forEach(source => {
+        for (const source of loadedConfig.modelSources) {
           if (source.type === 'local' && source.path && !path.isAbsolute(source.path)) {
             // Use app.getAppPath() or process.cwd() depending on desired base for relative paths
             // Using process.cwd() for consistency with original main.js logic
@@ -109,7 +111,29 @@ class ConfigService {
             log.info(`[ConfigService] Converting relative path "${source.path}" to absolute path "${absolutePath}"`);
             source.path = absolutePath;
           }
-        });
+
+          // ===== WebDAV 密码处理 (从文件迁移 & 读取) =====
+          if (source.type === 'webdav') {
+            try {
+              // 情况 1: 文件中仍然有明文密码 -> 写入 keytar 并用 flag 标记
+              if (source.password) {
+                await keytar.setPassword(KEYTAR_SERVICE, source.id, source.password);
+                source.passwordSaved = true;
+              }
+              // 情况 2: 文件已无明文，仅有 flag -> 从 keytar 读取
+              if (!source.password && source.passwordSaved) {
+                const storedPwd = await keytar.getPassword(KEYTAR_SERVICE, source.id);
+                if (storedPwd) {
+                  source.password = storedPwd;
+                } else {
+                  log.warn(`[ConfigService] passwordSaved===true but no password found in keytar for sourceId: ${source.id}`);
+                }
+              }
+            } catch (e) {
+              log.error(`[ConfigService] Error processing WebDAV password for sourceId ${source.id}:`, e.message);
+            }
+          }
+        }
       }
 
       // --- 添加：确保 imageCache 配置和默认大小 ---
@@ -170,6 +194,23 @@ class ConfigService {
        // Ensure default keys exist
        const configToSave = { ...deepClone(DEFAULT_CONFIG), ...newConfig };
 
+       // ===== 处理 WebDAV 密码：写入 keytar，并从保存文件中移除 =====
+       if (Array.isArray(configToSave.modelSources)) {
+         for (const src of configToSave.modelSources) {
+           if (src.type === 'webdav') {
+             try {
+               if (src.password) {
+                 await keytar.setPassword(KEYTAR_SERVICE, src.id, src.password);
+                 src.passwordSaved = true;
+               }
+               // 不论是否有密码，都不要把明文写进磁盘
+               delete src.password;
+             } catch (e) {
+               log.error(`[ConfigService] Failed to store WebDAV password for sourceId ${src.id}:`, e.message);
+             }
+           }
+         }
+       }
 
       // 2. Convert absolute local paths back to relative (optional, depends on requirements)
       //    For simplicity and consistency with loading, we'll save absolute paths for now.
@@ -181,8 +222,8 @@ class ConfigService {
       log.info(`[ConfigService] Configuration saved successfully to: ${this.configPath}`);
 
       // 4. Update in-memory config *after* successful save
-      //    Make sure to handle path conversions consistently if applied before saving
-      this.config = deepClone(configToSave); // Use deepClone to avoid mutation issues
+      const runtimeCopy = deepClone(newConfig); // 保留运行时所需的密码
+      this.config = runtimeCopy;
        // Re-apply absolute path conversion after updating internal state,
        // ensuring consistency with getConfig() results.
        if (Array.isArray(this.config.modelSources)) {
