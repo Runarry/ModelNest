@@ -1,6 +1,6 @@
 {
   "name": "model-nest",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "跨平台 AIGC 模型管理与浏览工具，支持本地与 WebDAV 多数据源。",
   "main": "main.js",
   "scripts": {
@@ -20,7 +20,7 @@
     "electron-log": "^5.4.0",
     "electron-updater": "^6.6.4",
     "p-limit": "^6.2.0",
-    "sharp": "^0.34.1",
+    "sharp": "^0.34.2",
     "turndown": "^7.2.0",
     "webdav": "^5.8.0"
   },
@@ -35,7 +35,7 @@
     "core-js": "^3.42.0",
     "cross-env": "^7.0.3",
     "cssnano": "^7.0.7",
-    "electron": "^36.2.0",
+    "electron": "^36.4.0",
     "electron-builder": "^26.0.15",
     "postcss": "^8.5.3",
     "postcss-import": "^16.1.0",
