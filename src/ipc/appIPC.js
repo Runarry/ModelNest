@@ -1,7 +1,6 @@
 const { ipcMain, BrowserWindow, app } = require('electron');
 const log = require('electron-log');
 const imageCache = require('../common/imageCache'); // 直接导入 imageCache
-const { WebDavDataSource } = require('../data/webdavDataSource'); // 导入 WebDavDataSource
 const { cleanupUserData } = require('../../scripts/cleanup-handler'); // 导入清理函数
 
 /**
@@ -28,48 +27,6 @@ function initializeAppIPC(services) {
   ipcMain.handle('save-config', async (event, newConfig) => {
     log.info('[IPC] save-config 请求');
     try {
-      // --- BEGIN WebDAV SubDirectory Validation ---
-      if (newConfig && newConfig.modelSources && Array.isArray(newConfig.modelSources)) {
-        log.info('[IPC] 开始验证 WebDAV 子目录...');
-        for (const source of newConfig.modelSources) {
-          // 检查是否是需要验证的 WebDAV 源
-          if (source.type === 'webdav' && source.subDirectory && typeof source.subDirectory === 'string' && source.subDirectory.startsWith('/')) {
-            log.info(`[IPC] 验证 WebDAV 源 "${source.name}" 的子目录: ${source.subDirectory}`);
-            let tempDataSource = null;
-            try {
-              // 创建临时实例进行验证 (假设构造函数和方法已更新以处理 subDirectory)
-              tempDataSource = new WebDavDataSource({
-                id: `validation-${Date.now()}`,
-                name: `validation-${source.name}`,
-                type: 'webdav',
-                url: source.url,
-                username: source.username,
-                password: source.password,
-                subDirectory: source.subDirectory,
-                readOnly: true // 验证不应写入
-              });
-
-              // 尝试访问子目录的根路径 (依赖 WebDavDataSource 内部实现)
-              // 使用 stat('/') 作为检查方法，假设它会检查 subDirectory + '/'
-              await tempDataSource.stat('/');
-              log.info(`[IPC] WebDAV 源 "${source.name}" 子目录 ${source.subDirectory} 验证成功`);
-
-            } catch (validationError) {
-              log.error(`[IPC] WebDAV 源 "${source.name}" 子目录 ${source.subDirectory} 验证失败:`, validationError);
-              // 抛出更具体的错误给渲染进程
-              throw new Error(`WebDAV 源 "${source.name}" 的子目录 "${source.subDirectory}" 验证失败: ${validationError.message || '无法访问或不存在'}`);
-            } finally {
-               // 清理临时客户端 (如果需要)
-               if (tempDataSource && typeof tempDataSource.disconnect === 'function') {
-                   await tempDataSource.disconnect();
-               }
-            }
-          }
-        }
-        log.info('[IPC] 所有 WebDAV 子目录验证完成 (如果需要)');
-      }
-      // --- END WebDAV SubDirectory Validation ---
-
       // 如果验证通过 (或无需验证), 则保存配置
       await services.configService.saveConfig(newConfig);
       log.info('[IPC] 配置已通过 configService 保存');
